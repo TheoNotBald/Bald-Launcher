@@ -1,5 +1,7 @@
 node_modules/
 dist/
+build-release/
+release/
 .env
 .env.*
 *.log
@@ -7,6 +9,7 @@ dist/
 *.zip
 launcher/
 profiles/
+BaldLauncher-backup-*
 **/launcher-state.json
 **/launcher-state*.json
 **/settings.json
