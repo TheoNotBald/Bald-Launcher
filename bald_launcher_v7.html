@@ -1,0 +1,2827 @@
+<link rel="stylesheet" href="node_modules/codemirror/lib/codemirror.css">
+<link rel="stylesheet" href="node_modules/codemirror/theme/darcula.css">
+<link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css">
+<style>
+:root{
+  --bg-void:#0a0a0a;
+  --bg-surface:#111111;
+  --bg-surface-2:#161616;
+  --border:#1e1e1e;
+  --border-strong:#2a2a2a;
+  --accent-green:#7ef15e;
+  --accent-green-bg:#2d6e1a;
+  --accent-green-bg-hover:#357a1e;
+  --accent-green-text-on-dark:#d4f0c4;
+  --accent-purple:#7f77dd;
+  --accent-purple-bg:#221c47;
+  --text-primary:#cccccc;
+  --text-secondary:#555555;
+  --text-muted:#3a3a3a;
+  --text-xs:10px;
+  --text-sm:11px;
+  --text-base:12px;
+  --text-md:13px;
+  --text-lg:14px;
+  --text-xl:16px;
+}
+html,body{height:100%;overflow:hidden;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font-sans);}
+.app{background:var(--bg-void);border-radius:12px;overflow:hidden;height:100%;min-height:620px;display:flex;flex-direction:column;}
+.titlebar{height:38px;background:var(--bg-void);border-bottom:0.5px solid var(--bg-surface-2);display:flex;align-items:center;padding:0 14px;gap:9px;flex-shrink:0;}
+.titlebar-logo{width:28px;height:28px;border-radius:7px;background:linear-gradient(180deg,#3b8d20,#245912);display:flex;align-items:center;justify-content:center;font-size:var(--text-base);font-weight:800;color:#eef9e9;flex-shrink:0;letter-spacing:-0.03em;}
+.titlebar-name{font-size:var(--text-md);color:#bbb;font-weight:500;flex:1;}
+.update-banner{display:none;align-items:center;gap:10px;padding:7px 14px;background:var(--bg-surface-2);border-bottom:0.5px solid var(--border-strong);color:var(--text-primary);font-size:var(--text-sm);}
+.update-banner.visible{display:flex;}
+.update-banner span{flex:1;}
+.update-banner button{border:0.5px solid var(--accent-green);border-radius:6px;background:var(--accent-green-bg);color:var(--accent-green-text-on-dark);padding:5px 10px;font:inherit;cursor:pointer;}
+.titlebar-acc{display:flex;align-items:center;gap:6px;background:var(--bg-surface-2);border:0.5px solid var(--border-strong);border-radius:12px;padding:3px 10px 3px 4px;cursor:pointer;}
+.acc-av{width:22px;height:22px;border-radius:50%;background:#3c3489;display:flex;align-items:center;justify-content:center;font-size:var(--text-xs);color:#ceecf6;font-weight:500;}
+.acc-name{font-size:var(--text-sm);color:#888;}
+.body{flex:1;display:flex;overflow:hidden;min-height:0;}
+.sidebar{width:52px;background:var(--bg-surface);border-right:0.5px solid var(--bg-surface-2);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:3px;flex-shrink:0;}
+.si{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:var(--text-xl);cursor:pointer;border:0.5px solid transparent;position:relative;transition:background .12s,color .12s;}
+.si:hover{color:#aaa;background:var(--bg-surface-2);}
+.si.on{color:var(--accent-purple);background:#1a1833;border-color:#2d2860;}
+.si.has-badge::after{content:'';position:absolute;top:5px;right:5px;width:7px;height:7px;border-radius:50%;background:#c0392b;border:1.5px solid var(--bg-surface);}
+.si-gap{flex:1;}
+.panel{flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;}
+
+/* PROFILES (home) */
+.profiles-view{padding:16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;height:100%;}
+.profiles-toolbar{display:flex;align-items:center;justify-content:space-between;}
+.new-profile-btn{display:flex;align-items:center;gap:7px;background:var(--accent-green-bg);border:0.5px solid #3b6d11;border-radius:8px;padding:9px 15px;color:var(--accent-green-text-on-dark);font-size:var(--text-base);font-weight:600;cursor:pointer;font-family:inherit;transition:background .12s;}
+.new-profile-btn:hover{background:var(--accent-green-bg-hover);}
+.profiles-count{font-size:var(--text-sm);color:var(--text-muted);}
+.profile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px;}
+.profile-card{background:var(--bg-surface);border:0.5px solid var(--border);border-radius:12px;padding:12px;cursor:pointer;transition:border-color .12s,transform .08s;display:flex;flex-direction:column;gap:8px;}
+.profile-card:hover{border-color:#3b6d11;}
+.profile-card:active{transform:scale(0.98);}
+.profile-card-icon{width:100%;height:60px;border-radius:8px;background:#1a1833;display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:700;color:var(--accent-purple);}
+.profile-card-name{font-size:var(--text-md);color:#ccc;font-weight:500;}
+.profile-card-sub{font-size:var(--text-xs);color:var(--text-muted);}
+.profile-card-badge{display:inline-flex;align-self:flex-start;font-size:var(--text-xs);padding:2px 8px;border-radius:8px;}
+.badge-vulkan{background:#16350f;color:var(--accent-green);}
+.badge-sodium{background:#1a1833;color:var(--accent-purple);}
+.badge-vanilla{background:var(--bg-surface-2);color:#666;}
+.empty-state{color:var(--text-muted);font-size:var(--text-base);text-align:center;padding:44px 16px;display:flex;flex-direction:column;align-items:center;gap:10px;}
+.empty-state-icon{font-size:26px;color:#262626;}
+.empty-cta{background:var(--accent-green-bg);border:0.5px solid #3b6d11;border-radius:8px;padding:8px 16px;color:var(--accent-green-text-on-dark);font-size:var(--text-base);font-weight:600;cursor:pointer;font-family:inherit;}
+
+/* SERVERS */
+.servers-view{padding:16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;height:100%;}
+.servers-toolbar{display:flex;align-items:center;justify-content:space-between;}
+.server-list{display:flex;flex-direction:column;gap:10px;}
+.server-card{background:var(--bg-surface);border:0.5px solid var(--border);border-radius:12px;padding:12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;transition:border-color .12s,transform .08s;}
+.server-card:hover{border-color:#2d2860;}
+.server-card:active{transform:scale(0.98);}
+.server-card-main{display:flex;align-items:center;gap:12px;min-width:0;flex:1;}
+.server-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;box-shadow:0 0 10px currentColor;}
+.server-dot.gray{background:#5a5a5a;color:#5a5a5a;}
+.server-dot.amber{background:#d7a91e;color:#d7a91e;animation:pulse 1.2s infinite ease-in-out;}
+.server-dot.green{background:var(--accent-green);color:var(--accent-green);}
+@keyframes pulse{0%,100%{opacity:.55;transform:scale(0.95);}50%{opacity:1;transform:scale(1.1);}}
+.server-card-icon{width:40px;height:40px;border-radius:10px;background:linear-gradient(180deg,#1a1833,var(--bg-surface-2));display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent-purple);border:0.5px solid var(--border-strong);flex-shrink:0;}
+.server-card-body{min-width:0;flex:1;}
+.server-card-name{font-size:var(--text-md);color:#ddd;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.server-card-meta{font-size:var(--text-xs);color:#666;margin-top:2px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+.server-card-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.server-btn{height:32px;padding:0 12px;border-radius:8px;border:0.5px solid #3b6d11;background:var(--accent-green-bg);color:var(--accent-green-text-on-dark);font-size:var(--text-sm);font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .12s,opacity .12s;}
+.server-btn:hover{background:var(--accent-green-bg-hover);}
+.server-btn.starting{border-color:#b88a16;background:#d7a91e;color:#1b1605;cursor:not-allowed;}
+.server-btn.running{border-color:#b52b2b;background:#c93636;color:#fff0f0;}
+.server-btn.running:hover{background:#e04444;}
+.server-btn.stopping{border-color:#b88a16;background:#d7a91e;color:#1b1605;cursor:not-allowed;opacity:0.85;}
+.server-detail{display:flex;flex-direction:column;height:100%;overflow:hidden;}
+.server-detail-header{padding:14px 16px;border-bottom:0.5px solid var(--bg-surface-2);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;}
+.server-detail-body{display:flex;flex-direction:column;flex:1;min-height:0;}
+.server-tabs{display:flex;gap:4px;padding:9px 16px 0;border-bottom:0.5px solid var(--bg-surface-2);flex-shrink:0;}
+.server-tab{padding:7px 13px;font-size:var(--text-base);color:var(--text-secondary);cursor:pointer;border-bottom:2px solid transparent;transition:color .12s;}
+.server-tab.active{color:var(--accent-green);border-color:var(--accent-green);}
+.server-tab:hover:not(.active){color:#999;}
+.server-layout{flex:1;min-height:0;overflow:hidden;}
+.server-console-panel,.server-stats-panel,.server-files-panel,.server-backups-panel,.server-schedules-panel,.server-settings-panel,.server-playit-panel{height:100%;padding:12px 16px 14px;overflow:hidden;display:none;}
+.server-console-panel.active,.server-stats-panel.active,.server-files-panel.active,.server-backups-panel.active,.server-schedules-panel.active,.server-settings-panel.active,.server-playit-panel.active{display:flex;flex-direction:column;}
+.server-playit-card{background:var(--bg-surface);border:0.5px solid var(--border);border-radius:11px;padding:16px;display:flex;flex-direction:column;gap:10px;max-width:900px;min-height:0;flex:1;}
+.server-playit-title{font-size:var(--text-lg);color:#ddd;}.server-playit-status{font-size:var(--text-base);}.server-playit-status.neutral{color:#9e9e9e;}.server-playit-status.running{color:var(--accent-green);}.server-playit-status.waiting{color:#d7a91e;}.server-playit-status.error{color:#ff6b6b;}.server-playit-help{font-size:var(--text-sm);color:#666;line-height:1.5;}.server-playit-claim{color:#b3aaf5;word-break:break-all;cursor:pointer;text-decoration:underline;}
+.server-playit-terminal{flex:1;min-height:280px;background:#050505;border:0.5px solid var(--border);border-radius:8px;padding:8px;overflow:hidden;}
+.server-playit-terminal .xterm{height:100%;}
+.server-playit-terminal .xterm-viewport{overflow-y:auto!important;}
+.server-console-box{flex:1;overflow-y:auto;background:var(--bg-void);border:0.5px solid var(--border);border-radius:10px;padding:10px;font-family:var(--font-mono);font-size:var(--text-xs);line-height:1.7;color:#d9d9d9;}
+.server-console-line{display:block;white-space:pre-wrap;}
+.server-console-input{margin-top:10px;display:flex;gap:8px;align-items:center;background:var(--bg-surface-2);border:0.5px solid var(--border);border-radius:9px;padding:8px 10px;}
+.server-console-input input{flex:1;background:transparent;border:none;outline:none;color:#ddd;font:inherit;font-size:var(--text-sm);}
+.server-console-send{border:0.5px solid #2d2860;background:#1a1833;color:#d6d2ff;border-radius:7px;padding:7px 11px;font:inherit;font-size:var(--text-sm);cursor:pointer;}
+.server-files-toolbar{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-bottom:8px;}
+.server-files-toolbar .server-mini-btn{min-height:30px;padding:0 11px;}
+.server-files-header{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;}
+.server-files-header .server-files-breadcrumbs{padding:0;flex:1;min-width:180px;}
+.server-files-breadcrumbs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:5px 0 8px;color:#666;font-size:var(--text-sm);}
+.server-breadcrumb{color:var(--accent-purple);cursor:pointer;}
+.server-breadcrumb.current{color:#ddd;cursor:default;}
+.server-file-editor{display:flex;flex-direction:column;gap:8px;flex:1;min-height:0;}
+.server-file-editor-header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;background:var(--bg-surface);border:0.5px solid var(--border);border-radius:8px;color:#ddd;font-size:var(--text-sm);}
+.server-file-editor textarea{flex:1;min-height:220px;background:var(--bg-void);border:0.5px solid var(--border);border-radius:8px;color:#ddd;padding:10px;font:11px/1.5 var(--font-mono);resize:none;outline:none;}
+.server-file-editor-actions{display:flex;justify-content:flex-end;gap:8px;}
+.server-files-tree .server-file-row.folder{cursor:pointer;}
+.server-stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;}
+.server-charts{display:flex;flex-direction:column;gap:12px;margin-top:12px;}
+.server-chart-wrap{background:var(--bg-surface);border:0.5px solid var(--border);border-radius:10px;padding:10px;}
+.server-chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:var(--text-sm);color:#aaa;}
+.server-chart-header span:last-child{color:var(--accent-green);}
+.server-chart-wrap.ram .server-chart-header span:last-child{color:var(--accent-purple);}
+.server-chart-canvas{display:block;width:100%;height:150px;border-radius:8px;background:var(--bg-void);border:0.5px solid var(--bg-surface-2);}
+.server-form{display:flex;flex-direction:column;gap:8px;background:var(--bg-surface);border:0.5px solid var(--border);border-radius:10px;padding:10px;}
+.server-form-row{display:flex;gap:8px;align-items:center;}
+.server-form-label{font-size:var(--text-xs);color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.06em;}
+.server-stat{background:var(--bg-surface);border:0.5px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:7px;}
+.server-stat-label{font-size:var(--text-xs);color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.08em;}
+.server-stat-value{font-size:20px;color:#ddd;font-weight:600;}
+.server-stat-sub{font-size:var(--text-xs);color:var(--text-muted);}
+.server-files-tree{flex:1;overflow:auto;background:var(--bg-void);border:0.5px solid var(--border);border-radius:10px;padding:8px;display:flex;flex-direction:column;gap:4px;}
+.server-files-list{display:flex;flex-direction:column;gap:4px;overflow:auto;flex:1;min-width:0;}
+.server-files-layout{display:flex;gap:10px;flex:1;min-height:0;}
+.server-file-editor-pane{display:flex;flex-direction:column;gap:8px;flex:1;min-width:260px;background:var(--bg-void);border:0.5px solid var(--border);border-radius:10px;padding:8px;}
+.server-file-editor-pane .server-file-editor{min-height:0;}
+.server-file-meta{display:flex;gap:12px;color:var(--text-secondary);font-size:var(--text-xs);white-space:nowrap;}
+.server-file-check{width:14px;height:14px;accent-color:#3b9a25;flex-shrink:0;}
+.server-file-icon{width:20px;text-align:center;color:var(--accent-green);flex-shrink:0;}
+.server-files-search{width:180px;background:var(--bg-surface-2);border:0.5px solid var(--border-strong);border-radius:7px;padding:6px 9px;color:#ccc;font:inherit;font-size:var(--text-sm);outline:none;}
+.server-context-menu{position:fixed;z-index:100;background:var(--bg-surface-2);border:0.5px solid #333;border-radius:7px;padding:4px;display:flex;flex-direction:column;min-width:140px;box-shadow:0 8px 25px rgba(0,0,0,.45);}
+.server-context-menu button{border:0;background:transparent;color:#bbb;text-align:left;padding:7px 9px;font:inherit;font-size:var(--text-sm);cursor:pointer;border-radius:4px;}
+.server-context-menu button:hover{background:#252525;color:#fff;}
+.server-file-editor-pane .server-file-editor textarea{min-height:0;}
+.server-file-editor-pane .CodeMirror{flex:1;min-height:260px;border:0.5px solid var(--border);border-radius:8px;font:11px/1.5 var(--font-mono);}
+.cm-s-bald.CodeMirror{background:var(--bg-void);color:#c7d0d9;}
+.cm-s-bald .CodeMirror-gutters{background:#11151a;border-right:1px solid #252a30;}
+.cm-s-bald .CodeMirror-linenumber{color:#59636d;}
+.cm-s-bald span.cm-comment{color:#6fbf73;font-style:italic;}
+.cm-s-bald span.cm-def{color:#8fc7ff;font-style:normal;font-weight:600;}
+.cm-s-bald span.cm-quote,.cm-s-bald span.cm-string{color:#e7b875;font-style:normal;}
+.cm-s-bald span.cm-atom,.cm-s-bald span.cm-number{color:#f0a45d;font-style:normal;}
+.cm-s-bald span.cm-variable,.cm-s-bald span.cm-variable-2{color:#e7b875;}
+.cm-s-bald span.cm-header{color:#c49cff;}
+.cm-s-bald .CodeMirror-cursor{border-left-color:var(--accent-green);}
+.server-file-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 8px;border-radius:7px;background:var(--bg-surface);border:0.5px solid var(--border);}
+.server-file-row:hover{border-color:var(--border-strong);}
+.server-file-name{font-size:var(--text-sm);color:#ddd;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.server-file-actions{display:flex;align-items:center;gap:8px;}
+.server-file-action{color:#666;cursor:pointer;font-size:var(--text-sm);}
+.server-file-action:hover{color:#ddd;}
+.server-file-action.disabled{color:#444;cursor:default;}
+.server-setting-note{font-size:var(--text-xs);color:#b88a16;font-weight:400;text-transform:none;letter-spacing:0;}
+.server-backup-list,.server-schedule-list{display:flex;flex-direction:column;gap:8px;overflow:auto;}
+.server-card-row{background:var(--bg-surface);border:0.5px solid var(--border);border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.server-row-meta{font-size:var(--text-base);color:#ccc;}
+.server-row-sub{font-size:var(--text-xs);color:#444;margin-top:2px;}
+.server-mini-btn{border:0.5px solid var(--border-strong);background:var(--bg-surface-2);color:#cfcfcf;border-radius:7px;padding:6px 10px;font:inherit;font-size:var(--text-sm);cursor:pointer;}
+.server-mini-btn.primary{border-color:#3b6d11;background:var(--accent-green-bg);color:var(--accent-green-text-on-dark);}
+.server-mini-btn.danger{border-color:#562020;background:#2a1212;color:#ffbdbd;}
+.server-settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;}
+.server-settings-section{background:var(--bg-surface);border:0.5px solid var(--border);border-radius:11px;padding:11px 13px;display:flex;flex-direction:column;gap:8px;}
+.server-settings-section-title{font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;padding-bottom:3px;border-bottom:.5px solid var(--border);}
+.server-settings-section .server-setting{background:transparent;border:0;border-radius:0;padding:4px 0;}
+.server-setting-help{font-size:var(--text-xs);line-height:1.45;color:var(--text-secondary);margin-top:-3px;max-width:720px;}
+.server-setting label a{color:var(--accent-purple);text-decoration:none;font-size:var(--text-xs);margin-left:5px;}
+.server-setting label a:hover{text-decoration:underline;}
+.server-setting{background:var(--bg-surface);border:0.5px solid var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;}
+.server-setting label{font-size:var(--text-xs);color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.08em;}
+.server-setting input,.server-setting select{background:var(--bg-surface-2);border:0.5px solid var(--border-strong);border-radius:7px;padding:8px 10px;color:#ccc;font:inherit;font-size:var(--text-base);outline:none;}
+.server-setting .server-toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+.server-setting .server-toggle input{accent-color:var(--accent-green);width:16px;height:16px;}
+.server-empty{color:#444;font-size:var(--text-base);padding:18px 0;}
+.modal-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.62);display:flex;align-items:center;justify-content:center;z-index:50;}
+.modal-box{background:var(--bg-surface);border:0.5px solid var(--border-strong);border-radius:12px;padding:18px;width:340px;max-height:540px;overflow-y:auto;display:flex;flex-direction:column;gap:12px;}
+.modal-box.wide{width:460px;}
+.modal-title-row{display:flex;align-items:center;justify-content:space-between;}
+.modal-title{font-size:var(--text-lg);color:#ddd;font-weight:500;}
+.modal-close{color:#444;cursor:pointer;font-size:var(--text-xl);line-height:1;}
+.modal-close:hover{color:#999;}
+.modal-label{font-size:var(--text-xs);color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px;display:block;}
+.modal-input{width:100%;background:var(--bg-surface-2);border:0.5px solid var(--border-strong);border-radius:7px;padding:8px 10px;color:#ccc;font-size:var(--text-base);font-family:inherit;outline:none;}
+.modal-input:focus{border-color:#3b6d11;}
+.modal-select{width:100%;background:var(--bg-surface-2);border:0.5px solid var(--border-strong);border-radius:7px;padding:8px 10px;color:#ccc;font-size:var(--text-base);font-family:inherit;outline:none;cursor:pointer;}
+.renderer-opt{display:flex;flex-direction:column;gap:2px;padding:9px 11px;border-radius:8px;border:0.5px solid var(--border-strong);cursor:pointer;transition:border-color .12s,background .12s;}
+.renderer-opt.sel{border-color:#3b6d11;background:#0f1a0a;}
+.renderer-opt-label{font-size:var(--text-base);color:#ccc;font-weight:500;}
+.renderer-opt-note{font-size:var(--text-xs);color:var(--text-muted);margin-top:1px;}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:2px;}
+.modal-btn{padding:8px 16px;border-radius:7px;border:0.5px solid var(--border-strong);background:var(--bg-surface-2);color:#999;font-size:var(--text-base);cursor:pointer;font-family:inherit;}
+.modal-btn.primary{background:var(--accent-green-bg);border-color:#3b6d11;color:var(--accent-green-text-on-dark);}
+.modal-btn.primary:hover{background:var(--accent-green-bg-hover);}
+.bundle-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:0.5px solid var(--border-strong);border-radius:8px;background:var(--bg-surface-2);}
+.bundle-item.unresolved{opacity:0.5;}
+.bundle-item-icon{width:28px;height:28px;border-radius:6px;background:var(--bg-surface-2);background-size:cover;background-position:center;flex-shrink:0;border:0.5px solid #262626;}
+.bundle-item-info{flex:1;min-width:0;}
+.bundle-item-name{font-size:var(--text-base);color:#ccc;font-weight:500;}
+.bundle-item-desc{font-size:var(--text-xs);color:#444;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* PROFILE DETAIL */
+.profile-detail{display:flex;flex-direction:column;height:100%;overflow:hidden;}
+.pd-header{padding:14px 16px;border-bottom:0.5px solid var(--bg-surface-2);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;}
+.pd-back{color:var(--text-secondary);cursor:pointer;font-size:var(--text-lg);margin-right:6px;}
+.pd-back:hover{color:#999;}
+.pd-identity{display:flex;align-items:center;gap:11px;min-width:0;}
+.pd-icon{width:40px;height:40px;border-radius:9px;background:#1a1833;display:flex;align-items:center;justify-content:center;font-size:var(--text-xl);font-weight:700;color:var(--accent-purple);flex-shrink:0;}
+.pd-name{font-size:var(--text-lg);color:#ccc;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pd-sub{font-size:var(--text-xs);color:var(--text-muted);margin-top:2px;}
+.pd-actions{display:flex;gap:8px;flex-shrink:0;}
+.add-content-btn{height:36px;padding:0 14px;border:0.5px solid #4a3f8a;border-radius:9px;background:var(--accent-purple-bg);color:#b3aaf5;font-size:var(--text-base);font-weight:600;font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:background .12s;}
+.add-content-btn:hover{background:#2b2358;}
+.pd-play{height:36px;padding:0 17px;border:0.5px solid #3b6d11;border-radius:9px;background:var(--accent-green-bg);color:var(--accent-green-text-on-dark);font-size:var(--text-base);font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .12s;}
+.pd-play:hover{background:var(--accent-green-bg-hover);}
+.pd-play.starting-btn{border-color:#b88a16;background:#d7a91e;color:#1b1605;}
+.pd-play.starting-btn:hover{background:#edbd2b;}
+.pd-play.stop-btn{border-color:#b52b2b;background:#c93636;color:#fff0f0;}
+.pd-play.stop-btn:hover{background:#e04444;}
+.pd-tabs{display:flex;gap:4px;padding:9px 16px 0;border-bottom:0.5px solid var(--bg-surface-2);flex-shrink:0;}
+.pd-tab{padding:7px 13px;font-size:var(--text-base);color:var(--text-secondary);cursor:pointer;border-bottom:2px solid transparent;transition:color .12s;}
+.pd-tab.active{color:var(--accent-purple);border-color:var(--accent-purple);}
+.pd-tab:hover:not(.active){color:#999;}
+
+.vulkan-warning{margin:10px 14px 0;background:#231d05;border:0.5px solid #5a4a10;border-radius:8px;padding:9px 12px;font-size:var(--text-sm);color:#e0c050;display:flex;align-items:center;gap:9px;line-height:1.5;flex-shrink:0;}
+
+/* Installed content (library) */
+.library-view{flex:1;overflow-y:auto;min-height:0;}
+.chip-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:11px 16px 0;flex-shrink:0;}
+.library-search{display:flex;align-items:center;gap:8px;margin:11px 16px 0;background:var(--bg-surface-2);border:0.5px solid var(--border-strong);border-radius:8px;padding:0 10px;color:var(--text-secondary);flex-shrink:0;}
+.library-search:focus-within{border-color:#3b6d11;color:var(--accent-green);}
+.library-search input{width:100%;height:32px;border:0;background:transparent;outline:none;color:#ccc;font:inherit;font-size:var(--text-sm);}
+.library-search input::placeholder{color:var(--text-secondary);}
+.chip{min-height:30px;min-width:76px;padding:0 13px;border-radius:18px;border:0.5px solid #2e2e2e;background:var(--bg-surface-2);color:#8a8a8a;font-size:var(--text-sm);font-family:inherit;cursor:pointer;transition:all .12s;white-space:nowrap;}
+.chip:hover{background:var(--border);color:#ccc;}
+.chip.active{background:#142f11;color:var(--accent-green);border-color:#2b8b2f;}
+.library-list{display:flex;flex-direction:column;gap:6px;padding:12px 16px;}
+.library-item{background:var(--bg-surface);border:0.5px solid var(--border);border-radius:10px;padding:9px 12px;display:flex;align-items:center;gap:11px;transition:border-color .12s;}
+.library-item:hover{border-color:var(--border-strong);}
+.library-item.disabled{opacity:0.5;}
+.li-icon{width:32px;height:32px;border-radius:7px;background:var(--bg-surface-2);display:flex;align-items:center;justify-content:center;font-size:var(--text-lg);flex-shrink:0;border:0.5px solid var(--border-strong);color:var(--text-secondary);}
+.li-icon.type-mod{color:var(--accent-green);background:#132a0d;}
+.li-icon.type-shader{color:#e0c050;background:#231d05;}
+.li-icon.type-resourcepack{color:var(--accent-purple);background:#1a1833;}
+.li-icon.type-datapack{color:#5aa9e0;background:#0d1e2a;}
+.li-info{flex:1;min-width:0;}
+.li-name{font-size:var(--text-base);color:#ccc;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.li-type{font-size:var(--text-xs);color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.04em;margin-top:1px;}
+.li-actions{display:flex;align-items:center;gap:10px;flex-shrink:0;}
+.li-toggle{position:relative;width:34px;height:19px;flex-shrink:0;}
+.li-toggle input{opacity:0;width:0;height:0;}
+.li-toggle-slider{position:absolute;inset:0;background:var(--border-strong);border-radius:10px;cursor:pointer;transition:background .15s;}
+.li-toggle-slider::before{content:'';position:absolute;width:14px;height:14px;left:2.5px;top:2.5px;background:#666;border-radius:50%;transition:transform .15s,background .15s;}
+.li-toggle input:checked + .li-toggle-slider{background:#1e4a10;}
+.li-toggle input:checked + .li-toggle-slider::before{transform:translateX(15px);background:var(--accent-green);}
+.li-remove{color:var(--text-muted);cursor:pointer;font-size:var(--text-lg);padding:4px;}
+.li-remove:hover{color:#c0392b;}
+
+/* Add-content (browse) modal */
+.content-search-row{display:flex;align-items:center;gap:10px;}
+.search-wrap{position:relative;flex:1;display:flex;align-items:center;}
+.search-icon{position:absolute;left:11px;color:var(--text-muted);font-size:var(--text-lg);pointer-events:none;}
+.search-box{width:100%;background:var(--bg-surface-2);border:0.5px solid var(--border-strong);border-radius:8px;padding:8px 12px 8px 32px;color:#ccc;font-size:var(--text-base);font-family:inherit;outline:none;}
+.search-box:focus{border-color:#3b6d11;}
+.browse-status{font-size:var(--text-xs);color:var(--text-muted);padding:2px 0;}
+.browse-results{display:flex;flex-direction:column;gap:7px;flex:1;min-height:0;overflow-y:auto;}
+.browse-pagination{display:flex;align-items:center;justify-content:center;gap:7px;padding:4px 0 0;min-height:30px;}
+.browse-footer{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;padding-top:4px;}
+.browse-footer .chip-row{padding:0!important;}
+.browse-page-btn{min-width:28px;height:28px;border:0.5px solid var(--border-strong);border-radius:50%;background:var(--bg-surface-2);color:#888;cursor:pointer;font-family:inherit;font-size:var(--text-sm);}
+.browse-page-btn:hover:not(:disabled){background:#232323;color:#ddd;border-color:#3b6d11;}
+.browse-page-btn.active{background:#145b2a;border-color:#2ed65b;color:var(--accent-green-text-on-dark);}
+.browse-page-btn:disabled{color:#333;cursor:default;}
+.browse-page-gap{color:var(--text-secondary);padding:0 2px;}
+.browse-card{background:var(--bg-surface-2);border:0.5px solid var(--border-strong);border-radius:9px;padding:9px 11px;display:flex;align-items:center;gap:10px;}
+.mod-attribution{display:flex;align-items:center;gap:9px;min-width:0;flex:1;cursor:pointer;}
+.mod-attribution-icon{width:38px;height:38px;flex-shrink:0;border-radius:7px;background:var(--border-strong) center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#888;}
+.mod-attribution-copy{min-width:0;}.mod-attribution-name{color:#ddd;font-size:var(--text-base);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.mod-attribution-meta{color:#777;font-size:var(--text-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.mod-attribution-source{color:#8ad66e;font-size:var(--text-xs);}
+.content-attribution{font-size:var(--text-xs);line-height:1.5;color:#666;padding-top:5px;}.content-attribution strong{color:#aaa;font-weight:500;}
+.mod-details{display:flex;flex-direction:column;gap:14px;}.mod-details-head{display:flex;gap:12px;align-items:center;}.mod-details-icon{width:64px;height:64px;border-radius:10px;background:var(--border-strong) center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#888;font-size:22px;flex-shrink:0;}.mod-details-title{font-size:18px;color:#eee;}.mod-details-author{font-size:var(--text-sm);color:#aaa;margin-top:4px;}.mod-details-description{font-size:var(--text-base);color:#aaa;line-height:1.5;}.mod-details-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;font-size:var(--text-sm);color:#999;}.mod-details-grid strong{color:#ddd;font-weight:500;}
+.bc-icon{width:32px;height:32px;border-radius:7px;background:var(--bg-surface-2);display:flex;align-items:center;justify-content:center;font-size:var(--text-lg);flex-shrink:0;border:0.5px solid #262626;background-size:cover;background-position:center;}
+.bc-info{flex:1;min-width:0;}
+.bc-name{font-size:var(--text-base);color:#ccc;font-weight:500;}
+.bc-desc{font-size:var(--text-xs);color:#444;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.bc-dl{font-size:var(--text-xs);color:#333;margin-top:2px;}
+.install-btn{font-size:var(--text-sm);padding:5px 11px;border-radius:6px;border:0.5px solid #2a6d14;background:#1a3d0a;color:#7fc45a;cursor:pointer;font-family:inherit;flex-shrink:0;white-space:nowrap;}
+.install-btn.installed{color:#666;border-color:var(--border-strong);background:var(--bg-surface-2);cursor:default;}
+#browseModal .modal-box.wide{width:min(92vw,980px);height:min(86vh,760px);max-height:calc(100vh - 40px);overflow:hidden;}
+#browseModal .browse-footer{flex-shrink:0;}
+#browseModal .content-attribution{flex-shrink:0;}
+@media (max-width:700px){#browseModal .modal-box.wide{width:calc(100vw - 24px);height:calc(100vh - 24px);max-height:none;padding:14px;}.browse-card{padding:8px;}.mod-attribution-meta{white-space:normal;}.browse-footer{gap:8px;}}
+
+/* PROFILE SETTINGS TAB */
+.pd-settings{padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;height:100%;max-width:760px;width:100%;min-height:0;}
+.pd-settings-row{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:0.5px solid var(--bg-surface-2);}
+.pd-settings-row.column{flex-direction:column;align-items:stretch;gap:7px;}
+.pd-settings-row:last-child{margin-top:auto;}
+.danger-btn{margin-left:auto;background:#7f1d1d;border:1px solid #b52b2b;color:#ffe0e0;border-radius:7px;padding:8px 14px;font-size:var(--text-sm);font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;}
+.danger-btn:hover{background:#a52424;border-color:#d04444;}
+
+/* LOGS */
+.logs-panel{padding:12px 14px;display:flex;flex-direction:column;gap:9px;height:100%;overflow:hidden;}
+.logs-tabs{display:flex;gap:6px;flex-shrink:0;}
+.log-tab{font-size:var(--text-sm);padding:5px 13px;border-radius:7px;border:0.5px solid var(--border-strong);background:var(--bg-surface-2);color:#444;cursor:pointer;font-family:inherit;transition:all .12s;}
+.log-tab.active{background:#1a1833;border-color:#2d2860;color:var(--accent-purple);}
+.log-tab.crash-tab{border-color:#3a1010;color:#7a3030;}
+.log-tab.crash-tab.active{background:#1a0808;border-color:#5a1a1a;color:#e74c3c;}
+.crash-summary{background:#1a0808;border:0.5px solid #5a1a1a;border-radius:10px;padding:11px 13px;flex-shrink:0;}
+.crash-title{font-size:var(--text-md);color:#e74c3c;font-weight:500;display:flex;align-items:center;gap:7px;margin-bottom:5px;}
+.crash-sub{font-size:var(--text-xs);color:#6a2a2a;}
+.fix-steps{display:flex;flex-direction:column;gap:7px;overflow-y:auto;flex:1;}
+.fix-step{background:var(--bg-surface);border:0.5px solid var(--border);border-radius:9px;padding:10px 12px;}
+.step-hd{display:flex;align-items:center;gap:9px;margin-bottom:5px;}
+.step-num{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:var(--text-xs);font-weight:600;flex-shrink:0;}
+.s1{background:#1a1833;color:var(--accent-purple);}.s2{background:#1a2a1a;color:#3b6d11;}
+.s3{background:#1a1a2a;color:#5577cc;}.s4{background:#2a1a1a;color:#c07030;}
+.step-title{font-size:var(--text-base);color:#ccc;font-weight:500;}
+.step-desc{font-size:var(--text-xs);color:var(--text-secondary);line-height:1.6;}
+.step-cmd{background:var(--bg-void);border:0.5px solid var(--border-strong);border-radius:5px;padding:5px 9px;font-family:var(--font-mono);font-size:var(--text-xs);color:var(--accent-purple);margin-top:5px;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.copy-btn{font-size:var(--text-xs);color:#333;cursor:pointer;background:none;border:none;font-family:inherit;flex-shrink:0;}
+.copy-btn:hover{color:#aaa;}
+.raw-log{flex:1;overflow-y:auto;background:var(--bg-void);border:0.5px solid var(--bg-surface-2);border-radius:9px;padding:10px;font-family:var(--font-mono);font-size:var(--text-xs);line-height:1.7;}
+.pd-logs-view{padding:12px 14px;display:flex;flex-direction:column;gap:9px;height:100%;min-height:0;overflow:hidden;}
+.log-line{display:block;padding:1px 0;}
+.log-line.err{color:#ff5c57;}.log-line.warn{color:#f0c44f;}
+.log-line.info,.log-line.normal{color:#66d66b;}
+.prev-item{background:var(--bg-surface);border:0.5px solid var(--border);border-radius:9px;padding:9px 12px;display:flex;align-items:center;gap:10px;cursor:pointer;}
+.prev-item:hover{border-color:var(--border-strong);}
+
+/* ACCOUNTS */
+.accounts-panel{padding:16px;display:flex;flex-direction:column;gap:9px;height:100%;overflow-y:auto;}
+.acc-card{background:var(--bg-surface);border:0.5px solid var(--border);border-radius:10px;padding:11px 13px;display:flex;align-items:center;gap:11px;}
+.acc-card.active-acc{border-color:#2d2860;background:#0f0d1a;}
+.acc-av-lg{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:var(--text-md);font-weight:500;flex-shrink:0;}
+.acc-info{flex:1;min-width:0;}.acc-info-name{font-size:var(--text-md);color:#ccc;}
+.acc-info-type{font-size:var(--text-xs);color:var(--text-muted);margin-top:2px;}
+.acc-badge{font-size:var(--text-xs);padding:2px 8px;border-radius:8px;background:#1a1833;color:var(--accent-purple);flex-shrink:0;}
+.add-acc{background:var(--bg-surface-2);border:0.5px dashed var(--border-strong);border-radius:10px;padding:11px;display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer;color:#444;font-size:var(--text-base);font-family:inherit;transition:all .12s;width:100%;}
+.add-acc:hover{border-color:var(--accent-purple);color:var(--accent-purple);}
+.add-acc.offline{border-style:solid;border-color:#2b8b2f;color:var(--accent-green);}
+.add-acc.offline:hover{border-color:#3ccf58;color:#bcffbe;}
+.sw-btn{font-size:var(--text-sm);padding:4px 11px;border-radius:6px;border:0.5px solid var(--border-strong);background:var(--bg-surface-2);color:#888;cursor:pointer;font-family:inherit;flex-shrink:0;}
+.delete-account-btn{font-size:var(--text-sm);padding:4px 8px;border-radius:6px;border:0.5px solid #512020;background:#210f0f;color:#c97878;cursor:pointer;font-family:inherit;flex-shrink:0;}
+
+/* SETTINGS */
+.options-source{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.options-source-label{font-size:var(--text-sm);color:var(--text-secondary);flex:1;min-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.options-help{font-size:var(--text-xs);color:#444;line-height:1.5;margin-top:2px;}
+.setting-check{accent-color:#3b9a25;width:15px;height:15px;}
+.settings-panel{padding:16px;overflow-y:auto;height:100%;display:flex;flex-direction:column;gap:11px;}
+.settings-section{background:var(--bg-surface);border:0.5px solid var(--border);border-radius:11px;padding:11px 13px;}
+.ss-title{font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:9px;}
+.setting-row{display:flex;align-items:center;gap:9px;padding:5px 0;border-bottom:0.5px solid var(--bg-surface-2);}
+.setting-row:last-child{border-bottom:none;}
+.setting-label{font-size:var(--text-base);color:#777;flex:1;}
+.setting-val{font-size:var(--text-base);color:#3b9a25;font-weight:500;min-width:46px;text-align:right;}
+.setting-slider{flex:1;max-width:120px;accent-color:#3b9a25;}
+.setting-input{background:var(--bg-surface-2);border:0.5px solid var(--border-strong);border-radius:6px;padding:4px 8px;color:#ccc;font-size:var(--text-sm);font-family:var(--font-mono);outline:none;}
+.setting-select{background:var(--bg-surface-2);border:0.5px solid var(--border-strong);border-radius:6px;padding:4px 8px;color:#ccc;font-size:var(--text-sm);font-family:inherit;outline:none;cursor:pointer;}
+
+.statusbar{height:25px;background:var(--bg-void);border-top:0.5px solid var(--bg-surface-2);display:flex;align-items:center;padding:0 13px;gap:13px;flex-shrink:0;}
+.sb-dot{width:6px;height:6px;border-radius:50%;background:#3b6d11;flex-shrink:0;}
+.sb-txt{font-size:var(--text-xs);color:#333;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+i.ti{font-style:normal;display:inline-flex;align-items:center;justify-content:center;line-height:1;min-width:1em;min-height:1em;}
+div[onclick],span[onclick]{outline:none;}
+div[onclick]:focus-visible,span[onclick]:focus-visible{box-shadow:0 0 0 2px var(--accent-purple);}
+.ti-home::before{content:"⌂";}.ti-user::before{content:"◉";}.ti-settings::before{content:"⚙";}
+.ti-terminal-2::before{content:"▣";}.ti-bell::before{content:"🔔";}.ti-chevron-down::before{content:"▾";}
+.ti-player-play::before{content:"▶";}.ti-square::before{content:"■";}.ti-loader::before{content:"◌";}.ti-search::before{content:"⌕";}.ti-alert-triangle::before{content:"⚠";}
+.ti-alert-circle::before{content:"!";}.ti-chevron-right::before{content:"›";}.ti-trash::before{content:"×";}
+.ti-plus::before{content:"+";}.ti-check::before{content:"✓";}.ti-compass::before{content:"◎";}
+.ti-arrow-left::before{content:"←";}.ti-package::before{content:"▣";}.ti-sun::before{content:"☀";}
+.ti-photo::before{content:"▦";}.ti-map::before{content:"▧";}.ti-x::before{content:"×";}
+.ti-folder::before{content:"📁";}.ti-puzzle::before{content:"♢";}.ti-file-json::before{content:"{}";font-size:.75em;}.ti-file-config::before{content:"⚙";}.ti-file-text::before{content:"≡";}.ti-file-log::before{content:"▤";}.ti-file-archive::before{content:"▥";}.ti-file-generic::before{content:"•";}
+</style>
+
+<div class="app" style="position:relative;">
+  <div class="update-banner" id="updateBanner"><span id="updateBannerText"></span><button id="updateButton" type="button">Update now</button></div>
+  <div class="titlebar">
+    <div class="titlebar-logo">B</div>
+    <span class="titlebar-name">Bald Launcher</span>
+    <div class="titlebar-acc">
+      <div class="acc-av" id="titlebarAv">YO</div>
+      <span class="acc-name" id="titlebarName">YourName</span>
+      <i class="ti ti-chevron-down" style="font-size:10px;color:#444;" aria-hidden="true"></i>
+    </div>
+  </div>
+  <div class="body">
+    <div class="sidebar">
+      <div class="si on" id="nav-home" title="Profiles" onclick="showPanel('home')"><i class="ti ti-home" aria-hidden="true"></i></div>
+      <div class="si" id="nav-servers" title="Servers" onclick="showPanel('servers')"><i class="ti ti-terminal-2" aria-hidden="true"></i></div>
+      <div class="si" id="nav-accounts" title="Accounts" onclick="showPanel('accounts')"><i class="ti ti-user" aria-hidden="true"></i></div>
+      <div class="si" id="nav-settings" title="Settings" onclick="showPanel('settings')"><i class="ti ti-settings" aria-hidden="true"></i></div>
+      <div class="si has-badge" id="nav-logs" title="Logs" onclick="showPanel('logs')"><i class="ti ti-terminal-2" aria-hidden="true"></i></div>
+      <div class="si-gap"></div>
+      <div class="si" title="Changelog"><i class="ti ti-bell" aria-hidden="true"></i></div>
+    </div>
+
+    <!-- PROFILES (home) -->
+    <div class="panel" id="panel-home">
+      <div class="profiles-view">
+        <div class="profiles-toolbar">
+          <button class="new-profile-btn" type="button" onclick="openNewProfileModal()"><i class="ti ti-plus" aria-hidden="true"></i> New profile</button>
+          <span class="profiles-count" id="profileCount"></span>
+        </div>
+        <div class="profile-grid" id="profileGrid"></div>
+      </div>
+    </div>
+
+    <!-- SERVERS -->
+    <div class="panel" id="panel-servers" style="display:none;">
+      <div class="servers-view">
+        <div class="servers-toolbar">
+          <button class="new-profile-btn" type="button" onclick="openNewServerModal()"><i class="ti ti-plus" aria-hidden="true"></i> New server</button>
+        </div>
+        <div class="server-list" id="serverList"></div>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-server-detail" style="display:none;">
+      <div class="server-detail">
+        <div class="server-detail-header">
+          <div class="pd-identity">
+            <span class="pd-back" onclick="showPanel('servers')" title="Back to servers"><i class="ti ti-arrow-left" aria-hidden="true"></i></span>
+            <div class="pd-icon" id="serverDetailIcon">S</div>
+            <div style="min-width:0;">
+              <div class="pd-name" id="serverDetailName">Server</div>
+              <div class="pd-sub" id="serverDetailMeta">1.21.1 · Fabric · Playit</div>
+            </div>
+          </div>
+          <div class="pd-actions">
+            <button class="add-content-btn" type="button" onclick="openBrowseModal()"><i class="ti ti-compass" aria-hidden="true"></i> Add content</button>
+            <button class="server-btn" id="serverActionButton" type="button" onclick="toggleServerAction(currentServerId)"><i class="ti ti-player-play" aria-hidden="true"></i> Start</button>
+          </div>
+        </div>
+        <div class="server-tabs">
+          <div class="server-tab active" data-server-tab="console" onclick="setServerTab('console')">Console</div>
+          <div class="server-tab" data-server-tab="stats" onclick="setServerTab('stats')">Stats</div>
+          <div class="server-tab" data-server-tab="files" onclick="setServerTab('files')">Files</div>
+          <div class="server-tab" data-server-tab="backups" onclick="setServerTab('backups')">Backups</div>
+          <div class="server-tab" data-server-tab="schedules" onclick="setServerTab('schedules')">Schedules</div>
+          <div class="server-tab" data-server-tab="settings" onclick="setServerTab('settings')">Settings</div>
+          <div class="server-tab" data-server-tab="playit" onclick="setServerTab('playit')">Playit</div>
+        </div>
+        <div class="server-layout">
+          <div class="server-console-panel active" id="serverConsolePanel">
+            <div class="server-console-box" id="serverConsoleBox"></div>
+            <div class="server-console-input">
+              <input id="serverConsoleInput" type="text" placeholder="Type a command and press Enter..." onkeydown="if(event.key==='Enter'){sendServerConsoleCommand();}" />
+              <button class="server-console-send" type="button" onclick="sendServerConsoleCommand()">Send</button>
+            </div>
+          </div>
+          <div class="server-stats-panel" id="serverStatsPanel">
+            <div class="server-stats-grid" id="serverStatsGrid"></div>
+          </div>
+          <div class="server-files-panel" id="serverFilesPanel">
+            <div class="server-files-tree" id="serverFilesTree"></div>
+          </div>
+          <div class="server-backups-panel" id="serverBackupsPanel">
+            <div class="server-backup-list" id="serverBackupList"></div>
+          </div>
+          <div class="server-schedules-panel" id="serverSchedulesPanel">
+            <div class="server-schedule-list" id="serverScheduleList"></div>
+          </div>
+          <div class="server-settings-panel" id="serverSettingsPanel">
+            <div class="server-settings-grid" id="serverSettingsGrid"></div>
+          </div>
+          <div class="server-playit-panel" id="serverPlayitPanel">
+            <div class="server-playit-card">
+              <div class="server-playit-title">Playit agent</div>
+              <div class="server-playit-status neutral" id="serverPlayitStatus">Stopped</div>
+              <div class="server-playit-help" id="serverPlayitHelp">The real Playit agent terminal is attached below.</div>
+              <div class="server-playit-terminal" id="serverPlayitTerminal"></div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="server-mini-btn" type="button" onclick="startPlayitAgent()">Start</button>
+                <button class="server-mini-btn" type="button" onclick="stopPlayitAgent()">Stop</button>
+                <button class="server-mini-btn" type="button" onclick="restartPlayitAgent()">Restart</button>
+                <button class="server-mini-btn" type="button" onclick="clearPlayitTerminal()">Clear terminal</button>
+                <button class="server-mini-btn" type="button" onclick="installPlayitAgent()">Install / update agent</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROFILE DETAIL -->
+    <div class="panel" id="panel-profile" style="display:none;">
+      <div class="profile-detail">
+        <div class="pd-header">
+          <div class="pd-identity">
+            <span class="pd-back" onclick="showPanel('home')" title="Back to profiles"><i class="ti ti-arrow-left" aria-hidden="true"></i></span>
+            <div class="pd-icon" id="pdIcon">B</div>
+            <div style="min-width:0;">
+              <div class="pd-name" id="pdName">Profile</div>
+              <div class="pd-sub" id="pdSub">1.21.1 · Fabric · Vulkan</div>
+            </div>
+          </div>
+          <div class="pd-actions">
+            <button class="add-content-btn" type="button" onclick="openBrowseModal()"><i class="ti ti-compass" aria-hidden="true"></i> Add content</button>
+            <button class="pd-play" id="pdPlayButton" type="button"><i class="ti ti-player-play" aria-hidden="true"></i> Play</button>
+          </div>
+        </div>
+        <div class="pd-tabs">
+          <div class="pd-tab active" id="pdtab-content" onclick="setPdTab('content')">Content</div>
+          <div class="pd-tab" id="pdtab-settings" onclick="setPdTab('settings')">Settings</div>
+          <div class="pd-tab" id="pdtab-logs" onclick="setPdTab('logs')">Logs</div>
+        </div>
+
+        <div id="pd-content-view" style="flex:1;display:flex;flex-direction:column;min-height:0;">
+          <div class="vulkan-warning" id="vulkanWarning" style="display:none;">
+            <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+            <span>Vulkan mode is on — some mods might not work. If something breaks, switch to Sodium in this profile's Settings tab or remove the mod.</span>
+          </div>
+          <label class="library-search" for="installedContentSearch">
+            <i class="ti ti-search" aria-hidden="true"></i>
+            <input id="installedContentSearch" type="search" placeholder="Search installed content" oninput="setLibrarySearch(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();setLibrarySearch(this.value)}" />
+          </label>
+          <div class="chip-row" id="typeChipRow"></div>
+          <div class="library-view">
+            <div class="library-list" id="libraryList"></div>
+          </div>
+        </div>
+
+        <div id="pd-settings-view" style="display:none;">
+          <div class="pd-settings">
+            <div class="pd-settings-row"><span class="setting-label">Profile name</span><input class="modal-input" id="pdRename" style="max-width:180px;" /></div>
+            <div class="pd-settings-row"><span class="setting-label">Minecraft version</span><select class="modal-select" id="pdVersionSel" style="max-width:180px;" onchange="onPdConfigChange()"></select></div>
+            <div class="pd-settings-row"><span class="setting-label">Mod loader</span><select class="modal-select" id="pdLoaderSel" style="max-width:180px;" onchange="onPdConfigChange()"></select></div>
+            <div class="pd-settings-row column">
+              <span class="setting-label">Renderer mode</span>
+              <div id="pdRendererOptions" style="display:flex;flex-direction:column;gap:6px;"></div>
+            </div>
+            <div class="pd-settings-row"><span class="setting-label">Mods / resource pack folders</span>
+              <button class="modal-btn" onclick="openFolder('mods')" style="padding:6px 11px;font-size:11px;"><i class="ti ti-folder" aria-hidden="true"></i> Open mods folder</button>
+            </div>
+            <div class="pd-settings-row" style="border-bottom:none;justify-content:space-between;">
+              <button class="modal-btn primary" onclick="savePdSettings()">Save changes</button>
+              <button class="danger-btn" onclick="deleteCurrentProfile()"><i class="ti ti-trash" aria-hidden="true"></i> Delete profile</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="pd-logs-view" class="pd-logs-view" style="display:none;">
+          <div class="logs-tabs">
+            <button class="log-tab active" id="pd-logtab-live" onclick="switchProfileLog('live')">Live session</button>
+            <button class="log-tab" id="pd-logtab-status" onclick="switchProfileLog('status')">Status</button>
+          </div>
+          <div id="pd-log-live" class="raw-log" style="flex:1;min-height:0;"></div>
+          <div id="pd-log-status" style="display:none;flex:1;min-height:0;overflow:auto;">
+            <div class="crash-summary" style="background:#111;border-color:#222;">
+              <div class="crash-title" style="color:#7ef15e;"><i class="ti ti-terminal-2" aria-hidden="true"></i> Launch diagnostics</div>
+              <div class="crash-sub" id="pd-log-status-text">Waiting for a launch.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOGS -->
+    <div class="panel" id="panel-logs" style="display:none;">
+      <div class="logs-panel">
+        <div class="logs-tabs">
+          <button class="log-tab active" id="tab-crash" onclick="switchLog('crash')"><i class="ti ti-check" style="font-size:11px;" aria-hidden="true"></i> Crash status</button>
+          <button class="log-tab" id="tab-raw" onclick="switchLog('raw')">Latest log</button>
+          <button class="log-tab" id="tab-prev" onclick="switchLog('prev')">Previous sessions</button>
+        </div>
+        <div id="lc-crash" style="flex:1;overflow:hidden;display:flex;flex-direction:column;gap:8px;">
+          <div class="crash-summary">
+            <div class="crash-title" style="color:#7ef15e;"><i class="ti ti-check" style="font-size:15px;" aria-hidden="true"></i> No crash detected</div>
+            <div class="crash-sub">A profile-specific crash will appear here after Minecraft reports one.</div>
+          </div>
+          <div class="fix-steps" style="display:none;">
+            <div class="fix-step"><div class="step-hd"><div class="step-num s1">1</div><span class="step-title">Increase RAM allocation</span></div><div class="step-desc">Your heap ran out. Go to Settings → Memory and raise the RAM slider.</div></div>
+            <div class="fix-step"><div class="step-hd"><div class="step-num s2">2</div><span class="step-title">Add G1GC tuning args</span></div><div class="step-desc">Paste into Settings → Java arguments:</div><div class="step-cmd"><span>-XX:+UseG1GC -XX:G1HeapRegionSize=32M -XX:MaxGCPauseMillis=50</span><button class="copy-btn" onclick="this.textContent='Copied!'">Copy</button></div></div>
+            <div class="fix-step"><div class="step-hd"><div class="step-num s3">3</div><span class="step-title">Install FerriteCore</span></div><div class="step-desc">Reduces baseline memory usage. Add it from the profile's Content tab.</div></div>
+            <div class="fix-step"><div class="step-hd"><div class="step-num s4">4</div><span class="step-title">Check mod conflicts</span></div><div class="step-desc">Try disabling recently added mods one by one to isolate the cause.</div></div>
+          </div>
+        </div>
+        <div id="lc-raw" style="flex:1;overflow:hidden;display:none;flex-direction:column;"><div class="raw-log" id="rawLogBox"></div></div>
+        <div id="lc-prev" style="flex:1;overflow:hidden;display:none;flex-direction:column;gap:7px;overflow-y:auto;">
+          <div style="font-size:10px;color:#333;padding:2px 0;">Previous sessions</div>
+          <div class="prev-item"><i class="ti ti-check" style="color:#3b6d11;font-size:15px;" aria-hidden="true"></i><div style="flex:1;"><div style="font-size:12px;color:#ccc;">No previous failed sessions</div><div style="font-size:10px;color:#333;margin-top:2px;">Live profile logs appear under Latest log</div></div></div>
+          <div class="prev-item"><i class="ti ti-check" style="color:#3b6d11;font-size:15px;" aria-hidden="true"></i><div style="flex:1;"><div style="font-size:12px;color:#ccc;">Normal exit</div><div style="font-size:10px;color:#333;margin-top:2px;">Today · 1h 12m</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ACCOUNTS -->
+    <div class="panel" id="panel-accounts" style="display:none;">
+      <div class="accounts-panel">
+        <div class="acc-card active-acc" id="acc-card-active"><div class="acc-av-lg" id="acc-active-av" style="background:#3c3489;color:#ceecf6;">YO</div><div class="acc-info"><div class="acc-info-name" id="acc-active-name">YourName</div><div class="acc-info-type" id="acc-active-type">Microsoft account</div></div><span class="acc-badge" id="acc-active-badge">Active</span><button class="delete-account-btn" onclick="deleteAccount(state.activeAccountId)" title="Delete account">Delete</button></div>
+        <div id="accountList"></div>
+        <button class="add-acc" type="button" onclick="addMicrosoftAccount()"><i class="ti ti-plus" aria-hidden="true"></i> Add Microsoft account</button>
+        <button class="add-acc offline" type="button" onclick="addOfflineAccount()"><i class="ti ti-user" aria-hidden="true"></i> Add offline account</button>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="panel" id="panel-settings" style="display:none;">
+      <div class="settings-panel">
+        <div class="settings-section"><div class="ss-title">Memory & Java</div>
+          <div class="setting-row"><span class="setting-label">RAM maximum</span><input type="range" class="setting-slider" min="1" max="32" value="6" step="1" id="ramSlider" oninput="updateRam(this.value)"/><span class="setting-val" id="ramVal">6 GB</span></div>
+          <div class="setting-row"><span class="setting-label">Java arguments</span><input class="setting-input" value="-XX:+UseG1GC -XX:G1HeapRegionSize=32M" style="width:195px;"/></div>
+          <div class="setting-row"><span class="setting-label">Java path</span><input class="setting-input" value="Auto-detect" style="width:140px;"/></div>
+        </div>
+        <div class="settings-section"><div class="ss-title">Launcher</div>
+          <div class="setting-row"><span class="setting-label">Close launcher on launch</span><select class="setting-select"><option>Yes</option><option>No</option><option>Minimize</option></select></div>
+          <div class="setting-row"><span class="setting-label">Keep open after game closes</span><select class="setting-select"><option>Yes</option><option>No</option></select></div>
+        </div>
+        <div class="settings-section"><div class="ss-title">PvP performance</div>
+          <div class="setting-row"><span class="setting-label">Video preset</span><select class="setting-select" id="performancePreset" onchange="syncSettings()"><option value="max-fps-pvp">Max FPS PvP</option><option value="balanced-pvp" selected>Balanced PvP</option><option value="quality">Quality</option></select></div>
+          <div class="setting-row"><span class="setting-label">Simulation distance</span><input type="range" class="setting-slider" min="4" max="16" value="8" step="1" id="simSlider" oninput="updateSim(this.value)"/><span class="setting-val" id="simVal">8 ch</span></div>
+          <div class="setting-row"><span class="setting-label">JVM profile</span><select class="setting-select" id="jvmProfile" onchange="toggleJvmArgs();syncSettings()"><option value="default">Tuned G1GC</option><option value="zgc">Ultra low-stutter (ZGC)</option><option value="custom">Custom</option></select></div>
+          <div class="setting-row"><span class="setting-label">Custom JVM arguments</span><input class="setting-input" id="customJvmArgs" value="" placeholder="Only when Custom is selected" style="width:260px;" onchange="syncSettings()"/></div>
+          <div class="setting-row"><span class="setting-label">Minecraft priority</span><select class="setting-select" id="processPriority" onchange="syncSettings()"><option value="normal">Normal</option><option value="above-normal">Above Normal</option></select></div>
+        </div>
+        <div class="settings-section"><div class="ss-title">Diagnostics</div>
+          <button class="modal-btn" type="button" onclick="loadDiagnostics()"><i class="ti ti-terminal-2" aria-hidden="true"></i> Refresh diagnostics</button>
+          <pre id="diagnosticsOutput" style="white-space:pre-wrap;color:#666;font:10px/1.5 var(--font-mono);margin-top:8px;">No diagnostics collected.</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="statusbar">
+    <div class="sb-dot"></div>
+    <span class="sb-txt" id="sbStatus">Ready</span>
+  </div>
+
+  <!-- NEW PROFILE MODAL -->
+  <div class="modal-overlay" id="offlineAccountModal" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-title-row"><span class="modal-title">Add offline account</span><span class="modal-close" onclick="closeOfflineAccountModal()">&times;</span></div>
+      <div><label class="modal-label">Username</label><input class="modal-input" id="offlineAccountName" maxlength="16" placeholder="Player" /></div>
+      <div class="options-source"><span class="options-source-label" id="offlineSkinLabel">No skin selected</span><button class="modal-btn" type="button" onclick="chooseOfflineSkin()">Choose PNG skin</button></div>
+      <div class="modal-actions">
+        <button class="modal-btn" onclick="closeOfflineAccountModal()">Cancel</button>
+        <button class="modal-btn primary" onclick="submitOfflineAccount()">Create account</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="newServerModal" style="display:none;">
+    <div class="modal-box wide">
+      <div class="modal-title-row"><span class="modal-title">New server</span><span class="modal-close" onclick="closeNewServerModal()">&times;</span></div>
+      <div><label class="modal-label">Server name</label><input class="modal-input" id="nsName" value="My server" /></div>
+      <div><label class="modal-label">Server type</label><select class="modal-select" id="nsServerType">
+        <option value="paper">Paper</option>
+        <option value="purpur">Purpur</option>
+        <option value="folia">Folia</option>
+        <option value="forge">Forge</option>
+        <option value="neoforge">NeoForge</option>
+        <option value="spigot">Spigot</option>
+        <option value="bukkit">Bukkit</option>
+        <option value="velocity">Velocity</option>
+        <option value="waterfall">Waterfall</option>
+        <option value="bungeecord">BungeeCord</option>
+        <option value="vanilla">Vanilla</option>
+        <option value="fabric">Fabric</option>
+        <option value="quilt">Quilt</option>
+      </select></div>
+      <div><label class="modal-label">Minecraft version</label><select class="modal-select" id="nsVersion"></select></div>
+      <div><label class="modal-label">Memory (GB)</label><input class="modal-input" id="nsMemory" type="number" min="2" max="32" value="4" /></div>
+      <div><label class="modal-label">Networking mode</label><select class="modal-select" id="nsNetworkingMode"><option value="playit">Playit tunnel</option><option value="port-forward">Port forwarding</option></select></div>
+      <div class="modal-actions">
+        <button class="modal-btn" onclick="closeNewServerModal()">Cancel</button>
+        <button class="modal-btn primary" onclick="submitNewServer()">Create server</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEW PROFILE MODAL -->
+  <div class="modal-overlay" id="newProfileModal" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-title-row"><span class="modal-title">New profile</span><span class="modal-close" onclick="closeNewProfileModal()">&times;</span></div>
+      <div><label class="modal-label">Profile name</label><input class="modal-input" id="npName" value="My profile" /></div>
+      <div><label class="modal-label">Minecraft version</label><select class="modal-select" id="npVersion" onchange="refreshNewProfileRenderers()"></select></div>
+      <div><label class="modal-label">Mod loader</label><select class="modal-select" id="npLoader" onchange="refreshNewProfileRenderers()"></select></div>
+      <div><label class="modal-label">Renderer mode</label><div id="npRendererOptions" style="display:flex;flex-direction:column;gap:6px;"></div></div>
+      <div class="modal-actions">
+        <button class="modal-btn" onclick="closeNewProfileModal()">Cancel</button>
+        <button class="modal-btn primary" onclick="submitNewProfile()">Create profile</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD CONTENT (browse/search) MODAL -->
+  <div class="modal-overlay" id="browseModal" style="display:none;">
+    <div class="modal-box wide">
+      <div class="modal-title-row"><span class="modal-title">Add content</span><span class="modal-close" onclick="closeBrowseModal()">&times;</span></div>
+      <div class="content-search-row">
+        <div class="search-wrap">
+          <i class="ti ti-search search-icon" aria-hidden="true"></i>
+          <input class="search-box" id="browseSearch" placeholder="Search Modrinth..." oninput="debouncedBrowseSearch()" onkeydown="if(event.key==='Enter'){event.preventDefault();runBrowseSearch()}" />
+        </div>
+      </div>
+      <div class="chip-row" id="browseChipRow" style="padding:0;"></div>
+      <div class="browse-status" id="browseStatus"></div>
+      <div class="browse-results" id="browseResults"></div>
+      <div class="browse-footer">
+        <div class="chip-row" id="browseSourceRow"></div>
+        <div class="browse-pagination" id="browsePagination"></div>
+      </div>
+      <div class="content-attribution"><strong>CurseForge Content</strong><br>Bald Launcher uses the CurseForge API to provide access to Minecraft projects and files. Content remains the property of its authors. Visit original project pages for licensing, documentation, and support.</div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="modDetailsModal" style="display:none;">
+    <div class="modal-box" style="max-width:560px;">
+      <div class="modal-title-row"><span class="modal-title">Mod details</span><span class="modal-close" onclick="closeModDetails()">&times;</span></div>
+      <div id="modDetailsBody"></div>
+    </div>
+  </div>
+
+  <!-- BUNDLE CHECKLIST MODAL -->
+  <div class="modal-overlay" id="bundleModal" style="display:none;">
+    <div class="modal-box wide">
+      <div class="modal-title-row"><span class="modal-title" id="bundleModalTitle">Recommended mods for this mode</span><span class="modal-close" onclick="closeBundleModal()">&times;</span></div>
+      <div class="modal-label" style="text-transform:none;letter-spacing:0;color:#777;">These are commonly paired with this renderer mode. Uncheck anything you don't want.</div>
+      <div id="bundleList" style="display:flex;flex-direction:column;gap:7px;max-height:320px;overflow-y:auto;"></div>
+      <div class="modal-actions">
+        <button class="modal-btn" onclick="closeBundleModal()">Skip</button>
+        <button class="modal-btn primary" onclick="confirmBundleInstall()">Install selected</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<script src="node_modules/codemirror/lib/codemirror.js"></script>
+<script src="node_modules/codemirror/mode/javascript/javascript.js"></script>
+<script src="node_modules/codemirror/mode/xml/xml.js"></script>
+<script src="node_modules/codemirror/mode/yaml/yaml.js"></script>
+<script src="node_modules/codemirror/mode/properties/properties.js"></script>
+<script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
+<script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+<script src="node_modules/@xterm/addon-web-links/lib/addon-web-links.js"></script>
+<script>
+const launcherBridge = window.launcherAPI || null;
+const LOADERS = ['fabric','forge','neoforge','quilt','vanilla'];
+// Real version list comes from Mojang's manifest via the bridge (populated
+// in boot()) — this is only the offline fallback for when there's no
+// bridge/network at all.
+const FALLBACK_VERSIONS = ['26.2','26.1','1.21.11','1.21.4','1.21.1','1.20.4','1.20.1','1.19.4','1.19.2','1.18.2','1.16.5','1.12.2','1.8.9','1.7.10'];
+let VERSIONS = FALLBACK_VERSIONS;
+const CONTENT_TYPES = [
+  {id:'all', label:'All'},
+  {id:'mod', label:'Mods'},
+  {id:'shader', label:'Shaders'},
+  {id:'resourcepack', label:'Resource Packs'},
+  {id:'datapack', label:'Data Packs'},
+];
+const TYPE_ICON = {mod:'ti-package', plugin:'ti-puzzle', shader:'ti-sun', resourcepack:'ti-photo', datapack:'ti-map'};
+
+// Offline fallback sample used only if the live Modrinth search fails.
+const FALLBACK_CONTENT = [
+  {id:'lithium', name:'Lithium', desc:'General-purpose optimization of game logic', downloads:6100000, type:'mod'},
+  {id:'ferrite-core', name:'FerriteCore', desc:'Dramatically cuts memory usage', downloads:5800000, type:'mod'},
+  {id:'entity-culling', name:'EntityCulling', desc:'Skips rendering entities you cannot see', downloads:7400000, type:'mod'},
+  {id:'complementary-reimagined', name:'Complementary Reimagined', desc:'Balanced, popular shader pack', downloads:14000000, type:'shader'},
+  {id:'faithful', name:'Faithful 32x', desc:'Faithful recreation of vanilla textures', downloads:18000000, type:'resourcepack'},
+];
+
+let state = { accounts: [], activeAccountId: null, profiles: [], activeProfileId: null, settings: {} };
+let currentProfileId = null;
+let libraryTypeFilter = 'all';
+let librarySearchTerm = '';
+let browseTypeFilter = 'all';
+let browseSource = 'modrinth';
+let browseDebounce = null;
+let browsePage = 1;
+let browseHasMore = false;
+let browseTotalPages = 1;
+let browseRequestId = 0;
+const browseContentByKey = {};
+
+function contentIdentity(value){ return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+function isBrowseContentInstalled(profile, hit){
+  if (!profile) return false;
+  const id = contentIdentity(hit?.id);
+  const name = contentIdentity(hit?.name);
+  return (profile.mods || []).some(item => (id && contentIdentity(item.id) === id) || (name && contentIdentity(item.name) === name));
+}
+
+// Local heuristic used only when there's no launcherBridge (e.g. previewing
+// this file in a plain browser tab, no Electron). The real app always asks
+// main.js's live Modrinth-backed getRendererOptions() instead — this exists
+// purely so the UI isn't broken outside Electron.
+async function renderersFor(mcVersion, loader) {
+  if (launcherBridge?.getRendererOptions) {
+    return await launcherBridge.getRendererOptions(mcVersion, loader);
+  }
+  const l = String(loader || '').toLowerCase();
+  const idx = VERSIONS.indexOf(mcVersion);
+  const idx262 = VERSIONS.indexOf('26.2');
+  const nativeVulkanEra = idx !== -1 && idx262 !== -1 && idx <= idx262;
+  const opts = [];
+  if (l === 'fabric' || l === 'quilt' || l === 'neoforge') {
+    opts.push(nativeVulkanEra
+      ? {id:'sodium', label:'Sodium (with native Vulkan option)', note:'Vulkan is a setting inside Sodium on this version, not a separate mod'}
+      : {id:'sodium', label:'Sodium', note:'Wide mod/shader compatibility'});
+  }
+  if (!nativeVulkanEra && (l === 'fabric' || l === 'quilt')) opts.push({id:'vulkan', label:'Vulkan (VulkanMod)', note:'Standalone Vulkan renderer for this version'});
+  if (l === 'forge' || l === 'neoforge') opts.push({id:'embeddium', label:'Embeddium', note:"Forge/NeoForge's Sodium-equivalent renderer"});
+  opts.push({id:'vanilla', label:'Vanilla', note:'Always available fallback'});
+  return opts;
+}
+function badgeClass(m){ return m==='vulkan'?'badge-vulkan':m==='sodium-native-vulkan'?'badge-sodium':m==='sodium'?'badge-sodium':m==='embeddium'?'badge-sodium':'badge-vanilla'; }
+function badgeLabel(m){ return m==='vulkan'?'Vulkan':m==='sodium-native-vulkan'?'Sodium + Vulkan':m==='sodium'?'Sodium':m==='embeddium'?'Embeddium':'Vanilla'; }
+function capitalize(s){ return String(s||'').charAt(0).toUpperCase()+String(s||'').slice(1); }
+function escapeQuote(s){ return String(s).replace(/'/g,"\\'"); }
+function formatDownloads(n){ if(!n) return '0'; if(n>1e6) return (n/1e6).toFixed(1)+'M'; if(n>1e3) return (n/1e3).toFixed(1)+'K'; return String(n); }
+
+// ---------------- Profiles grid ----------------
+function getProfile(profileId){
+  return (state.profiles || []).find(p => p.id === profileId) || null;
+}
+
+function renderProfileGrid(){
+  const grid = document.getElementById('profileGrid');
+  document.getElementById('profileCount').textContent = state.profiles.length ? `${state.profiles.length} profile${state.profiles.length===1?'':'s'}` : '';
+  if (!state.profiles.length){
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><span class="empty-state-icon"><i class="ti ti-package" aria-hidden="true"></i></span>No profiles yet<button class="empty-cta" onclick="openNewProfileModal()">Create your first profile</button></div>`;
+    return;
+  }
+  grid.innerHTML = state.profiles.map(p => `
+    <div class="profile-card" onclick="openProfile('${p.id}')">
+      <div class="profile-card-icon">${p.icon || p.name.slice(0,1).toUpperCase()}</div>
+      <div class="profile-card-name">${p.name}</div>
+      <div class="profile-card-sub">${p.mcVersion} · ${capitalize(p.loader)}</div>
+      <span class="profile-card-badge ${badgeClass(p.rendererMode)}">${badgeLabel(p.rendererMode)}</span>
+    </div>`).join('');
+}
+
+// ---------------- New profile modal ----------------
+function normalizeVersionOptions(list){
+  return (Array.isArray(list) ? list : [])
+    .map(v => typeof v === 'string' ? v : v && (v.id || v.version) ? String(v.id || v.version) : '')
+    .filter(Boolean)
+    .filter((value, index, array) => array.indexOf(value) === index);
+}
+
+function populateVersionLoaderSelects(versionSelId, loaderSelId, version, loader){
+  const normalizedVersions = normalizeVersionOptions(VERSIONS);
+  document.getElementById(versionSelId).innerHTML = normalizedVersions.map(v => `<option value="${v}" ${v===version?'selected':''}>${v}</option>`).join('');
+  document.getElementById(loaderSelId).innerHTML = LOADERS.map(l => `<option value="${l}" ${l===loader?'selected':''}>${capitalize(l)}</option>`).join('');
+}
+function openNewProfileModal(){
+  document.getElementById('npName').value = 'My profile';
+  populateVersionLoaderSelects('npVersion','npLoader', VERSIONS.includes('1.21.1') ? '1.21.1' : VERSIONS[0], 'fabric');
+  refreshNewProfileRenderers();
+  document.getElementById('newProfileModal').style.display='flex';
+}
+function closeNewProfileModal(){ document.getElementById('newProfileModal').style.display='none'; }
+
+let npSelectedRenderer = null;
+async function refreshNewProfileRenderers(){
+  const version = document.getElementById('npVersion').value;
+  const loader = document.getElementById('npLoader').value;
+  document.getElementById('npRendererOptions').innerHTML = '<div style="color:#444;font-size:11px;">Checking availability...</div>';
+  const opts = await renderersFor(version, loader);
+  if (!opts.some(o=>o.id===npSelectedRenderer)) npSelectedRenderer = opts[0].id;
+  renderRendererOptions('npRendererOptions', opts, npSelectedRenderer, id => { npSelectedRenderer = id; refreshNewProfileRenderers(); });
+}
+function renderRendererOptions(containerId, opts, selectedId, onSelect){
+  const el = document.getElementById(containerId);
+  el.innerHTML = opts.map(o => `
+    <div class="renderer-opt ${o.id===selectedId?'sel':''}" data-id="${o.id}">
+      <span class="renderer-opt-label">${o.label}</span>
+      <span class="renderer-opt-note">${o.note}</span>
+    </div>`).join('');
+  el.querySelectorAll('.renderer-opt').forEach(node => node.addEventListener('click', () => onSelect(node.dataset.id)));
+}
+
+async function submitNewProfile(){
+  const name = document.getElementById('npName').value.trim() || 'New profile';
+  const mcVersion = document.getElementById('npVersion').value;
+  const loader = document.getElementById('npLoader').value;
+  const rendererChoices = await renderersFor(mcVersion, loader);
+  const rendererMode = npSelectedRenderer && rendererChoices.some(o => o.id === npSelectedRenderer)
+    ? npSelectedRenderer
+    : (rendererChoices[0]?.id || 'vanilla');
+  npSelectedRenderer = rendererMode;
+  const payload = { name, mcVersion, loader, rendererMode, icon: name.slice(0,1).toUpperCase() };
+  if (launcherBridge?.createProfile) state = await launcherBridge.createProfile(payload);
+  else {
+    const local = { id:'local-'+Date.now(), mods:[], ...payload };
+    state.profiles.push(local); state.activeProfileId = local.id;
+  }
+  closeNewProfileModal();
+  renderProfileGrid();
+  openProfile(state.activeProfileId);
+  const created = getProfile(state.activeProfileId);
+  if (created && created.rendererMode !== 'vanilla') openBundleModal(created.rendererMode, created);
+}
+
+// ---------------- Bundle checklist (optimization mods for Vulkan/Sodium) ----------------
+let bundleTargetProfileId = null;
+let bundleItems = [];
+
+async function openBundleModal(rendererMode, profile){
+  bundleTargetProfileId = profile?.id || currentProfileId;
+  document.getElementById('bundleModalTitle').textContent = `Recommended mods for ${badgeLabel(rendererMode)} mode`;
+  document.getElementById('bundleList').innerHTML = '<div style="color:#444;font-size:11px;padding:6px 0;">Looking up recommended mods...</div>';
+  document.getElementById('bundleModal').style.display = 'flex';
+
+  if (launcherBridge?.previewBundle){
+    const result = await launcherBridge.previewBundle({ mcVersion: profile.mcVersion, loader: profile.loader, rendererMode });
+    bundleItems = (result?.items || []).map(item => ({ ...item, installed: isBrowseContentInstalled(profile, item), selected: !item.unresolved && !isBrowseContentInstalled(profile, item) }));
+  } else {
+    bundleItems = [];
+  }
+  renderBundleList();
+}
+function closeBundleModal(){
+  bundleTargetProfileId = null;
+  bundleItems = [];
+  document.getElementById('bundleModal').style.display = 'none';
+}
+function buildThumbMarkup(iconUrl, fallbackText, type='mod'){
+  const safeUrl = String(iconUrl || '').replace(/['\"]/g, '');
+  const iconStyle = safeUrl ? `style="background-image:url('${safeUrl}');background-size:cover;background-position:center;"` : '';
+  const fallback = safeUrl ? '' : `<i class="ti ${TYPE_ICON[type] || 'ti-package'}" aria-hidden="true"></i>`;
+  return `<div class="li-icon type-${type}" ${iconStyle}>${fallback}</div>`;
+}
+
+function renderBundleList(){
+  const list = document.getElementById('bundleList');
+  if (!bundleItems.length){ list.innerHTML = '<div style="color:#444;font-size:11px;padding:6px 0;">No recommendations available right now.</div>'; return; }
+  list.innerHTML = bundleItems.map((item, i) => `
+    <div class="bundle-item ${item.unresolved ? 'unresolved' : ''}">
+      <input type="checkbox" ${item.selected ? 'checked' : ''} ${item.unresolved || item.installed ? 'disabled' : ''} onchange="bundleItems[${i}].selected=this.checked" />
+      ${buildThumbMarkup(item.iconUrl || item.logoUrl || item.imageUrl, item.name ? item.name.slice(0,1).toUpperCase() : '?', item.type || 'mod')}
+      <div class="bundle-item-info"><div class="bundle-item-name">${escapeHtml(item.name || item.id || 'Recommended mod')}${item.installed ? ' (Installed)' : ''}</div><div class="bundle-item-desc">${escapeHtml(item.reason || item.description || '')}</div></div>
+    </div>`).join('');
+}
+async function confirmBundleInstall(){
+  const profile = getProfile(bundleTargetProfileId || currentProfileId);
+  if (!profile) return closeBundleModal();
+  const selected = bundleItems.filter(item => item.selected && !item.unresolved);
+  if (!selected.length) return closeBundleModal();
+
+  if (launcherBridge?.applyBundle) {
+    const result = await launcherBridge.applyBundle({ items: selected, rendererMode: profile.rendererMode });
+    if (result?.ok === false) {
+      alert(result.error || 'Failed to install the selected bundle.');
+      return;
+    }
+    if (result?.state) state = result.state;
+  } else {
+    profile.mods = Array.isArray(profile.mods) ? profile.mods : [];
+    for (const item of selected) {
+      if (!profile.mods.some(m => m.id === item.id)) {
+        profile.mods.push({
+          id: item.id,
+          name: item.name || item.id,
+          type: item.type || 'mod',
+          enabled: true,
+          bundleFor: profile.rendererMode,
+        });
+      }
+    }
+  }
+
+  closeBundleModal();
+  renderProfileGrid();
+  renderLibrary();
+}
+
+function openProfile(profileId){
+  if (!profileId) return;
+  const p = getProfile(profileId);
+  if (!p) return;
+  currentProfileId = profileId;
+  state.activeProfileId = profileId;
+  if (launcherBridge?.setActiveProfile) {
+    launcherBridge.setActiveProfile(profileId).catch(() => {});
+  }
+  const pdIcon = document.getElementById('pdIcon');
+  const pdName = document.getElementById('pdName');
+  const pdSub = document.getElementById('pdSub');
+  const vulkanWarning = document.getElementById('vulkanWarning');
+  if (pdIcon) pdIcon.textContent = p.icon || p.name.slice(0,1).toUpperCase();
+  if (pdName) pdName.textContent = p.name;
+  if (pdSub) pdSub.textContent = `${p.mcVersion} · ${capitalize(p.loader)} · ${badgeLabel(p.rendererMode)}`;
+  if (vulkanWarning) vulkanWarning.style.display = p.rendererMode==='vulkan' ? 'flex' : 'none';
+  renderTypeChips();
+  setPdTab('content');
+  populatePdSettingsForm(p);
+  showPanel('profile');
+  renderLibrary();
+  renderProfileLogs();
+  renderPlayButton();
+}
+
+function renderTypeChips(){
+  document.getElementById('typeChipRow').innerHTML = CONTENT_TYPES.map(t => `<button class="chip ${t.id===libraryTypeFilter?'active':''}" onclick="setLibraryType('${t.id}')">${t.label}</button>`).join('');
+}
+function setLibraryType(t){ libraryTypeFilter = t; renderTypeChips(); renderLibrary(); }
+function setLibrarySearch(value){ librarySearchTerm = String(value || '').trim().replace(/\s+/g, ' ').toLowerCase(); renderLibrary(); }
+
+function setPdTab(tab){
+  document.getElementById('pdtab-content').classList.toggle('active', tab==='content');
+  document.getElementById('pdtab-settings').classList.toggle('active', tab==='settings');
+  document.getElementById('pdtab-logs').classList.toggle('active', tab==='logs');
+  document.getElementById('pd-content-view').style.display = tab==='content' ? 'flex' : 'none';
+  document.getElementById('pd-settings-view').style.display = tab==='settings' ? 'flex' : 'none';
+  document.getElementById('pd-logs-view').style.display = tab==='logs' ? 'flex' : 'none';
+  document.getElementById('pd-settings-view').style.flex = tab==='settings' ? '1' : '';
+  if (tab==='logs') renderProfileLogs(true);
+}
+
+function renderProfileLogs(forceBottom = false){
+  const profile = getProfile(currentProfileId);
+  const box = document.getElementById('pd-log-live');
+  if (!profile || !box) return;
+  const wasAtBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+  const entries = sessionLogs.filter(entry => entry.profileId === profile.id || (!entry.profileId && entry.profileName === profile.name));
+  box.innerHTML = entries.length
+    ? entries.map(entry => `<span class="log-line ${entry.type||'normal'}">${escapeHtml(entry.line)}</span>`).join('')
+    : '<span class="log-line normal">No session activity for this profile yet.</span>';
+  if (forceBottom || wasAtBottom) box.scrollTop = box.scrollHeight;
+  const status = document.getElementById('pd-log-status-text');
+  if (status) status.textContent = entries.length ? entries[entries.length - 1].line : 'Waiting for a launch.';
+}
+
+function switchProfileLog(tab){
+  document.getElementById('pd-logtab-live').classList.toggle('active', tab==='live');
+  document.getElementById('pd-logtab-status').classList.toggle('active', tab==='status');
+  document.getElementById('pd-log-live').style.display = tab==='live' ? 'block' : 'none';
+  document.getElementById('pd-log-status').style.display = tab==='status' ? 'flex' : 'none';
+  if (tab==='live') renderProfileLogs(true);
+}
+
+// Installed-content library (default view) — shows what's already on disk
+// for this profile, not a search/download list.
+function renderLibrary(){
+  const p = getProfile(currentProfileId);
+  if (!p) return;
+  const list = document.getElementById('libraryList');
+  const items = p.mods.filter(m => {
+    const matchesType = libraryTypeFilter === 'all' || m.type === libraryTypeFilter;
+    const searchable = `${m.name || ''} ${m.type || ''} ${m.id || ''} ${m.author || ''} ${m.description || ''} ${m.source || ''}`.toLowerCase();
+    const searchTerms = librarySearchTerm.split(/\s+/).filter(Boolean);
+    return matchesType && searchTerms.every(term => searchable.includes(term));
+  });
+  if (!items.length){
+    const emptyMessage = librarySearchTerm ? 'No installed content matches this search' : (p.mods.length ? 'Nothing installed in this category' : 'No content installed yet');
+    list.innerHTML = `<div class="empty-state"><span class="empty-state-icon"><i class="ti ti-package" aria-hidden="true"></i></span>${emptyMessage}<button class="empty-cta" onclick="openBrowseModal()">Add content</button></div>`;
+    return;
+  }
+  list.innerHTML = items.map(m => `
+    <div class="library-item ${m.enabled?'':'disabled'}">
+      ${buildThumbMarkup(m.iconUrl || m.logoUrl || m.imageUrl, m.name ? m.name.slice(0,1).toUpperCase() : '?', m.type || 'mod')}
+      <div class="li-info" onclick="showContentDetails('${escapeJsString(JSON.stringify({ ...m, desc: m.description }))}')"><div class="li-name">${escapeHtml(m.name)}</div><div class="li-type">${m.type}${m.author ? ` · by ${escapeHtml(m.author)}` : ''}${m.source ? ` · ${capitalize(m.source)}` : ''}</div></div>
+      <div class="li-actions">
+        <label class="li-toggle" title="${m.enabled?'Disable':'Enable'}">
+          <input type="checkbox" ${m.enabled?'checked':''} onchange="toggleLibraryItem('${m.id}')" />
+          <span class="li-toggle-slider"></span>
+        </label>
+        <span class="li-remove" title="Remove" onclick="removeLibraryItem('${m.id}')"><i class="ti ti-x" aria-hidden="true"></i></span>
+      </div>
+    </div>`).join('');
+}
+
+async function toggleLibraryItem(id){
+  const p = getProfile(currentProfileId);
+  const entry = p.mods.find(m=>m.id===id);
+  if (!entry) return;
+  if (launcherBridge?.toggleContent){
+    const result = await launcherBridge.toggleContent({ id });
+    if (result?.ok) entry.enabled = result.enabled;
+    else { alert(result?.error || 'Unable to change content state'); return; }
+  } else {
+    entry.enabled = !entry.enabled;
+  }
+  renderLibrary();
+}
+
+async function removeLibraryItem(id){
+  const p = getProfile(currentProfileId);
+  if (launcherBridge?.removeContent) await launcherBridge.removeContent({ id });
+  p.mods = p.mods.filter(m=>m.id!==id);
+  renderLibrary();
+}
+
+// ---------------- Add content (browse) modal ----------------
+function openBrowseModal(){
+  browseTypeFilter = 'all';
+  browseSource = 'modrinth';
+  browsePage = 1;
+  document.getElementById('browseSearch').value = '';
+  updateBrowseSearchPlaceholder();
+  renderBrowseChips();
+  renderBrowseSources();
+  document.getElementById('browseModal').style.display='flex';
+  runBrowseSearch();
+}
+function closeBrowseModal(){ document.getElementById('browseModal').style.display='none'; }
+function updateBrowseSearchPlaceholder(){
+  const search = document.getElementById('browseSearch');
+  if (search) search.placeholder = `Search ${browseSource === 'curseforge' ? 'CurseForge' : 'Modrinth'}...`;
+}
+function renderBrowseSources(){
+  const row = document.getElementById('browseSourceRow');
+  if (!row) return;
+  row.innerHTML = ['modrinth', 'curseforge'].map(source => `<button class="chip ${browseSource === source ? 'active' : ''}" onclick="setBrowseSource('${source}')">${source === 'modrinth' ? 'Modrinth' : 'CurseForge'}</button>`).join('');
+}
+function setBrowseSource(source){
+  browseSource = source === 'curseforge' ? 'curseforge' : 'modrinth';
+  browsePage = 1;
+  browseTotalPages = 1;
+  updateBrowseSearchPlaceholder();
+  renderBrowseSources();
+  runBrowseSearch();
+}
+function getServerContentTypes(server){
+  const type = String(server?.serverType || 'paper').toLowerCase();
+  const rules = {
+    vanilla: [{id:'all', label:'All'}, {id:'datapack', label:'Data Packs'}],
+    fabric: [{id:'all', label:'All'}, {id:'mod', label:'Mods'}, {id:'datapack', label:'Data Packs'}],
+    forge: [{id:'all', label:'All'}, {id:'mod', label:'Mods'}, {id:'datapack', label:'Data Packs'}],
+    neoforge: [{id:'all', label:'All'}, {id:'mod', label:'Mods'}, {id:'datapack', label:'Data Packs'}],
+    quilt: [{id:'all', label:'All'}, {id:'mod', label:'Mods'}, {id:'datapack', label:'Data Packs'}],
+    paper: [{id:'all', label:'All'}, {id:'plugin', label:'Plugins'}, {id:'datapack', label:'Data Packs'}],
+    purpur: [{id:'all', label:'All'}, {id:'plugin', label:'Plugins'}, {id:'datapack', label:'Data Packs'}],
+    folia: [{id:'all', label:'All'}, {id:'plugin', label:'Plugins'}, {id:'datapack', label:'Data Packs'}],
+    spigot: [{id:'all', label:'All'}, {id:'plugin', label:'Plugins'}, {id:'datapack', label:'Data Packs'}],
+    bukkit: [{id:'all', label:'All'}, {id:'plugin', label:'Plugins'}, {id:'datapack', label:'Data Packs'}],
+    velocity: [{id:'all', label:'All'}, {id:'plugin', label:'Plugins'}],
+    waterfall: [{id:'all', label:'All'}, {id:'plugin', label:'Plugins'}],
+    bungeecord: [{id:'all', label:'All'}, {id:'plugin', label:'Plugins'}],
+  };
+  const list = rules[type] || rules.paper;
+  return list;
+}
+
+function renderBrowseChips(){
+  const profile = getProfile(currentProfileId);
+  const server = currentServerId ? getServer(currentServerId) : null;
+  const chipTypes = server ? getServerContentTypes(server) : (profile?.loader === 'vanilla' ? CONTENT_TYPES.filter(t => t.id !== 'mod') : CONTENT_TYPES);
+  if (!server && profile?.loader === 'vanilla' && browseTypeFilter === 'mod') browseTypeFilter = 'all';
+  if (server && !chipTypes.some(t => t.id === browseTypeFilter)) browseTypeFilter = 'all';
+  document.getElementById('browseChipRow').innerHTML = chipTypes.map(t => `<button class="chip ${t.id===browseTypeFilter?'active':''}" onclick="setBrowseType('${t.id}')">${t.label}</button>`).join('');
+}
+function setBrowseType(t){ browseTypeFilter = t; browsePage = 1; browseTotalPages = 1; renderBrowseChips(); runBrowseSearch(); }
+function browsePageButtons(){
+  const page = browsePage;
+  const total = Math.max(1, browseTotalPages);
+  const pages = total <= 5 ? Array.from({length:total},(_,i)=>i+1) : [1, page > 3 ? '...' : 2, page > 2 && page < total - 1 ? page : Math.max(2, Math.min(page, total - 1)), page < total - 2 ? '...' : total - 1, total].filter((p,i,a)=>p==='...' || a.indexOf(p)===i);
+  return `<button class="browse-page-btn" ${page===1?'disabled':''} onclick="changeBrowsePage(${page-1})">‹</button>${pages.map(p=>p==='...' ? '<span class="browse-page-gap">...</span>' : `<button class="browse-page-btn ${p===page?'active':''}" onclick="changeBrowsePage(${p})">${p}</button>`).join('')}<button class="browse-page-btn" ${page>=total?'disabled':''} onclick="changeBrowsePage(${page+1})">›</button>`;
+}
+function changeBrowsePage(page){
+  const targetPage = Number(page);
+  if (!Number.isInteger(targetPage) || targetPage < 1 || targetPage > browseTotalPages || targetPage === browsePage) return;
+  browsePage = targetPage;
+  runBrowseSearch();
+}
+function debouncedBrowseSearch(){ clearTimeout(browseDebounce); browsePage = 1; browseTotalPages = 1; browseDebounce = setTimeout(runBrowseSearch, 700); }
+
+async function runBrowseSearch(){
+  const requestId = ++browseRequestId;
+  const requestedPage = browsePage;
+  const p = getProfile(currentProfileId);
+  const server = currentServerId ? getServer(currentServerId) : null;
+  if (!p && !server) return;
+  const query = document.getElementById('browseSearch').value.trim().replace(/\s+/g, ' ');
+  const statusEl = document.getElementById('browseStatus');
+  const results = document.getElementById('browseResults');
+  statusEl.textContent = `Searching ${browseSource === 'curseforge' ? 'CurseForge' : 'Modrinth'}...`;
+  results.innerHTML = '<div class="empty-state">Loading results...</div>';
+
+  let hits = [];
+  let usedFallback = false;
+  const browseLoader = server ? (server.loader || 'fabric') : p.loader;
+  const browseVersion = server ? server.mcVersion : p.mcVersion;
+  if ((!server && p.loader === 'vanilla' && (browseTypeFilter === 'mod' || browseTypeFilter === 'all')) || (server && !getServerContentTypes(server).some(t => t.id === browseTypeFilter))) {
+    if (browseTypeFilter === 'mod') {
+      statusEl.textContent = 'Mods are unavailable for this server type';
+      document.getElementById('browseResults').innerHTML = '<div class="empty-state">This server type does not support that content category.</div>';
+      document.getElementById('browsePagination').innerHTML = '';
+      return;
+    }
+  }
+  if (launcherBridge?.searchContent){
+    try {
+      const result = await launcherBridge.searchContent({ query, type: browseTypeFilter, mcVersion: browseVersion, loader: browseLoader, page: browsePage, serverType: server?.serverType || null, source: browseSource });
+      if (requestId !== browseRequestId || requestedPage !== browsePage) return;
+      if (result?.ok) hits = result.hits || []; else {
+        if (browseSource === 'curseforge' && /CurseForge API key|Enter your CurseForge API key/i.test(String(result?.error || ''))) {
+          statusEl.textContent = 'CurseForge is locked until a valid key is available.';
+          results.innerHTML = '<div class="empty-state">Manual setup: run <strong>setx CURSEFORGE_API_KEY \'PASTE_YOUR_KEY_HERE\'</strong> in PowerShell, then restart Bald Launcher.</div>';
+          document.getElementById('browsePagination').innerHTML = '';
+          return;
+        }
+        statusEl.textContent = `${browseSource === 'curseforge' ? 'CurseForge' : 'Modrinth'} search failed: ${result?.error || 'Unknown error'}`;
+        results.innerHTML = `<div class="empty-state">Unable to reach ${browseSource === 'curseforge' ? 'CurseForge' : 'Modrinth'}. ${result?.error || 'Check the launcher log for request details.'}</div>`;
+        document.getElementById('browsePagination').innerHTML = '';
+        return;
+      }
+      browseHasMore = Boolean(result?.hasMore);
+      browseTotalPages = Math.max(1, Number(result?.totalPages) || Math.ceil((Number(result?.totalHits) || 0) / 20));
+    } catch (error) {
+      statusEl.textContent = `${browseSource === 'curseforge' ? 'CurseForge' : 'Modrinth'} search failed: ${error?.message || error}`;
+      results.innerHTML = `<div class="empty-state">Unable to reach ${browseSource === 'curseforge' ? 'CurseForge' : 'Modrinth'}. ${error?.message || error}</div>`;
+      document.getElementById('browsePagination').innerHTML = '';
+      return;
+    }
+  } else usedFallback = true;
+  if (requestId !== browseRequestId || requestedPage !== browsePage) return;
+  if (usedFallback){
+    hits = FALLBACK_CONTENT.filter(c => (browseTypeFilter==='all'||c.type===browseTypeFilter) && c.name.toLowerCase().includes(query.toLowerCase()));
+  }
+  statusEl.textContent = usedFallback ? `Showing offline sample (${browseSource} unreachable) · ${hits.length} results` : `${hits.length} results from ${browseSource === 'curseforge' ? 'CurseForge' : 'Modrinth'}`;
+  document.getElementById('browsePagination').innerHTML = browsePageButtons();
+
+  if (!hits.length){ results.innerHTML = '<div class="empty-state">Nothing found</div>'; return; }
+  results.innerHTML = hits.map(hit => {
+    browseContentByKey[`${hit.source || browseSource}:${hit.id}`] = hit;
+    const installed = server ? false : isBrowseContentInstalled(p, hit);
+    const iconStyle = hit.iconUrl ? `style="background-image:url('${hit.iconUrl}')"` : '';
+    const projectUrl = /^https?:\/\//i.test(String(hit.projectUrl || '')) ? hit.projectUrl : '';
+    return `<div class="browse-card">
+      <div class="mod-attribution" ${projectUrl ? `onclick="openContentProject('${escapeQuote(projectUrl)}')" style="cursor:pointer;"` : ''}>
+        <div class="mod-attribution-icon" ${iconStyle}>${hit.iconUrl?'':'<i class="ti '+(TYPE_ICON[hit.type]||'ti-package')+'" aria-hidden="true"></i>'}</div>
+        <div class="mod-attribution-copy"><div class="mod-attribution-name">${escapeHtml(hit.name)}</div><div class="mod-attribution-meta">by ${escapeHtml(hit.author || 'Unknown creator')} · ${escapeHtml(hit.minecraftVersion || browseVersion || 'Any version')} · ${escapeHtml(hit.loader || browseLoader || 'Any loader')}</div><div class="mod-attribution-source">Source: ${hit.source === 'curseforge' ? 'CurseForge' : 'Modrinth'}</div></div>
+      </div>
+      <button class="install-btn ${installed?'installed':''}" ${installed?'disabled':''} onclick="installFromBrowse('${hit.id}','${escapeQuote(hit.name)}','${hit.type||'mod'}','${hit.iconUrl||''}','${hit.source || browseSource}')">${installed?'Installed':'Install'}</button>
+    </div>`;
+  }).join('');
+}
+
+function closeModDetails(){ document.getElementById('modDetailsModal').style.display = 'none'; }
+function showContentDetails(serialized){
+  let hit;
+  try { hit = JSON.parse(serialized); } catch (_error) { return; }
+  const body = document.getElementById('modDetailsBody');
+  if (!body) return;
+  const sourceName = hit.source === 'curseforge' ? 'CurseForge' : 'Modrinth';
+  const projectUrl = /^https?:\/\//i.test(String(hit.projectUrl || '')) ? hit.projectUrl : '';
+  const iconStyle = hit.iconUrl ? `style="background-image:url('${escapeHtml(hit.iconUrl)}')"` : '';
+  body.innerHTML = `<div class="mod-details">
+    <div class="mod-details-head"><div class="mod-details-icon" ${iconStyle}>${hit.iconUrl ? '' : '<i class="ti ti-package" aria-hidden="true"></i>'}</div><div><div class="mod-details-title">${escapeHtml(hit.name || 'Untitled project')}</div><div class="mod-details-author">by <strong>${escapeHtml(hit.author || 'Unknown creator')}</strong></div></div></div>
+    <div class="mod-details-description">${escapeHtml(hit.desc || hit.description || 'No description supplied by the project API.')}</div>
+    <div class="mod-details-grid"><div>Minecraft version<br><strong>${escapeHtml(hit.minecraftVersion || 'Not specified')}</strong></div><div>Mod loader<br><strong>${escapeHtml(hit.loader || 'Not specified')}</strong></div><div>Downloads<br><strong>${formatDownloads(hit.downloads)}</strong></div><div>Source<br><strong>${sourceName}</strong></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">${projectUrl ? `<button class="modal-btn primary" type="button" onclick="openContentProject('${escapeQuote(projectUrl)}')">View on ${sourceName}</button>` : ''}<button class="modal-btn" type="button" onclick="closeModDetails()">Close</button></div>
+  </div>`;
+  document.getElementById('modDetailsModal').style.display = 'flex';
+}
+async function openContentProject(url){
+  if (/^https?:\/\//i.test(url) && launcherBridge?.openExternalUrl) await launcherBridge.openExternalUrl(url);
+  else if (/^https?:\/\//i.test(url)) window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+async function installFromBrowse(id, name, type, iconUrl, source = browseSource){
+  const metadata = browseContentByKey[`${source}:${id}`] || {};
+  const server = currentServerId ? getServer(currentServerId) : null;
+  if (server) {
+    const result = launcherBridge?.installContent ? await launcherBridge.installContent({ serverId: server.id, id, name, type, iconUrl: iconUrl || null, source, author: metadata.author, description: metadata.desc, minecraftVersion: metadata.minecraftVersion, loader: metadata.loader, projectUrl: metadata.projectUrl }) : null;
+    if (!result?.ok) { alert(result?.error || 'Unable to install server content'); return; }
+    closeBrowseModal();
+    renderServerFiles();
+    return;
+  }
+  const p = getProfile(currentProfileId);
+  if (p?.loader === 'vanilla' && type === 'mod') return;
+  const payload = { id, name, type, iconUrl: iconUrl || null, source, author: metadata.author, description: metadata.desc, minecraftVersion: metadata.minecraftVersion, loader: metadata.loader, projectUrl: metadata.projectUrl };
+  if (launcherBridge?.installContent) {
+    const result = await launcherBridge.installContent(payload);
+    if (!result?.ok) { alert(result?.error || 'Unable to install content'); return; }
+    if (result.entry) Object.assign(payload, result.entry);
+  }
+  if (!isBrowseContentInstalled(p, payload)) p.mods.push({ ...payload, enabled:true });
+  runBrowseSearch();
+  renderLibrary();
+}
+
+// ---------------- Profile settings tab ----------------
+function populatePdSettingsForm(p){
+  document.getElementById('pdRename').value = p.name;
+  populateVersionLoaderSelects('pdVersionSel','pdLoaderSel', p.mcVersion, p.loader);
+  onPdConfigChange(p.rendererMode);
+}
+let pdSelectedRenderer = null;
+async function onPdConfigChange(forceRenderer){
+  const version = document.getElementById('pdVersionSel').value;
+  const loader = document.getElementById('pdLoaderSel').value;
+  document.getElementById('pdRendererOptions').innerHTML = '<div style="color:#444;font-size:11px;">Checking availability...</div>';
+  const opts = await renderersFor(version, loader);
+  pdSelectedRenderer = (forceRenderer && opts.some(o=>o.id===forceRenderer)) ? forceRenderer : opts[0].id;
+  renderRendererOptions('pdRendererOptions', opts, pdSelectedRenderer, id => { pdSelectedRenderer = id; onPdConfigChange(id); });
+}
+async function savePdSettings(){
+  const p = getProfile(currentProfileId);
+  const payload = {
+    id: p.id,
+    name: document.getElementById('pdRename').value.trim() || p.name,
+    mcVersion: document.getElementById('pdVersionSel').value,
+    loader: document.getElementById('pdLoaderSel').value,
+    rendererMode: pdSelectedRenderer,
+  };
+  let rendererChanged = false;
+  let newRendererMode = null;
+  if (launcherBridge?.updateProfile){
+    const result = await launcherBridge.updateProfile(payload);
+    state = result.state || result; // tolerate older shape
+    rendererChanged = result.rendererChanged;
+    newRendererMode = result.newRendererMode;
+  } else {
+    Object.assign(p, payload);
+  }
+  renderProfileGrid();
+  openProfile(p.id);
+  if (rendererChanged && newRendererMode && newRendererMode !== 'vanilla'){
+    openBundleModal(newRendererMode, getProfile(p.id));
+  }
+}
+async function deleteCurrentProfile(){
+  const profile = getProfile(currentProfileId);
+  if (!profile) return;
+  if (!confirm(`Delete profile "${profile.name}"? Its installed content and settings will be removed. This cannot be undone.`)) return;
+  if (launcherBridge?.deleteProfile){
+    const result = await launcherBridge.deleteProfile(currentProfileId);
+    if (result?.ok===false){ alert(result.error); return; }
+    state = result.state;
+  } else {
+    state.profiles = state.profiles.filter(p=>p.id!==currentProfileId);
+  }
+  renderProfileGrid();
+  showPanel('home');
+}
+async function openFolder(type){ if (launcherBridge?.openFolder) await launcherBridge.openFolder(type); }
+
+// ---------------- Accounts ----------------
+function renderAccounts(){
+  const list = document.getElementById('accountList');
+  list.innerHTML = state.accounts.filter(a=>a.id!==state.activeAccountId).map(a => `
+    <div class="acc-card" style="margin-top:9px;">
+      <div class="acc-av-lg" style="background:${a.accent};color:${a.fg};">${a.initials}</div>
+      <div class="acc-info"><div class="acc-info-name">${a.name}</div><div class="acc-info-type">${a.type} account</div></div>
+      <button class="sw-btn" onclick="setActiveAccount('${a.id}')">Switch</button>
+      <button class="delete-account-btn" onclick="deleteAccount('${a.id}')" title="Delete account">Delete</button>
+    </div>`).join('');
+  const active = state.accounts.find(a=>a.id===state.activeAccountId);
+  if (active){
+    document.getElementById('acc-active-av').style.background=active.accent;
+    document.getElementById('acc-active-av').style.color=active.fg;
+    document.getElementById('acc-active-av').textContent=active.initials;
+    document.getElementById('acc-active-name').textContent=active.name;
+    document.getElementById('acc-active-type').textContent=active.type+' account';
+    document.getElementById('titlebarAv').textContent=active.initials;
+    document.getElementById('titlebarName').textContent=active.name;
+  }
+}
+async function setActiveAccount(id){
+  if (launcherBridge?.setActiveAccount) state = await launcherBridge.setActiveAccount(id);
+  else state.activeAccountId = id;
+  renderAccounts();
+}
+async function addOfflineAccount(){
+  document.getElementById('offlineAccountName').value = '';
+  document.getElementById('offlineSkinLabel').textContent = 'No skin selected';
+  offlineSkinPath = null;
+  document.getElementById('offlineAccountModal').style.display = 'flex';
+  document.getElementById('offlineAccountName').focus();
+}
+let offlineSkinPath = null;
+function closeOfflineAccountModal(){ document.getElementById('offlineAccountModal').style.display = 'none'; }
+async function chooseOfflineSkin(){
+  if (!launcherBridge?.chooseSkin) return;
+  const result = await launcherBridge.chooseSkin();
+  if (result?.ok){ offlineSkinPath = result.path; document.getElementById('offlineSkinLabel').textContent = result.path.split(/[\\/]/).pop(); }
+}
+async function submitOfflineAccount(){
+  const clean = document.getElementById('offlineAccountName').value.trim().slice(0,16);
+  if (!/^[A-Za-z0-9_]{1,16}$/.test(clean)){ alert('Use 1-16 letters, numbers, or underscores.'); return; }
+  const result = launcherBridge?.addAccount
+    ? await launcherBridge.addAccount({ name:clean, type:'Offline', skinPath:offlineSkinPath })
+    : { ok:true, ...state };
+  if (result?.ok === false){ alert(result.error); return; }
+  state = result;
+  closeOfflineAccountModal();
+  renderAccounts();
+}
+async function addMicrosoftAccount(){
+  if (!launcherBridge?.linkMicrosoftAccount){ alert('Microsoft linking is unavailable in preview mode.'); return; }
+  const result = await launcherBridge.linkMicrosoftAccount();
+  if (result?.ok === false){ alert(result.error); return; }
+  state = result.state;
+  renderAccounts();
+}
+async function deleteAccount(id){
+  const account = state.accounts.find(item => item.id === id);
+  if (!account || !confirm(`Delete account "${account.name}"?`)) return;
+  if (!launcherBridge?.deleteAccount) return;
+  const result = await launcherBridge.deleteAccount(id);
+  if (result?.ok === false){ alert(result.error); return; }
+  state = result.state;
+  renderAccounts();
+}
+
+// ---------------- Settings ----------------
+function updateRam(v){ document.getElementById('ramVal').textContent=v+' GB'; syncSettings(); }
+function updateRd(v){ document.getElementById('rdVal').textContent=v+' ch'; syncSettings(); }
+function updateSim(v){ document.getElementById('simVal').textContent=v+' ch'; syncSettings(); }
+function updateRes(){ syncSettings(); }
+function updateFps(){ syncSettings(); }
+function toggleJvmArgs(){ document.getElementById('customJvmArgs').disabled = document.getElementById('jvmProfile').value !== 'custom'; }
+function syncSettings(){
+  const valueOf = (id, fallback) => document.getElementById(id)?.value ?? fallback;
+  const settings = {
+    memoryMax: Number(valueOf('ramSlider', 6)),
+    resolution: valueOf('resSel', '1920×1080'),
+    fpsCap: valueOf('fpsCap', 'Unlimited'),
+    renderDistance: Number(valueOf('rdSlider', 12)),
+    simulationDistance: Number(valueOf('simSlider', 8)),
+    performancePreset: valueOf('performancePreset', 'balanced-pvp'),
+    jvmProfile: valueOf('jvmProfile', 'default'),
+    customJvmArgs: valueOf('customJvmArgs', ''),
+    processPriority: valueOf('processPriority', 'normal'),
+  };
+  state.settings = { ...(state.settings || {}), ...settings };
+  if (launcherBridge?.syncState) launcherBridge.syncState(state);
+}
+
+// ---------------- Logs ----------------
+let sessionLogs=[];
+let updateReady = false;
+function navigateServerFiles(serverId, pathValue) {
+  const safePath = normalizeServerPath(pathValue);
+  if (!serverId) return;
+  const stateRef = serverFileBrowserState[serverId] || { currentPath: '.' };
+  stateRef.currentPath = safePath;
+  serverFileBrowserState[serverId] = stateRef;
+  renderServerFiles();
+}
+
+function setServerFileSearch(serverId, value) {
+  const stateRef = serverFileBrowserState[serverId] || { currentPath: '.' };
+  stateRef.search = value;
+  serverFileBrowserState[serverId] = stateRef;
+  renderServerFiles();
+}
+
+function serverFileIconClass(name) {
+  const fileName = String(name || '').toLowerCase();
+  const extension = fileName.includes('.') ? fileName.slice(fileName.lastIndexOf('.') + 1) : '';
+  if (extension === 'jar') return 'ti-package';
+  if (extension === 'json') return 'ti-file-json';
+  if (['properties', 'yml', 'yaml', 'toml', 'conf', 'cfg'].includes(extension)) return 'ti-file-config';
+  if (['txt', 'md'].includes(extension)) return 'ti-file-text';
+  if (fileName.endsWith('.log.gz') || extension === 'log') return 'ti-file-log';
+  if (extension === 'zip') return 'ti-file-archive';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'tif', 'tiff'].includes(extension)) return 'ti-photo';
+  return 'ti-file-generic';
+}
+
+function toggleServerFileSelection(serverId, filePath, checked) {
+  const selection = new Set(serverFileSelection[serverId] || []);
+  if (checked) selection.add(filePath); else selection.delete(filePath);
+  serverFileSelection[serverId] = [...selection];
+  renderServerFiles();
+}
+
+function showServerFileContextMenu(event, serverId, filePath, isDirectory) {
+  event.preventDefault();
+  document.querySelector('.server-context-menu')?.remove();
+  const menu = document.createElement('div');
+  menu.className = 'server-context-menu';
+  const actions = isDirectory ? [['Open', `navigateServerFiles('${serverId}','${escapeJsString(filePath)}')`], ['Reveal in Explorer', `revealServerPath('${serverId}','${escapeJsString(filePath)}')`], ['Delete', `deleteServerFile('${serverId}','${escapeJsString(filePath)}')`]] : [['Edit', `readServerFile('${serverId}','${escapeJsString(filePath)}')`], ['Reveal in Explorer', `revealServerPath('${serverId}','${escapeJsString(filePath)}')`], ['Delete', `deleteServerFile('${serverId}','${escapeJsString(filePath)}')`]];
+  menu.innerHTML = actions.map(([label, action]) => `<button type="button" onclick="${action};this.parentElement.remove()">${label}</button>`).join('');
+  menu.style.left = `${Math.min(event.clientX, window.innerWidth - 160)}px`;
+  menu.style.top = `${Math.min(event.clientY, window.innerHeight - 140)}px`;
+  document.body.appendChild(menu);
+  setTimeout(() => document.addEventListener('click', () => menu.remove(), { once: true }), 0);
+}
+
+function escapeHtml(value){ return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function buildRaw(forceBottom = false){
+  const box=document.getElementById('rawLogBox');
+  if (!box) return;
+  const wasAtBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+  if(!sessionLogs.length){ box.innerHTML='<span class="log-line normal">No Minecraft session logs yet.</span>'; return; }
+  box.innerHTML=sessionLogs.map(r=>`<span class="log-line ${r.type||'normal'}">${escapeHtml(r.line)}</span>`).join('');
+  if (forceBottom || wasAtBottom) box.scrollTop=box.scrollHeight;
+}
+function switchLog(tab){
+  ['crash','raw','prev'].forEach(t=>{
+    document.getElementById('lc-'+t).style.display = t===tab ? 'flex' : 'none';
+    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+  });
+  if (tab==='raw') buildRaw(true);
+}
+
+// ---------------- Nav / launch ----------------
+const runningProfileIds = new Set();
+let launchPreparingProfileId = null;
+
+function renderPlayButton(){
+  const button = document.getElementById('pdPlayButton');
+  if (!button) return;
+  const running = runningProfileIds.has(currentProfileId);
+  const preparing = launchPreparingProfileId === currentProfileId;
+  button.classList.toggle('stop-btn', running);
+  button.classList.toggle('starting-btn', preparing && !running);
+  if (running) {
+    button.innerHTML = '<i class="ti ti-square" aria-hidden="true"></i> Stop';
+    button.disabled = false;
+    button.title = 'Safely close Minecraft';
+  } else if (preparing) {
+    button.innerHTML = '<i class="ti ti-loader" aria-hidden="true"></i> Starting...';
+    button.disabled = true;
+    button.title = 'Minecraft is starting';
+  } else {
+    button.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Play';
+    button.disabled = false;
+    button.title = 'Launch Minecraft';
+  }
+}
+
+function showPanel(name){
+  const panelNames = ['home','servers','profile','server-detail','accounts','settings','logs'];
+  panelNames.forEach(p=>{
+    const el = document.getElementById('panel-'+p);
+    if (el) el.style.display = p===name ? 'flex' : 'none';
+  });
+  const navMapping = {
+    home: 'home',
+    servers: 'servers',
+    profile: 'home',
+    accounts: 'accounts',
+    settings: 'settings',
+    logs: 'logs',
+    'server-detail': 'servers',
+  };
+  ['home','servers','accounts','settings','logs'].forEach(p=>{
+    const n = document.getElementById('nav-'+p);
+    if (n) n.classList.toggle('on', navMapping[name] === p);
+  });
+  if (name==='home') renderProfileGrid();
+  if (name==='accounts') renderAccounts();
+  if (name==='servers') renderServers();
+  if (name==='server-detail' && currentServerId) renderServerDetail();
+}
+
+const serverConsoleLogs = {};
+const serverFileBrowserState = {};
+const serverConsoleScrollState = {};
+const serverEditorState = {};
+const serverFileSelection = {};
+let serverCodeMirror = null;
+const serverStatsState = {};
+let currentServerId = null;
+let activeServerTab = 'console';
+
+function getServer(id){ return (state.servers || []).find(server => server.id === id) || null; }
+
+function escapeJsString(value) {
+  return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n');
+}
+
+function normalizeServerPath(value) {
+  const cleaned = String(value || '.').replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+/g, '/');
+  return cleaned === '' ? '.' : cleaned.replace(/\/$/, '');
+}
+
+function getParentServerPath(value) {
+  const norm = normalizeServerPath(value);
+  if (!norm || norm === '.') return '.';
+  const parts = norm.split('/');
+  parts.pop();
+  return parts.length ? parts.join('/') : '.';
+}
+
+function buildServerPathBreadcrumbs(serverId, currentPath) {
+  const safePath = normalizeServerPath(currentPath);
+  const parts = safePath === '.' ? [] : safePath.split('/').filter(Boolean);
+  const rootLabel = getServer(serverId)?.name || 'Server';
+  const crumbs = [{ label: rootLabel, path: '.' }];
+  let built = '';
+  for (const part of parts) {
+    built = built ? `${built}/${part}` : part;
+    crumbs.push({ label: part, path: built });
+  }
+  return crumbs;
+}
+
+function isEditableServerFile(relativePath) {
+  return !/\.(?:jar|zip|gz|7z|rar|tar|tgz|bz2|xz|png|jpg|jpeg|gif|webp|bmp|ico|tif|tiff|mp3|wav|ogg|flac|mp4|webm|avi|mov|exe|dll|msi|bat|cmd|com|scr|class|bin|dat|pdf|doc|docx|xls|xlsx|ppt|pptx|litematic)(?:\.disabled)?$/i.test(String(relativePath || ''));
+}
+
+function editorModeForPath(filePath) {
+  const extension = String(filePath || '').toLowerCase().split('.').pop();
+  if (extension === 'json' || extension === 'js') return 'javascript';
+  if (extension === 'xml') return 'xml';
+  if (extension === 'yml' || extension === 'yaml') return 'yaml';
+  if (extension === 'properties' || extension === 'cfg' || extension === 'conf') return 'properties';
+  return 'text/plain';
+}
+
+function initializeServerEditor(serverId, editorState) {
+  const textarea = document.getElementById('serverFileEditorTextarea');
+  if (!textarea || typeof CodeMirror === 'undefined') return;
+  serverCodeMirror = CodeMirror.fromTextArea(textarea, {
+    lineNumbers: true,
+    mode: editorModeForPath(editorState.openPath),
+    theme: 'bald',
+    lineWrapping: false,
+    viewportMargin: Infinity,
+  });
+  serverCodeMirror.setValue(editorState.content || '');
+  serverCodeMirror.on('change', instance => { editorState.content = instance.getValue(); });
+}
+
+async function sendServerConsoleCommand() {
+  const input = document.getElementById('serverConsoleInput');
+  const server = getServer(currentServerId);
+  if (!input || !server) return;
+  const command = input.value.trim();
+  if (!command) return;
+  if (launcherBridge?.sendServerCommand) {
+    await launcherBridge.sendServerCommand({ serverId: server.id, command });
+  }
+  input.value = '';
+}
+
+function parseServerTpsLine(line) {
+  const text = String(line || '').replace(/[\u001b\u009b]\[[0-?]*[ -\/]*[@-~]/g, '');
+  const paperMatch = text.match(/\bTPS\b.*?:\s*([0-9]+(?:\.[0-9]+)?)/i);
+  if (paperMatch) return Number(paperMatch[1]);
+  const directMatch = text.match(/\bTPS\b\s*[:=]?\s*([0-9]+(?:\.[0-9]+)?)/i);
+  return directMatch ? Number(directMatch[1]) : null;
+}
+
+function recordServerStatSample(serverId, key, value) {
+  if (!serverId) return;
+  const bucket = serverStatsState[serverId] || { tps: [], ram: [] };
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return;
+  bucket[key] = [...(bucket[key] || []), { time: Date.now(), value: numeric }].slice(-300);
+  serverStatsState[serverId] = bucket;
+}
+
+function getServerTpsConfig(server) {
+  const type = String(server?.serverType || '').toLowerCase();
+  if (['velocity', 'waterfall', 'bungeecord'].includes(type)) return { kind: 'proxy' };
+  const installed = [
+    ...(Array.isArray(server?.mods) ? server.mods : []),
+    ...(Array.isArray(server?.content) ? server.content : []),
+    ...(Array.isArray(server?.installedContent) ? server.installedContent : []),
+  ];
+  const profile = server?.profileId ? getProfile(server.profileId) : null;
+  if (profile?.mods) installed.push(...profile.mods);
+  const reportingMod = installed.find(item => {
+    const identity = `${item?.id || ''} ${item?.slug || ''} ${item?.name || ''}`.toLowerCase();
+    return identity.includes('spark') || identity.includes('fabric-tps') || identity.includes('fabric_tps');
+  });
+  if (reportingMod) return { kind: 'mod', command: String(reportingMod.id || reportingMod.slug || '').toLowerCase().includes('spark') ? 'spark tps' : 'tps' };
+  if (type === 'purpur') return { kind: 'built-in', command: 'spark tps' };
+  if (['paper', 'folia', 'spigot', 'bukkit'].includes(type)) return { kind: 'missing-mod' };
+  if (type === 'forge') return { kind: 'built-in', command: 'forge tps' };
+  if (type === 'neoforge') return { kind: 'built-in', command: 'neoforge tps' };
+  return { kind: 'missing-mod' };
+}
+
+function isProxyServer(server) {
+  return getServerTpsConfig(server).kind === 'proxy';
+}
+
+function drawLineChart(canvas, samples, color, emptyLabel, scaleMin = null, scaleMax = null) {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width || 600;
+  const height = canvas.height || 180;
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0, 0, width, height);
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 5; i++) {
+    const y = 20 + (i * ((height - 30) / 4));
+    ctx.beginPath();
+    ctx.moveTo(10, y);
+    ctx.lineTo(width - 10, y);
+    ctx.stroke();
+  }
+  if (!samples.length) {
+    ctx.fillStyle = '#555';
+    ctx.font = '12px sans-serif';
+    ctx.fillText(emptyLabel, 18, height / 2 + 4);
+    return;
+  }
+  const values = samples.map(item => Number(item.value)).filter(value => Number.isFinite(value));
+  if (!values.length) {
+    ctx.fillStyle = '#555';
+    ctx.font = '12px sans-serif';
+    ctx.fillText(emptyLabel, 18, height / 2 + 4);
+    return;
+  }
+  const min = scaleMin == null ? Math.min(...values) : scaleMin;
+  const max = scaleMax == null ? Math.max(...values) : scaleMax;
+  const range = max - min || 1;
+  ctx.beginPath();
+  samples.forEach((sample, index) => {
+    const x = 14 + (index / Math.max(1, samples.length - 1)) * (width - 28);
+    const y = height - 14 - ((Number(sample.value) - min) / range) * (height - 32);
+    if (index === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.font = '10px sans-serif';
+  ctx.fillText(`${max.toFixed(2)}`, width - 36, 18);
+  ctx.fillText(`${min.toFixed(2)}`, width - 36, height - 14);
+}
+
+function updateServerStatsCharts(serverId) {
+  const server = getServer(serverId);
+  if (!server) return;
+  const tpsConfig = getServerTpsConfig(server);
+  const tpsCanvas = document.getElementById(`serverTpsChart-${serverId}`);
+  const ramCanvas = document.getElementById(`serverRamChart-${serverId}`);
+  const bucket = serverStatsState[serverId] || { tps: [], ram: [] };
+  if (tpsConfig.kind === 'proxy') {
+    drawLineChart(tpsCanvas, [], '#7ef15e', 'TPS does not apply to proxy servers', 0, 20);
+  } else if (tpsConfig.kind === 'missing-mod') {
+    drawLineChart(tpsCanvas, [], '#7ef15e', 'Install Spark or Fabric TPS to monitor TPS', 0, 20);
+  } else if (server.status !== 'running') {
+    drawLineChart(tpsCanvas, [], '#7ef15e', 'No TPS', 0, 20);
+  } else {
+    drawLineChart(tpsCanvas, bucket.tps || [], '#7ef15e', 'Awaiting TPS', 0, 20);
+  }
+  drawLineChart(ramCanvas, server.status === 'running' ? (bucket.ram || []) : [], '#7f77dd', server.status === 'running' ? 'Awaiting RAM' : 'No RAM');
+}
+
+function refreshServerStats() {
+  const server = getServer(currentServerId);
+  if (!server) return;
+  updateServerStatsCharts(server.id);
+  const status = server.status || 'idle';
+  const tps = (serverStatsState[server.id]?.tps || []).slice(-1)[0]?.value ?? null;
+  const ram = (serverStatsState[server.id]?.ram || []).slice(-1)[0]?.value ?? null;
+  const tpsLabel = document.getElementById('serverStatisticTps');
+  const ramLabel = document.getElementById('serverStatisticRam');
+  const uptimeLabel = document.getElementById('serverStatisticUptime');
+  if (tpsLabel) tpsLabel.textContent = status === 'running' && tps != null ? `${Number(tps).toFixed(2)}` : '--';
+  if (ramLabel) ramLabel.textContent = status === 'running' && ram != null ? `${ram.toFixed(1)} MB` : '--';
+  if (uptimeLabel) uptimeLabel.textContent = status === 'running' ? 'Live' : '--';
+}
+
+function renderServerActionButton(server){
+  const button = document.getElementById('serverActionButton');
+  if (!button || !server) return;
+  const status = server.status || 'idle';
+  button.classList.remove('starting','running','stopping');
+  if (status === 'starting') {
+    button.classList.add('starting');
+    button.disabled = true;
+    button.innerHTML = '<i class="ti ti-loader" aria-hidden="true"></i> Starting...';
+  } else if (status === 'running') {
+    button.classList.add('running');
+    button.disabled = false;
+    button.innerHTML = '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop';
+  } else if (status === 'stopping') {
+    button.classList.add('stopping');
+    button.disabled = true;
+    button.innerHTML = '<i class="ti ti-loader" aria-hidden="true"></i> Stopping...';
+  } else {
+    button.classList.add('idle');
+    button.disabled = false;
+    button.innerHTML = '<i class="ti ti-player-play" aria-hidden="true"></i> Start';
+  }
+}
+
+function renderServers(){
+  const list = document.getElementById('serverList');
+  if (!list) return;
+  const servers = state.servers || [];
+  if (!servers.length){
+    list.innerHTML = '<div class="server-empty">No servers yet. Create one to start hosting.</div>';
+    return;
+  }
+  list.innerHTML = servers.map(server => {
+    const status = server.status || 'idle';
+    const dotClass = status === 'running' ? 'green' : status === 'starting' || status === 'stopping' ? 'amber' : 'gray';
+    const players = status === 'running' ? (server.playerCount || 0) : 0;
+    return `
+      <div class="server-card" onclick="openServerDetail('${server.id}')">
+        <div class="server-card-main">
+          <span class="server-dot ${dotClass}"></span>
+          <div class="server-card-icon">${String(server.name || 'S').slice(0,1).toUpperCase()}</div>
+          <div class="server-card-body">
+            <div class="server-card-name">${server.name}</div>
+            <div class="server-card-meta">
+              <span>${server.mcVersion}</span>
+              <span>·</span>
+              <span>${String(server.serverType || 'paper').toUpperCase()}</span>
+              <span>·</span>
+              <span>${players} players</span>
+            </div>
+          </div>
+        </div>
+        <div class="server-card-actions" onclick="event.stopPropagation()">
+          <button class="server-btn ${status === 'running' ? 'running' : status === 'starting' ? 'starting' : status === 'stopping' ? 'stopping' : ''}" type="button" data-server-action="${server.id}" onclick="toggleServerAction('${server.id}')">
+            ${status === 'running' ? '<i class="ti ti-player-stop" aria-hidden="true"></i> Stop' : status === 'starting' ? '<i class="ti ti-loader" aria-hidden="true"></i> Starting...' : status === 'stopping' ? '<i class="ti ti-loader" aria-hidden="true"></i> Stopping...' : '<i class="ti ti-player-play" aria-hidden="true"></i> Start'}
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function openNewServerModal(){
+  const versionSelect = document.getElementById('nsVersion');
+  const serverTypeSelect = document.getElementById('nsServerType');
+  if (versionSelect) {
+    const normalizedVersions = normalizeVersionOptions(VERSIONS);
+    versionSelect.innerHTML = normalizedVersions.map(v => `<option value="${v}" ${v === '1.21.1' ? 'selected' : ''}>${v}</option>`).join('');
+  }
+  if (serverTypeSelect) {
+    serverTypeSelect.value = 'paper';
+  }
+  document.getElementById('newServerModal').style.display = 'flex';
+}
+
+function closeNewServerModal(){
+  document.getElementById('newServerModal').style.display = 'none';
+}
+
+async function submitNewServer(){
+  const name = document.getElementById('nsName').value.trim() || 'My server';
+  const mcVersion = document.getElementById('nsVersion').value;
+  const serverType = document.getElementById('nsServerType').value || 'paper';
+  const memoryMax = Number(document.getElementById('nsMemory').value || 4);
+  const networkingMode = document.getElementById('nsNetworkingMode').value || 'playit';
+  const payload = { name, mcVersion, serverType, memoryMax, networkingMode, worldName: 'world' };
+
+  const created = {
+    id: `server-${Date.now()}`,
+    name,
+    mcVersion,
+    loader: 'fabric',
+    serverType,
+    memoryMax,
+    networkingMode,
+    worldName: 'world',
+    status: 'idle',
+    address: '',
+    createdAt: Date.now(),
+    playerCount: 0,
+    schedules: [],
+  };
+
+  try {
+    if (launcherBridge?.createServer) {
+      const result = await launcherBridge.createServer(payload);
+      if (result?.ok && result.server) {
+        state.servers = [ ...(state.servers || []), result.server ];
+        closeNewServerModal();
+        renderServers();
+        document.getElementById('sbStatus').textContent = `Server created: ${name}`;
+        serverConsoleLogs[result.server.id] = [];
+        openServerDetail(result.server.id);
+        return;
+      }
+      if (result?.error) {
+        console.error('Server creation failed:', result.error);
+      }
+    }
+  } catch (error) {
+    console.error('Server creation IPC error:', error);
+  }
+
+  state.servers = [...(state.servers || []), created];
+  closeNewServerModal();
+  renderServers();
+  document.getElementById('sbStatus').textContent = `Server created: ${name}`;
+  serverConsoleLogs[created.id] = [];
+  openServerDetail(created.id);
+}
+
+function setServerTab(tab){
+  activeServerTab = tab;
+  document.querySelectorAll('.server-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.serverTab === tab));
+  document.getElementById('serverConsolePanel').classList.toggle('active', tab === 'console');
+  document.getElementById('serverStatsPanel').classList.toggle('active', tab === 'stats');
+  document.getElementById('serverFilesPanel').classList.toggle('active', tab === 'files');
+  document.getElementById('serverBackupsPanel').classList.toggle('active', tab === 'backups');
+  document.getElementById('serverSchedulesPanel').classList.toggle('active', tab === 'schedules');
+  document.getElementById('serverSettingsPanel').classList.toggle('active', tab === 'settings');
+  document.getElementById('serverPlayitPanel').classList.toggle('active', tab === 'playit');
+  if (tab === 'playit') renderServerPlayit();
+}
+
+function openServerDetail(serverId){
+  currentServerId = serverId;
+  const server = getServer(serverId);
+  if (!server) return;
+  document.getElementById('serverDetailIcon').textContent = String(server.name || 'S').slice(0,1).toUpperCase();
+  document.getElementById('serverDetailName').textContent = server.name;
+  document.getElementById('serverDetailMeta').textContent = `${server.mcVersion} · ${capitalize(server.serverType || 'paper')} · ${server.networkingMode === 'port-forward' ? 'Port forwarding' : 'Playit tunnel'}`;
+  renderServerActionButton(server);
+  renderServerConsole();
+  renderServerStats();
+  renderServerFiles();
+  renderServerBackups();
+  renderServerSchedules();
+  renderServerSettings();
+  renderServerPlayit();
+  setServerTab(activeServerTab || 'console');
+  showPanel('server-detail');
+}
+
+let playitTerminal = null;
+let playitFitAddon = null;
+let playitTerminalHydrated = false;
+
+function ensurePlayitTerminal() {
+  if (playitTerminal || !window.Terminal) return playitTerminal;
+  const terminalElement = document.getElementById('serverPlayitTerminal');
+  if (!terminalElement) return null;
+  playitTerminal = new Terminal({
+    convertEol: false,
+    cursorBlink: true,
+    scrollback: 5000,
+    fontFamily: 'var(--font-mono)',
+    fontSize: 12,
+    theme: { background: '#050505', foreground: '#d9d9d9', cursor: '#7ef15e', selectionBackground: '#3a3a3a' },
+    allowProposedApi: false,
+  });
+  playitFitAddon = new FitAddon.FitAddon();
+  playitTerminal.loadAddon(playitFitAddon);
+  playitTerminal.loadAddon(new WebLinksAddon.WebLinksAddon((_event, uri) => launcherBridge?.openPlayitLink?.(uri)));
+  playitTerminal.open(terminalElement);
+  playitTerminal.onData(data => launcherBridge?.writePlayitInput?.(data));
+  playitTerminal.onResize(({ cols, rows }) => launcherBridge?.resizePlayit?.(cols, rows));
+  new ResizeObserver(() => fitPlayitTerminal()).observe(terminalElement);
+  fitPlayitTerminal();
+  return playitTerminal;
+}
+
+function fitPlayitTerminal() {
+  if (!playitFitAddon || !playitTerminal) return;
+  try { playitFitAddon.fit(); } catch (_error) {}
+}
+
+async function renderServerPlayit() {
+  const statusElement = document.getElementById('serverPlayitStatus');
+  const helpElement = document.getElementById('serverPlayitHelp');
+  const terminal = ensurePlayitTerminal();
+  if (!statusElement || !terminal || !launcherBridge?.getPlayitStatus) return;
+  const result = await launcherBridge.getPlayitStatus();
+  const playit = result?.playit || {};
+  const labels = { starting: 'Starting', running: 'Running', stopping: 'Stopping', stopped: 'Stopped', crashed: 'Crashed', exited: 'Exited' };
+  const status = String(playit.status || 'stopped');
+  statusElement.textContent = labels[status] || status;
+  statusElement.className = `server-playit-status ${status === 'running' ? 'running' : status === 'crashed' ? 'error' : status === 'starting' || status === 'stopping' ? 'waiting' : 'neutral'}`;
+  helpElement.textContent = status === 'crashed' ? 'The real Playit process exited unexpectedly. Review the terminal output and restart it.' : 'The real Playit agent terminal is attached below.';
+  if (playit.output && !playitTerminalHydrated) {
+    terminal.write(playit.output);
+    playitTerminalHydrated = true;
+  }
+  fitPlayitTerminal();
+}
+
+async function installPlayitAgent() {
+  if (!launcherBridge?.installPlayitAgent) return;
+  const result = await launcherBridge.installPlayitAgent();
+  if (!result?.ok) alert(result?.error || 'Unable to install Playit agent');
+  renderServerPlayit();
+}
+
+async function startPlayitAgent() {
+  if (!launcherBridge?.startPlayitAgent) return;
+  const result = await launcherBridge.startPlayitAgent();
+  if (!result?.ok) alert(result?.error || 'Unable to start Playit agent');
+  renderServerPlayit();
+}
+
+async function stopPlayitAgent() {
+  if (!launcherBridge?.stopPlayitAgent) return;
+  const result = await launcherBridge.stopPlayitAgent();
+  if (!result?.ok) alert(result?.error || 'Unable to stop Playit agent');
+  renderServerPlayit();
+}
+
+async function restartPlayitAgent() {
+  if (!launcherBridge?.restartPlayitAgent) return;
+  const result = await launcherBridge.restartPlayitAgent();
+  if (!result?.ok) alert(result?.error || 'Unable to restart Playit agent');
+  renderServerPlayit();
+}
+
+async function clearPlayitTerminal() {
+  if (playitTerminal) {
+    playitTerminal.clear();
+    playitTerminalHydrated = true;
+  }
+  if (launcherBridge?.clearPlayitTerminal) await launcherBridge.clearPlayitTerminal();
+}
+
+function renderServerConsole(){
+  const box = document.getElementById('serverConsoleBox');
+  if (!box) return;
+  const server = getServer(currentServerId);
+  const lines = serverConsoleLogs[currentServerId] || [];
+  const scrollState = serverConsoleScrollState[currentServerId] || { stuckToBottom: true };
+  const wasNearBottom = box.scrollHeight - box.clientHeight - box.scrollTop <= 36;
+  scrollState.stuckToBottom = wasNearBottom || scrollState.stuckToBottom;
+  if (!lines.length){
+    box.innerHTML = '<span class="server-console-line">No console output yet.</span>';
+    serverConsoleScrollState[currentServerId] = scrollState;
+    if (scrollState.stuckToBottom) box.scrollTop = box.scrollHeight;
+    return;
+  }
+  box.innerHTML = lines.map(line => `<span class="server-console-line">${escapeHtml(line)}</span>`).join('');
+  serverConsoleScrollState[currentServerId] = scrollState;
+  if (scrollState.stuckToBottom) box.scrollTop = box.scrollHeight;
+}
+
+function renderServerStats(){
+  const statsGrid = document.getElementById('serverStatsGrid');
+  if (!statsGrid) return;
+  const server = getServer(currentServerId);
+  if (!server) return;
+  const running = server.status === 'running';
+  const tpsConfig = getServerTpsConfig(server);
+  const latestTps = (serverStatsState[server.id]?.tps || []).slice(-1)[0]?.value ?? null;
+  const latestRam = (serverStatsState[server.id]?.ram || []).slice(-1)[0]?.value ?? null;
+  const stats = [
+    ...(tpsConfig.kind === 'proxy' ? [] : [['TPS', running && latestTps != null ? Number(latestTps).toFixed(2) : '--', tpsConfig.kind === 'missing-mod' ? 'Needs a TPS mod' : 'Target 20.0']]),
+    [tpsConfig.kind === 'proxy' ? 'Connections' : 'Players', running ? String(server.playerCount || 0) : '--', tpsConfig.kind === 'proxy' ? 'Active connections' : 'Connected users'],
+    ['RAM', running && latestRam != null ? `${latestRam.toFixed(1)} MB` : '--', `${server.memoryMax || 4}GB allocated`],
+    ['Uptime', running ? 'Live' : '--', 'Current runtime'],
+  ];
+  statsGrid.innerHTML = stats.map(([label, value, sub], index) => `
+    <div class="server-stat">
+      <div class="server-stat-label">${label}</div>
+      <div id="serverStatistic${label === 'TPS' ? 'Tps' : label === 'RAM' ? 'Ram' : label === 'Uptime' ? 'Uptime' : 'Players'}" class="server-stat-value">${value}</div>
+      <div class="server-stat-sub">${sub}</div>
+    </div>`).join('');
+  const tpsMarkup = tpsConfig.kind === 'proxy' ? '' : `
+      <div class="server-chart-wrap">
+        <div class="server-chart-header"><span>TPS over time</span><span>${tpsConfig.kind === 'missing-mod' ? 'Unavailable' : 'Live'}</span></div>
+        <canvas class="server-chart-canvas" id="serverTpsChart-${server.id}" width="620" height="180"></canvas>
+        ${tpsConfig.kind === 'missing-mod' ? '<div class="server-row-sub" style="margin-top:8px;">TPS monitoring needs a mod like Spark installed on this server. <button class="server-file-action" type="button" onclick="openServerContentForStats()">Browse server content</button></div>' : ''}
+      </div>`;
+  const chartMarkup = `
+    <div class="server-charts">
+      ${tpsMarkup}
+      <div class="server-chart-wrap ram">
+        <div class="server-chart-header"><span>RAM usage</span><span>Live</span></div>
+        <canvas class="server-chart-canvas" id="serverRamChart-${server.id}" width="620" height="180"></canvas>
+      </div>
+    </div>
+  `;
+  statsGrid.insertAdjacentHTML('beforeend', chartMarkup);
+  updateServerStatsCharts(server.id);
+}
+
+function openServerContentForStats() {
+  browseTypeFilter = 'all';
+  openBrowseModal();
+  if (currentServerId) renderBrowseChips();
+}
+
+function renderServerFiles(){
+  const tree = document.getElementById('serverFilesTree');
+  if (!tree) return;
+  const server = getServer(currentServerId);
+  if (!server) return;
+  const browserState = serverFileBrowserState[server.id] || { currentPath: '.' };
+  const currentPath = normalizeServerPath(browserState.currentPath || '.');
+  const serverRootLabel = server.name || 'Server';
+  const editorState = serverEditorState[server.id] || { openPath: null, content: '' };
+  const selected = serverFileSelection[server.id] || [];
+  const parentPath = getParentServerPath(currentPath);
+  const breadcrumbs = buildServerPathBreadcrumbs(server.id, currentPath);
+
+  if (launcherBridge?.listServerFiles) {
+    launcherBridge.listServerFiles({ serverId: server.id, path: currentPath }).then(result => {
+      if (!result?.ok) return;
+      const rows = (result.files || []).filter(item => item && item.name && item.path !== '.');
+      const orderedRows = rows.sort((a, b) => Number(b.isDirectory) - Number(a.isDirectory) || String(a.name).localeCompare(String(b.name)));
+      const search = String(browserState.search || '').toLowerCase();
+      const visibleRows = orderedRows.filter(item => !search || String(item.name).toLowerCase().includes(search));
+      tree.innerHTML = `
+        <div class="server-files-header">
+          <div class="server-files-breadcrumbs">${breadcrumbs.map((crumb, index) => `
+          <span class="server-file-breadcrumb" style="cursor:pointer;color:${index === breadcrumbs.length - 1 ? '#ddd' : '#666'};" onclick="navigateServerFiles('${server.id}','${escapeJsString(crumb.path)}')">${escapeHtml(crumb.label)}</span>
+          ${index < breadcrumbs.length - 1 ? '<span style="color:#444;">/</span>' : ''}
+          `).join('')}</div>
+          <div class="server-files-toolbar">
+            <button class="server-mini-btn" type="button" onclick="navigateServerFiles('${server.id}', '${escapeJsString(parentPath)}')" ${currentPath === '.' ? 'disabled' : ''}>Parent</button>
+            <button class="server-mini-btn" type="button" onclick="createServerFolder('${server.id}')">New folder</button>
+            <button class="server-mini-btn" type="button" onclick="createServerFile('${server.id}')">New file</button>
+            <button class="server-mini-btn" type="button" onclick="uploadServerFile('${server.id}')">Upload</button>
+            <button class="server-mini-btn" type="button" onclick="renderServerFiles()">Refresh</button>
+            <button class="server-mini-btn" type="button" onclick="exportServerArchive('${server.id}')">Export as zip</button>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">
+          <input class="server-files-search" placeholder="Search files..." value="${escapeHtml(browserState.search || '')}" oninput="setServerFileSearch('${server.id}', this.value)" />
+          <button class="server-mini-btn" type="button" onclick="revealServerPath('${server.id}','${escapeJsString(selected[0] || currentPath)}')" ${selected.length === 1 ? '' : 'disabled'}>Reveal selected</button>
+        </div>
+        <div class="server-files-layout">
+          <div class="server-files-list">
+          ${visibleRows.length ? visibleRows.map(item => `
+          <div class="server-file-row ${item.isDirectory ? 'folder' : 'file'}" oncontextmenu="showServerFileContextMenu(event,'${server.id}','${escapeJsString(item.path)}',${item.isDirectory})" ondblclick="${item.isDirectory ? `navigateServerFiles('${server.id}','${escapeJsString(item.path)}')` : item.isEditable !== false && isEditableServerFile(item.path) ? `readServerFile('${server.id}','${escapeJsString(item.path)}')` : ''}" title="${escapeHtml(item.name)}">
+            <input class="server-file-check" type="checkbox" ${selected.includes(item.path) ? 'checked' : ''} onclick="event.stopPropagation();toggleServerFileSelection('${server.id}','${escapeJsString(item.path)}',this.checked)" />
+            <span class="server-file-icon"><i class="ti ${item.isDirectory ? 'ti-folder' : serverFileIconClass(item.name)}" aria-hidden="true"></i></span>
+            <div class="server-file-name">${escapeHtml(item.name)}</div>
+            <div class="server-file-meta"><span>${item.isDirectory ? '-' : formatBytes(item.size || 0)}</span><span>${item.modifiedAt ? new Date(item.modifiedAt).toLocaleDateString() : '-'}</span></div>
+            <div class="server-file-actions">
+              <span class="server-file-action ${!item.isDirectory && (item.isEditable === false || !isEditableServerFile(item.path)) ? 'disabled' : ''}" title="${item.isDirectory ? 'Open folder' : item.isEditable !== false && isEditableServerFile(item.path) ? 'Open file' : 'Binary file'}" onclick="${item.isDirectory ? `navigateServerFiles('${server.id}','${escapeJsString(item.path)}')` : item.isEditable !== false && isEditableServerFile(item.path) ? `readServerFile('${server.id}','${escapeJsString(item.path)}')` : `alert('This file is binary or otherwise not editable as text')`}">${item.isDirectory ? 'Open' : item.isEditable !== false && isEditableServerFile(item.path) ? 'Edit' : 'Binary'}</span>
+              <span class="server-file-action" title="Reveal in File Explorer" onclick="revealServerPath('${server.id}','${escapeJsString(item.path)}')">Reveal</span>
+              <span class="server-file-action" title="Delete" onclick="deleteServerFile('${server.id}','${escapeJsString(item.path)}')">Delete</span>
+            </div>
+          </div>`).join('') : '<div class="server-empty">No matching files.</div>'}
+          </div>
+          ${editorState.openPath ? `<div class="server-file-editor-pane"><div class="server-file-editor-header"><span>${escapeHtml(editorState.openPath)}</span><button class="server-mini-btn primary" type="button" onclick="saveServerFileEditor('${server.id}')">Save</button></div><textarea id="serverFileEditorTextarea">${escapeHtml(editorState.content)}</textarea><button class="server-mini-btn" type="button" onclick="closeServerFileEditor('${server.id}')">Close editor</button></div>` : ''}
+        </div>`;
+      const textarea = document.getElementById('serverFileEditorTextarea');
+      if (textarea) initializeServerEditor(server.id, editorState);
+    });
+  } else {
+    tree.innerHTML = '<div class="server-empty">File browser unavailable in preview mode.</div>';
+  }
+}
+
+function readServerFile(serverId, relativePath){
+  if (!launcherBridge?.readServerFile) return;
+  if (!isEditableServerFile(relativePath)) {
+    alert('This file is binary or otherwise not editable as text');
+    return;
+  }
+  launcherBridge.readServerFile({ serverId, path: relativePath }).then(result => {
+    if (!result?.ok) return alert(result?.error || 'Unable to read file');
+    serverEditorState[serverId] = { openPath: result.path || relativePath, content: result.content || '' };
+    renderServerFiles();
+  });
+}
+
+function closeServerFileEditor(serverId){
+  if (serverCodeMirror) {
+    serverCodeMirror.toTextArea();
+    serverCodeMirror = null;
+  }
+  if (serverEditorState[serverId]) {
+    serverEditorState[serverId] = { openPath: null, content: '' };
+  }
+  renderServerFiles();
+}
+
+async function saveServerFileEditor(serverId){
+  const editorState = serverEditorState[serverId];
+  if (!editorState?.openPath) return;
+  if (!launcherBridge?.writeServerFile) return;
+  const content = serverCodeMirror ? serverCodeMirror.getValue() : editorState.content;
+  const result = await launcherBridge.writeServerFile({ serverId, path: editorState.openPath, content });
+  if (!result?.ok) {
+    alert(result?.error || 'Unable to save file');
+    return;
+  }
+  editorState.content = content;
+  closeServerFileEditor(serverId);
+}
+
+async function createServerFolder(serverId){
+  const browserState = serverFileBrowserState[serverId] || { currentPath: '.' };
+  const folderName = window.prompt('New folder name:', 'new-folder');
+  if (!folderName || !folderName.trim()) return;
+  const result = await launcherBridge.createServerFolder({ serverId, path: browserState.currentPath || '.', name: folderName.trim() });
+  if (!result?.ok) {
+    alert(result?.error || 'Unable to create folder');
+    return;
+  }
+  navigateServerFiles(serverId, browserState.currentPath || '.');
+}
+
+async function createServerFile(serverId){
+  const browserState = serverFileBrowserState[serverId] || { currentPath: '.' };
+  const fileName = window.prompt('New file name:', 'server.properties');
+  if (!fileName || !fileName.trim() || !launcherBridge?.createServerFile) return;
+  const result = await launcherBridge.createServerFile({ serverId, path: browserState.currentPath || '.', name: fileName.trim() });
+  if (!result?.ok) alert(result?.error || 'Unable to create file');
+  else { renderServerFiles(); readServerFile(serverId, result.path); }
+}
+
+async function uploadServerFile(serverId){
+  const browserState = serverFileBrowserState[serverId] || { currentPath: '.' };
+  if (!launcherBridge?.uploadServerFile) return;
+  const result = await launcherBridge.uploadServerFile({ serverId, path: browserState.currentPath || '.' });
+  if (!result?.ok && !result?.canceled) alert(result?.error || 'Unable to upload file');
+  else if (result?.ok) renderServerFiles();
+}
+
+async function revealServerPath(serverId, filePath){
+  if (!launcherBridge?.revealServerPath) return;
+  const result = await launcherBridge.revealServerPath({ serverId, path: filePath });
+  if (!result?.ok) alert(result?.error || 'Unable to reveal path');
+}
+
+async function exportServerArchive(serverId){
+  if (!launcherBridge?.downloadServerArchive) return;
+  const result = await launcherBridge.downloadServerArchive({ serverId });
+  if (!result?.ok && !result?.canceled) alert(result?.error || 'Unable to export server archive');
+}
+
+function openServerFileFromEditor(serverId, relativePath){
+  readServerFile(serverId, relativePath);
+}
+
+function deleteServerFile(serverId, relativePath){
+  if (!confirm('Delete this file/folder?')) return;
+  if (!launcherBridge?.deleteServerFile) return;
+  launcherBridge.deleteServerFile({ serverId, path: relativePath }).then(result => {
+    if (!result?.ok) alert(result?.error || 'Unable to delete file');
+    else renderServerFiles();
+  });
+}
+
+function renderServerBackups(){
+  const list = document.getElementById('serverBackupList');
+  if (!list) return;
+  const server = getServer(currentServerId);
+  if (!server) return;
+  if (!launcherBridge?.listServerBackups) {
+    list.innerHTML = '<div class="server-empty">Backups unavailable.</div>';
+    return;
+  }
+  launcherBridge.listServerBackups(server.id).then(result => {
+    const backups = result?.ok ? (result.backups || []) : [];
+    const retentionValue = Number(server.retentionCount || 10);
+    list.innerHTML = `
+      <div class="server-card-row">
+        <div style="display:flex;flex-direction:column;gap:4px;flex:1;">
+          <div class="server-row-meta">Create backup</div>
+          <div class="server-row-sub">World + config archive</div>
+        </div>
+        <div class="server-form-row" style="flex:1;justify-content:flex-end;flex-wrap:wrap;">
+          <input class="modal-input" id="serverBackupNameInput" placeholder="backup name (optional)" style="max-width:180px;" />
+          <button class="server-mini-btn primary" onclick="backupServer('${server.id}')">Backup now</button>
+        </div>
+      </div>
+      <div class="server-card-row">
+        <div style="display:flex;flex-direction:column;gap:4px;flex:1;">
+          <div class="server-row-meta">Retention</div>
+          <div class="server-row-sub">Keep last N backups</div>
+        </div>
+        <div class="server-form-row" style="justify-content:flex-end;">
+          <input class="modal-input" id="serverRetentionInput" type="number" min="1" max="100" value="${retentionValue}" style="width:76px;" />
+          <button class="server-mini-btn" onclick="saveServerRetention('${server.id}')">Apply</button>
+        </div>
+      </div>
+      ${backups.length ? backups.map(backup => `
+        <div class="server-card-row">
+          <div>
+            <div class="server-row-meta">${escapeHtml(backup.name)}</div>
+            <div class="server-row-sub">${formatBytes(backup.size || 0)} · ${new Date(backup.createdAt || Date.now()).toLocaleString()}</div>
+          </div>
+          <div class="server-file-actions">
+            <button class="server-mini-btn" type="button" onclick="restoreBackup('${server.id}', '${escapeJsString(backup.name)}')">Restore</button>
+            <button class="server-mini-btn danger" type="button" onclick="deleteBackup('${server.id}', '${escapeJsString(backup.name)}')">Delete</button>
+          </div>
+        </div>
+      `).join('') : '<div class="server-empty">No backups yet.</div>'}`;
+  });
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / (1024 ** unitIndex);
+  return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+async function backupServer(serverId){
+  if (!launcherBridge?.backupServer) return;
+  const input = document.getElementById('serverBackupNameInput');
+  const name = input ? input.value.trim() : '';
+  const result = await launcherBridge.backupServer({ serverId, name });
+  if (!result?.ok) { alert(result?.error || 'Unable to create backup'); return; }
+  renderServerBackups();
+}
+
+async function restoreBackup(serverId, backupName) {
+  if (!confirm('Restore this backup? It will overwrite the current world.')) return;
+  if (!launcherBridge?.restoreServerBackup) return;
+  const result = await launcherBridge.restoreServerBackup({ serverId, backupName });
+  if (!result?.ok) alert(result?.error || 'Unable to restore backup');
+  else renderServerBackups();
+}
+
+async function deleteBackup(serverId, backupName) {
+  if (!confirm('Delete this backup permanently?')) return;
+  if (!launcherBridge?.deleteServerBackup) return;
+  const result = await launcherBridge.deleteServerBackup({ serverId, backupName });
+  if (!result?.ok) alert(result?.error || 'Unable to delete backup');
+  else renderServerBackups();
+}
+
+function saveServerRetention(serverId) {
+  const input = document.getElementById('serverRetentionInput');
+  if (!input) return;
+  const value = Number(input.value || 10);
+  const server = getServer(serverId);
+  if (!server) return;
+  server.retentionCount = Math.max(1, Number.isFinite(value) ? value : 10);
+  if (launcherBridge?.syncState) launcherBridge.syncState({ servers: state.servers || [] });
+  renderServerBackups();
+}
+
+function renderServerSchedules(){
+  const list = document.getElementById('serverScheduleList');
+  if (!list) return;
+  const server = getServer(currentServerId);
+  if (!server) return;
+  const schedules = Array.isArray(server.schedules) ? server.schedules : [];
+  list.innerHTML = `
+    <div class="server-card-row">
+      <div>
+        <div class="server-row-meta">Add schedule</div>
+        <div class="server-row-sub">Start, stop, backup, or run a command</div>
+      </div>
+      <button class="server-mini-btn primary" onclick="addScheduleDraft('${server.id}')">Add schedule</button>
+    </div>
+    ${schedules.length ? schedules.map(schedule => `
+      <div class="server-card-row">
+        <div>
+          <div class="server-row-meta">${String(schedule.type || 'backup').toUpperCase()} · ${escapeHtml(schedule.name || schedule.command || 'Action')}</div>
+          <div class="server-row-sub">${schedule.type === 'command' ? (schedule.command || 'Run command') : `${Number(schedule.intervalMinutes || schedule.intervalHours * 60 || 60)} ${schedule.intervalHours ? 'hours' : 'min'}`} · ${schedule.enabled ? 'Enabled' : 'Disabled'}</div>
+        </div>
+        <div class="server-file-actions">
+          <label class="server-toggle"><input type="checkbox" ${schedule.enabled ? 'checked' : ''} onchange="toggleSchedule('${server.id}','${escapeJsString(schedule.id)}',this.checked)" /> Enabled</label>
+          <button class="server-mini-btn" type="button" onclick="editSchedule('${server.id}','${escapeJsString(schedule.id)}')">Edit</button>
+          <button class="server-mini-btn danger" type="button" onclick="deleteSchedule('${server.id}','${escapeJsString(schedule.id)}')">Delete</button>
+        </div>
+      </div>
+    `).join('') : '<div class="server-empty">No schedules configured.</div>'}`;
+}
+
+function addScheduleDraft(serverId) {
+  const server = getServer(serverId);
+  if (!server) return;
+  const nextSchedules = Array.isArray(server.schedules) ? server.schedules : [];
+  const draft = {
+    id: `schedule-${Date.now()}`,
+    type: 'backup',
+    enabled: true,
+    intervalMinutes: 60,
+    intervalHours: 0,
+    time: '00:00',
+    command: '',
+    name: ''
+  };
+  nextSchedules.push(draft);
+  server.schedules = nextSchedules;
+  renderServerSchedules();
+  editSchedule(serverId, draft.id);
+}
+
+function toggleSchedule(serverId, scheduleId, enabled) {
+  const server = getServer(serverId);
+  if (!server || !Array.isArray(server.schedules)) return;
+  const schedule = server.schedules.find(item => item.id === scheduleId);
+  if (!schedule) return;
+  schedule.enabled = enabled;
+  if (launcherBridge?.syncState) launcherBridge.syncState({ servers: state.servers || [] });
+  renderServerSchedules();
+}
+
+function editSchedule(serverId, scheduleId) {
+  const server = getServer(serverId);
+  if (!server || !Array.isArray(server.schedules)) return;
+  const schedule = server.schedules.find(item => item.id === scheduleId);
+  if (!schedule) return;
+  const currentList = document.getElementById('serverScheduleList');
+  if (!currentList) return;
+  currentList.innerHTML = `
+    <div class="server-card-row">
+      <div>
+        <div class="server-row-meta">Edit schedule</div>
+        <div class="server-row-sub">Update the action, timing, and command.</div>
+      </div>
+      <button class="server-mini-btn" onclick="renderServerSchedules()">Cancel</button>
+    </div>
+    <div class="server-form" id="schedule-form-${schedule.id}">
+      <div class="server-form-row"><div class="server-form-label">Action</div><select class="modal-select" id="editScheduleType"><option value="backup" ${schedule.type === 'backup' ? 'selected' : ''}>Backup</option><option value="start" ${schedule.type === 'start' ? 'selected' : ''}>Start</option><option value="stop" ${schedule.type === 'stop' ? 'selected' : ''}>Stop</option><option value="command" ${schedule.type === 'command' ? 'selected' : ''}>Run command</option></select></div>
+      <div class="server-form-row"><div class="server-form-label">Recurrence</div><select class="modal-select" id="editScheduleMode"><option value="minutes" ${!schedule.intervalHours ? 'selected' : ''}>Every N minutes</option><option value="hours" ${schedule.intervalHours ? 'selected' : ''}>Every N hours</option></select></div>
+      <div class="server-form-row"><div class="server-form-label">Value</div><input class="modal-input" id="editScheduleValue" type="number" min="1" max="720" value="${schedule.intervalHours ? schedule.intervalHours : schedule.intervalMinutes || 60}" /></div>
+      <div class="server-form-row"><div class="server-form-label">Name</div><input class="modal-input" id="editScheduleName" value="${escapeHtml(schedule.name || '')}" /></div>
+      <div class="server-form-row" ${schedule.type !== 'command' ? 'style="display:none;"' : ''}><div class="server-form-label">Command</div><input class="modal-input" id="editScheduleCommand" value="${escapeHtml(schedule.command || '')}" /></div>
+      <div class="server-file-actions">
+        <button class="server-mini-btn" onclick="renderServerSchedules()">Close</button>
+        <button class="server-mini-btn primary" onclick="saveScheduleEdit('${server.id}','${escapeJsString(schedule.id)}')">Save</button>
+      </div>
+    </div>
+  `;
+}
+
+function saveScheduleEdit(serverId, scheduleId) {
+  const server = getServer(serverId);
+  if (!server || !Array.isArray(server.schedules)) return;
+  const schedule = server.schedules.find(item => item.id === scheduleId);
+  if (!schedule) return;
+  const type = document.getElementById('editScheduleType')?.value || 'backup';
+  const mode = document.getElementById('editScheduleMode')?.value || 'minutes';
+  const value = Number(document.getElementById('editScheduleValue')?.value || 60);
+  const command = String(document.getElementById('editScheduleCommand')?.value || '').trim();
+  const name = String(document.getElementById('editScheduleName')?.value || '').trim();
+  schedule.type = ['start','stop','backup','command'].includes(type) ? type : 'backup';
+  schedule.name = name;
+  schedule.command = command;
+  if (mode === 'hours') {
+    schedule.intervalHours = Math.max(1, value);
+    schedule.intervalMinutes = 0;
+  } else {
+    schedule.intervalHours = 0;
+    schedule.intervalMinutes = Math.max(1, value);
+  }
+  if (schedule.type !== 'command') schedule.command = '';
+  schedule.enabled = true;
+  schedule.nextRunAt = Date.now() + ((schedule.intervalHours || 0) * 60 * 60 * 1000 + (schedule.intervalMinutes || 0) * 60 * 1000);
+  if (launcherBridge?.syncState) launcherBridge.syncState({ servers: state.servers || [] });
+  renderServerSchedules();
+}
+
+function deleteSchedule(serverId, scheduleId) {
+  const server = getServer(serverId);
+  if (!server || !Array.isArray(server.schedules)) return;
+  server.schedules = server.schedules.filter(item => item.id !== scheduleId);
+  if (launcherBridge?.syncState) launcherBridge.syncState({ servers: state.servers || [] });
+  renderServerSchedules();
+}
+
+function renderServerSettings(){
+  const grid = document.getElementById('serverSettingsGrid');
+  if (!grid) return;
+  const server = getServer(currentServerId);
+  if (!server) return;
+  const running = server.status === 'running';
+  const restartNote = '<span class="server-setting-note">Applies on next restart</span>';
+  const address = server.networkingMode === 'playit'
+    ? (server.address && !/^127\.0\.0\.1$/i.test(server.address) && !/^localhost$/i.test(server.address) && !/^\d+\.\d+\.\d+\.\d+(?::\d+)?$/i.test(server.address) ? server.address : 'No tunnel configured yet — visit playit.gg/account/tunnels to create one for port 25565')
+    : (server.address || '127.0.0.1:25565');
+  const field = (label, control, help = '') => `<div class="server-setting"><label>${label}</label>${help ? `<div class="server-setting-help">${help}</div>` : ''}${control}</div>`;
+  const section = (title, content) => `<div class="server-settings-section"><div class="server-settings-section-title">${title}</div>${content}</div>`;
+  grid.innerHTML = [
+    section('General', field('MOTD', `<input type="text" value="${escapeHtml(server.motd || '')}" onchange="saveServerSetting('motd', this.value)" />`) + field('Max players', `<input type="number" min="1" value="${server.maxPlayers || 20}" onchange="saveServerSetting('maxPlayers', this.value)" />`) + field('Server icon', `<button class="server-mini-btn" type="button" onclick="uploadServerIcon('${server.id}')">Upload server-icon.png</button>`)),
+    section('World & Gameplay', field(`World name ${restartNote}`, `<input type="text" value="${escapeHtml(server.worldName || 'world')}" ${running ? 'disabled' : ''} onchange="saveServerSetting('worldName', this.value)" />`) + field('Difficulty', `<select onchange="saveServerSetting('difficulty', this.value)">${['peaceful','easy','normal','hard'].map(v => `<option value="${v}" ${server.difficulty === v ? 'selected' : ''}>${capitalize(v)}</option>`).join('')}</select>`) + field('Gamemode', `<select onchange="saveServerSetting('gamemode', this.value)">${['survival','creative','adventure','spectator'].map(v => `<option value="${v}" ${server.gamemode === v ? 'selected' : ''}>${capitalize(v)}</option>`).join('')}</select>`) + field('Force gamemode', `<input type="checkbox" ${server.forceGamemode ? 'checked' : ''} onchange="saveServerSetting('forceGamemode', this.checked)" />`, "Overrides a player's own gamemode choice with the Gamemode setting above every time they join.") + field('PvP', `<input type="checkbox" ${server.pvp !== false ? 'checked' : ''} onchange="saveServerSetting('pvp', this.checked)" />`) + field('Whitelist', `<input type="checkbox" ${server.whitelist ? 'checked' : ''} onchange="saveServerSetting('whitelist', this.checked)" />`, 'When on, only players explicitly added to the whitelist can join.')),
+    section('Performance', field(`RAM ${restartNote}`, `<input type="number" min="2" max="32" value="${server.memoryMax || 4}" ${running ? 'disabled' : ''} onchange="saveServerSetting('memoryMax', this.value)" />`) + field('View distance', `<input type="number" min="2" max="32" value="${server.viewDistance || 10}" onchange="saveServerSetting('viewDistance', this.value)" />`, 'How many chunks around each player are sent to their client. Higher lets players see farther but uses more bandwidth and RAM.') + field('Simulation distance', `<input type="number" min="2" max="32" value="${server.simulationDistance || 10}" onchange="saveServerSetting('simulationDistance', this.value)" />`, 'How many chunks around each player are actively simulated (mobs, redstone, etc). Lowering this is one of the biggest performance wins on a small server.')),
+    section('Networking', field('Networking mode', `<select onchange="saveServerSetting('networkingMode', this.value)"><option value="playit" ${server.networkingMode === 'playit' ? 'selected' : ''}>Playit tunnel</option><option value="port-forward" ${server.networkingMode === 'port-forward' ? 'selected' : ''}>Port forwarding</option></select>`) + field('Address', `<input type="text" value="${address}" readonly />`)),
+    section('Server type', field(`Server type ${restartNote}`, `<select ${running ? 'disabled' : ''} onchange="saveServerSetting('serverType', this.value)">${['paper','purpur','folia','forge','neoforge','spigot','bukkit','velocity','waterfall','bungeecord','vanilla','fabric','quilt'].map(type => `<option value="${type}" ${server.serverType === type ? 'selected' : ''}>${capitalize(type)}</option>`).join('')}</select>`) + field(`Version ${restartNote}`, `<select ${running ? 'disabled' : ''} onchange="saveServerSetting('mcVersion', this.value)">${VERSIONS.map(v => `<option value="${v}" ${server.mcVersion === v ? 'selected' : ''}>${v}</option>`).join('')}</select>`)),
+    section('Advanced', field('Java arguments', `<input type="text" value="${escapeHtml(server.javaArgs || '')}" placeholder="-XX:+UseG1GC" onchange="saveServerSetting('javaArgs', this.value)" />`, 'Extra JVM startup flags for advanced tuning. Leave as-is unless you know what you\'re changing.') + field('Java executable', `<input type="text" value="${escapeHtml(server.javaPath || '')}" placeholder="Auto-detect" onchange="saveServerSetting('javaPath', this.value)" />`) + field('Auto-restart on crash', `<input type="checkbox" ${server.autoRestart ? 'checked' : ''} onchange="saveServerSetting('autoRestart', this.checked)" />`, "Automatically restarts the server process if it exits unexpectedly. Doesn't apply to a manual Stop.") + field('Auto-start with launcher', `<input type="checkbox" ${server.autoStart ? 'checked' : ''} onchange="saveServerSetting('autoStart', this.checked)" />`)),
+    section('Legal', field(`EULA accepted <a href="https://aka.ms/MinecraftEULA" target="_blank" rel="noreferrer">View EULA</a>`, `<input type="checkbox" ${server.eulaAccepted ? 'checked' : ''} onchange="saveServerSetting('eulaAccepted', this.checked)" />`, "Required before the server can start. This accepts Mojang's End User License Agreement on your behalf.")),
+  ].join('');
+}
+
+async function saveServerSetting(key, value){
+  const server = getServer(currentServerId);
+  if (!server) return;
+  if (server.status === 'running' && ['memoryMax', 'worldName', 'serverType', 'mcVersion'].includes(key)) return;
+  if (key === 'worldName' && !/^[a-zA-Z0-9._-]+$/.test(String(value))) { alert('World name can only contain letters, numbers, dots, underscores, and hyphens.'); return; }
+  if (key === 'worldName' && String(value) !== String(server.worldName || 'world')) {
+    const listing = launcherBridge?.listServerFiles ? await launcherBridge.listServerFiles({ serverId: currentServerId, path: '.' }) : null;
+    const existing = Boolean(listing?.files?.some(item => item.isDirectory && item.name === String(value)));
+    const message = existing
+      ? `The world folder "${value}" already exists and will be used on the next restart.`
+      : `The world folder "${value}" does not exist. A new world will be generated and "${server.worldName || 'world'}" will remain on disk. Continue?`;
+    if (!existing && !confirm(message)) return;
+    if (existing) alert(message);
+  }
+  if (['serverType', 'mcVersion'].includes(key)) {
+    if (!confirm(`Changing ${key === 'serverType' ? 'server type' : 'Minecraft version'} can break existing worlds and installed content. Create a backup first, then continue?`)) return;
+  }
+  const nextValue = ['memoryMax', 'maxPlayers', 'viewDistance', 'simulationDistance'].includes(key) ? Number(value || 0) : value;
+  state.servers = (state.servers || []).map(item => item.id === currentServerId ? { ...item, [key]: nextValue } : item);
+  if (launcherBridge?.syncState) await launcherBridge.syncState({ servers: state.servers || [] });
+  if (launcherBridge?.writeServerSettings) await launcherBridge.writeServerSettings({ serverId: currentServerId });
+  renderServers();
+  if (currentServerId) renderServerDetail();
+}
+
+async function uploadServerIcon(serverId) {
+  if (!launcherBridge?.uploadServerIcon) return;
+  const result = await launcherBridge.uploadServerIcon({ serverId });
+  if (!result?.ok && !result?.canceled) alert(result?.error || 'Unable to upload server icon');
+  else if (result?.ok) renderServerSettings();
+}
+
+async function toggleServerAction(serverId){
+  const resolvedServerId = String(serverId || currentServerId || '').trim();
+  if (!resolvedServerId) return;
+  const server = getServer(resolvedServerId);
+  if (!server) return;
+  if (server.status === 'starting' || server.status === 'stopping') return;
+  if (server.status === 'running') {
+    if (launcherBridge?.stopServer) {
+      await launcherBridge.stopServer(resolvedServerId);
+    }
+    return;
+  }
+  if (launcherBridge?.startServer) {
+    const result = await launcherBridge.startServer(resolvedServerId);
+    if (!result?.ok) alert(result?.error || 'Failed to start server');
+  }
+}
+
+if (launcherBridge?.onServerState) {
+  launcherBridge.onServerState(({ server }) => {
+    if (!server) return;
+    state.servers = (state.servers || []).map(item => item.id === server.id ? { ...item, ...server } : item);
+    if (currentServerId === server.id) {
+      renderServerActionButton(server);
+      renderServerDetail();
+    }
+    renderServers();
+  });
+}
+
+if (launcherBridge?.onServerConsole) {
+  launcherBridge.onServerConsole(entry => {
+    const serverId = entry?.serverId;
+    if (!serverId) return;
+    const bucket = serverConsoleLogs[serverId] || [];
+    bucket.push(entry.line || '');
+    if (bucket.length > 200) bucket.shift();
+    serverConsoleLogs[serverId] = bucket;
+    const server = getServer(serverId);
+    const tpsConfig = getServerTpsConfig(server);
+    const parsedTps = tpsConfig.kind === 'built-in' || tpsConfig.kind === 'mod' ? parseServerTpsLine(entry.line) : null;
+    if (parsedTps != null) recordServerStatSample(serverId, 'tps', parsedTps);
+    if (currentServerId === serverId) {
+      const box = document.getElementById('serverConsoleBox');
+      const scrollState = serverConsoleScrollState[serverId] || { stuckToBottom: true };
+      const wasNearBottom = box ? box.scrollHeight - box.clientHeight - box.scrollTop <= 36 : true;
+      scrollState.stuckToBottom = wasNearBottom || scrollState.stuckToBottom;
+      serverConsoleScrollState[serverId] = scrollState;
+      renderServerConsole();
+    }
+  });
+}
+
+if (launcherBridge?.onPlayitData) {
+  launcherBridge.onPlayitData(data => {
+    const terminal = ensurePlayitTerminal();
+    if (terminal) {
+      terminal.write(data);
+      playitTerminalHydrated = true;
+    }
+  });
+}
+if (launcherBridge?.onPlayitState) launcherBridge.onPlayitState(() => renderServerPlayit());
+if (launcherBridge?.onPlayitExit) launcherBridge.onPlayitExit(() => renderServerPlayit());
+if (launcherBridge?.onPlayitClear) launcherBridge.onPlayitClear(() => {
+  if (playitTerminal) playitTerminal.clear();
+  playitTerminalHydrated = true;
+});
+
+const serverConsoleBox = document.getElementById('serverConsoleBox');
+if (serverConsoleBox) {
+  serverConsoleBox.addEventListener('scroll', () => {
+    const current = currentServerId;
+    if (!current) return;
+    const box = document.getElementById('serverConsoleBox');
+    if (!box) return;
+    const nearBottom = box.scrollHeight - box.clientHeight - box.scrollTop <= 36;
+    serverConsoleScrollState[current] = { stuckToBottom: nearBottom };
+  });
+}
+
+setInterval(() => {
+  const activeServers = (state.servers || []).filter(server => server.status === 'running');
+  activeServers.forEach(server => {
+    if (launcherBridge?.getServerMemory) {
+      launcherBridge.getServerMemory(server.id).then(result => {
+        if (result?.ok && Number.isFinite(Number(result.memoryMb))) {
+          recordServerStatSample(server.id, 'ram', Number(result.memoryMb));
+          if (currentServerId === server.id) refreshServerStats();
+        }
+      });
+    }
+    const tpsConfig = getServerTpsConfig(server);
+    if (launcherBridge?.getServerTps && currentServerId === server.id && (tpsConfig.kind === 'built-in' || tpsConfig.kind === 'mod')) {
+      launcherBridge.getServerTps(server.id).then(result => {
+        if (result?.ok && result.tps != null && Number.isFinite(Number(result.tps))) {
+          recordServerStatSample(server.id, 'tps', Number(result.tps));
+          refreshServerStats();
+        }
+      });
+    }
+  });
+  if (currentServerId) {
+    const currentServer = getServer(currentServerId);
+    if (currentServer && currentServer.status !== 'running') {
+      serverStatsState[currentServerId] = { tps: [], ram: [] };
+      refreshServerStats();
+    }
+  }
+}, 500);
+
+function renderServerDetail(){
+  if (!currentServerId) return;
+  const server = getServer(currentServerId);
+  if (!server) return;
+  document.getElementById('serverDetailIcon').textContent = String(server.name || 'S').slice(0,1).toUpperCase();
+  document.getElementById('serverDetailName').textContent = server.name;
+  document.getElementById('serverDetailMeta').textContent = `${server.mcVersion} · ${capitalize(server.serverType || 'paper')} · ${server.networkingMode === 'port-forward' ? 'Port forwarding' : 'Playit tunnel'}`;
+  renderServerActionButton(server);
+  renderServerConsole();
+  renderServerStats();
+  renderServerFiles();
+  renderServerBackups();
+  renderServerSchedules();
+  renderServerSettings();
+}
+
+async function launchClick(){
+  const status = document.getElementById('sbStatus');
+  const profileId = currentProfileId || state.activeProfileId || state.profiles?.[0]?.id;
+  currentProfileId = profileId || null;
+  const profile = getProfile(profileId);
+  if (!profile || !profileId) {
+    if (status) status.textContent = 'Select a profile first';
+    return;
+  }
+  if (runningProfileIds.has(currentProfileId)) {
+    if (launcherBridge?.stop) await launcherBridge.stop(currentProfileId);
+    return;
+  }
+  if (launchPreparingProfileId) return;
+  sessionLogs = sessionLogs.filter(entry => entry.profileId !== profileId && (entry.profileId || entry.profileName !== getProfile(profileId)?.name));
+  renderProfileLogs();
+  buildRaw();
+  launchPreparingProfileId = profileId;
+  renderPlayButton();
+  if (status) status.textContent = 'Launching...';
+  sessionLogs.push({ profileId, profileName: profile.name, type: 'info', line: `[${profile.name}] Launch requested` });
+  renderProfileLogs();
+  try {
+    if (launcherBridge?.launch){
+      const result = await launcherBridge.launch({ profileId });
+      if (result?.ok) {
+        runningProfileIds.add(profileId);
+        launchPreparingProfileId = null;
+        if (status) status.textContent = `Running · ${result.profileName} · ${result.accountName}`;
+        sessionLogs.push({ profileId, profileName: profile.name, type: 'info', line: `[${profile.name}] Minecraft started (PID ${result.pid || 'unknown'})` });
+      } else {
+        if (status) status.textContent = `Launch failed · ${result?.error||'Unknown error'}`;
+        sessionLogs.push({ profileId, profileName: profile.name, type: 'err', line: `[${profile.name}] Launch failed: ${result?.error || 'Unknown error'}` });
+      }
+    } else {
+      if (status) status.textContent = 'Running (preview mode)';
+    }
+  } catch (error) {
+    if (status) status.textContent = `Launch failed · ${error?.message || error}`;
+    sessionLogs.push({ profileId, profileName: profile.name, type: 'err', line: `[${profile.name}] Launch request failed: ${error?.message || error}` });
+  } finally {
+    renderProfileLogs();
+    if (!runningProfileIds.has(profileId)) {
+      launchPreparingProfileId = null;
+      renderPlayButton();
+    }
+  }
+}
+function handleLaunchButtonClick(){
+  const status = document.getElementById('sbStatus');
+  if (status) status.textContent = 'Launch button clicked...';
+  launchClick();
+}
+
+function bindProfileLaunchButton(){
+  const button = document.getElementById('pdPlayButton');
+  if (!button || button.dataset.launchBound === 'true') return;
+  button.dataset.launchBound = 'true';
+  button.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    handleLaunchButtonClick();
+  });
+}
+
+function enhanceClickableKeyboardAccess(root = document){
+  root.querySelectorAll?.('div[onclick], span[onclick]').forEach(element => {
+    if (!element.hasAttribute('role')) element.setAttribute('role', 'button');
+    if (!element.hasAttribute('tabindex')) element.tabIndex = 0;
+  });
+}
+document.addEventListener('keydown', event => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement) || !target.matches('div[onclick], span[onclick]')) return;
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  target.click();
+});
+const clickableObserver = new MutationObserver(mutations => {
+  for (const mutation of mutations) {
+    mutation.addedNodes.forEach(node => {
+      if (node.nodeType === Node.ELEMENT_NODE) enhanceClickableKeyboardAccess(node);
+    });
+  }
+});
+clickableObserver.observe(document.body, { childList: true, subtree: true });
+enhanceClickableKeyboardAccess();
+
+// ---------------- Boot ----------------
+async function boot(){
+  if (launcherBridge?.getVersions){
+    try {
+      const versions = await launcherBridge.getVersions();
+      const normalized = normalizeVersionOptions(versions);
+      if (normalized.length) VERSIONS = normalized;
+    } catch (error) { /* keep FALLBACK_VERSIONS */ }
+  }
+  if (launcherBridge?.getState){
+    state = await launcherBridge.getState();
+    sessionLogs = (state.sessions || []).flatMap(session => (session.logs || []).map(entry => ({ ...entry, profileName: entry.profileName || session.profileName })));
+    (state.sessions || []).filter(session => session.running && session.pid).forEach(session => runningProfileIds.add(session.profileId));
+  } else {
+    state = {
+      accounts: [
+        {id:'ms-main',name:'YourName',type:'Microsoft',initials:'YO',accent:'#3c3489',fg:'#ceecf6'},
+        {id:'offline-local',name:'LocalPlayer',type:'Offline',initials:'LP',accent:'#173404',fg:'#97c459'},
+      ],
+      activeAccountId:'ms-main',
+      profiles:[{id:'default',name:'Default profile',mcVersion:'1.21.1',loader:'fabric',rendererMode:'vulkan',icon:'B',mods:[]}],
+      activeProfileId:'default',
+      settings:{ memoryMax:6, resolution:'1920×1080', fpsCap:'Unlimited', renderDistance:12 },
+      servers: [],
+    };
+  }
+  renderProfileGrid();
+  renderServers();
+  renderAccounts();
+  bindProfileLaunchButton();
+  const settings = state.settings || {};
+  document.getElementById('simSlider').value = settings.simulationDistance || 8;
+  document.getElementById('simVal').textContent = `${document.getElementById('simSlider').value} ch`;
+  document.getElementById('performancePreset').value = settings.performancePreset || 'balanced-pvp';
+  document.getElementById('jvmProfile').value = settings.jvmProfile || 'default';
+  document.getElementById('customJvmArgs').value = settings.customJvmArgs || '';
+  document.getElementById('processPriority').value = settings.processPriority || 'normal';
+  toggleJvmArgs();
+  showPanel('home');
+  if (launcherBridge?.onStatus){
+    launcherBridge.onStatus(message => { document.getElementById('sbStatus').textContent = message; });
+  }
+  if (launcherBridge?.onUpdateAvailable){
+    launcherBridge.onUpdateAvailable(update => {
+      const banner = document.getElementById('updateBanner');
+      const text = document.getElementById('updateBannerText');
+      const button = document.getElementById('updateButton');
+      if (!banner || !text || !button) return;
+      text.textContent = `Update available - v${update?.version || ''}`;
+      button.textContent = 'Update now';
+      banner.classList.add('visible');
+    });
+  }
+  if (launcherBridge?.onUpdateReady){
+    launcherBridge.onUpdateReady(() => {
+      const button = document.getElementById('updateButton');
+      updateReady = true;
+      if (button) { button.disabled = false; button.textContent = 'Restart to update'; }
+    });
+  }
+  if (launcherBridge?.onProcessState){
+    launcherBridge.onProcessState(processState => {
+      if (processState?.profileId) {
+        if (processState.running) runningProfileIds.add(processState.profileId);
+        else runningProfileIds.delete(processState.profileId);
+        if (launchPreparingProfileId === processState.profileId) launchPreparingProfileId = null;
+      }
+      renderPlayButton();
+    });
+  }
+  if (launcherBridge?.onLog){
+    launcherBridge.onLog(entry => { sessionLogs.push(entry); if(document.getElementById('lc-raw').style.display==='flex') buildRaw(); renderProfileLogs(); });
+  }
+}
+document.getElementById('updateButton')?.addEventListener('click', async event => {
+  const button = event.currentTarget;
+  if (updateReady) {
+    button.disabled = true;
+    await launcherBridge?.applyUpdate?.();
+    return;
+  }
+  button.disabled = true;
+  button.textContent = 'Downloading update...';
+});
+bindProfileLaunchButton();
+window.addEventListener('error', event => {
+  const message = event?.error?.message || event?.message || 'Renderer error';
+  const status = document.getElementById('sbStatus');
+  if (status) status.textContent = `Launcher error · ${message}`;
+  if (currentProfileId) {
+    sessionLogs.push({ profileId: currentProfileId, profileName: getProfile(currentProfileId)?.name || 'Profile', type: 'err', line: `[Launcher] ${message}` });
+    renderProfileLogs();
+  }
+});
+boot().catch(error => {
+  const message = error?.message || String(error);
+  const status = document.getElementById('sbStatus');
+  if (status) status.textContent = `Launcher startup failed · ${message}`;
+  console.error('Launcher startup failed:', error);
+});
+</script>

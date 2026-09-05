@@ -1,0 +1,14 @@
+diff --git a/node_modules/minecraft-launcher-core/components/handler.js b/node_modules/minecraft-launcher-core/components/handler.js
+index 111a797..085ee8f 100644
+--- a/node_modules/minecraft-launcher-core/components/handler.js
++++ b/node_modules/minecraft-launcher-core/components/handler.js
+@@ -294,7 +294,8 @@ class Handler {
+           // All is well.
+           console.warn(e)
+         }
+-        fs.unlinkSync(path.join(nativeDirectory, name))
++        const nativeArchivePath = path.join(nativeDirectory, name)
++        if (fs.existsSync(nativeArchivePath)) fs.unlinkSync(nativeArchivePath)
+         counter++
+         this.client.emit('progress', {
+           type: 'natives',

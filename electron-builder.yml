@@ -1,0 +1,28 @@
+appId: com.baldlauncher.app
+productName: Bald Launcher
+npmRebuild: false
+directories:
+  output: dist
+win:
+  target: nsis
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+files:
+  - main.js
+  - preload.js
+  - playit-manager.js
+  - bald_launcher_v7.html
+  - TERMS.md
+  - LICENSE.md
+  - build/icon.ico
+  - node_modules/**/*
+  - patches/**/*
+  - package.json
+publish:
+  provider: github
+  owner: TheoNotBald
+  repo: Bald-Launcher
