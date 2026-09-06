@@ -61,6 +61,25 @@ body{font-family:var(--font-sans);}
 .profile-card-name{font-size:var(--text-md);color:#ccc;font-weight:500;}
 .profile-card-sub{font-size:var(--text-xs);color:var(--text-muted);}
 .profile-card-badge{display:inline-flex;align-self:flex-start;font-size:var(--text-xs);padding:2px 8px;border-radius:8px;}
+.profile-card-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.profile-card-menu-btn{width:28px;height:28px;border:1px solid var(--ui-border);border-radius:var(--ui-radius-small);background:var(--ui-surface-hover);color:var(--ui-text-secondary);cursor:pointer;}
+.profile-card-menu-btn:hover{color:var(--ui-text);border-color:var(--ui-border-strong);}
+.profile-action-menu{position:fixed;z-index:120;min-width:210px;padding:6px;background:var(--ui-surface);border:1px solid var(--ui-border-strong);border-radius:var(--ui-radius-medium);box-shadow:var(--ui-shadow-large);}
+.profile-action-menu button{display:flex;width:100%;align-items:center;gap:9px;padding:9px 10px;border:0;border-radius:var(--ui-radius-small);background:transparent;color:var(--ui-text);text-align:left;cursor:pointer;font:inherit;}
+.profile-action-menu button:hover{background:var(--ui-surface-hover);}
+.profile-action-menu button.danger{color:#ff8d8d;}
+.command-palette{position:fixed;inset:0;z-index:140;background:rgba(0,0,0,.58);display:flex;align-items:flex-start;justify-content:center;padding-top:12vh;}
+.command-palette-box{width:min(680px,calc(100vw - 32px));background:var(--ui-surface);border:1px solid var(--ui-border-strong);border-radius:var(--ui-radius-medium);box-shadow:var(--ui-shadow-large);overflow:hidden;}
+.command-palette-search{width:100%;box-sizing:border-box;padding:16px 18px;background:transparent;border:0;border-bottom:1px solid var(--ui-border);color:var(--ui-text);font:16px var(--font-sans);outline:none;}
+.command-palette-results{max-height:52vh;overflow-y:auto;padding:7px;}
+.command-palette-item{display:flex;align-items:center;gap:11px;width:100%;padding:11px 12px;border:0;border-radius:var(--ui-radius-small);background:transparent;color:var(--ui-text);text-align:left;cursor:pointer;font:inherit;}
+.command-palette-item:hover,.command-palette-item.selected{background:var(--ui-surface-hover);}
+.command-palette-kind{margin-left:auto;color:var(--ui-text-secondary);font-size:11px;}
+.notification-center{position:fixed;right:18px;top:52px;width:min(380px,calc(100vw - 36px));max-height:70vh;z-index:130;background:var(--ui-surface);border:1px solid var(--ui-border-strong);border-radius:var(--ui-radius-medium);box-shadow:var(--ui-shadow-large);overflow:hidden;}
+.notification-center-header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--ui-border);color:var(--ui-text);font-weight:600;}
+.notification-list{max-height:60vh;overflow-y:auto;padding:8px;}
+.notification-item{padding:10px;border-bottom:1px solid var(--ui-border);color:var(--ui-text-secondary);font-size:12px;}
+.notification-item strong{display:block;color:var(--ui-text);margin-bottom:3px;}
 .badge-vulkan{background:#16350f;color:var(--accent-green);}
 .badge-sodium{background:#1a1833;color:var(--accent-purple);}
 .badge-vanilla{background:var(--bg-surface-2);color:#666;}
@@ -101,6 +120,7 @@ body{font-family:var(--font-sans);}
 .server-tab:hover:not(.active){color:#999;}
 .server-layout{flex:1;min-height:0;overflow:hidden;}
 .server-console-panel,.server-stats-panel,.server-files-panel,.server-backups-panel,.server-schedules-panel,.server-settings-panel,.server-playit-panel{height:100%;padding:12px 16px 14px;overflow:hidden;display:none;}
+.server-settings-panel.active{overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;}
 .server-console-panel.active,.server-stats-panel.active,.server-files-panel.active,.server-backups-panel.active,.server-schedules-panel.active,.server-settings-panel.active,.server-playit-panel.active{display:flex;flex-direction:column;}
 .server-playit-card{background:var(--bg-surface);border:0.5px solid var(--border);border-radius:11px;padding:16px;display:flex;flex-direction:column;gap:10px;max-width:900px;min-height:0;flex:1;}
 .server-playit-title{font-size:var(--text-lg);color:#ddd;}.server-playit-status{font-size:var(--text-base);}.server-playit-status.neutral{color:#9e9e9e;}.server-playit-status.running{color:var(--accent-green);}.server-playit-status.waiting{color:#d7a91e;}.server-playit-status.error{color:#ff6b6b;}.server-playit-help{font-size:var(--text-sm);color:#666;line-height:1.5;}.server-playit-claim{color:#b3aaf5;word-break:break-all;cursor:pointer;text-decoration:underline;}
@@ -177,7 +197,7 @@ body{font-family:var(--font-sans);}
 .server-mini-btn{border:0.5px solid var(--border-strong);background:var(--bg-surface-2);color:#cfcfcf;border-radius:7px;padding:6px 10px;font:inherit;font-size:var(--text-sm);cursor:pointer;}
 .server-mini-btn.primary{border-color:#3b6d11;background:var(--accent-green-bg);color:var(--accent-green-text-on-dark);}
 .server-mini-btn.danger{border-color:#562020;background:#2a1212;color:#ffbdbd;}
-.server-settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;}
+.server-settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;align-content:start;min-height:min-content;padding-bottom:12px;}
 .server-settings-section{background:var(--bg-surface);border:0.5px solid var(--border);border-radius:11px;padding:11px 13px;display:flex;flex-direction:column;gap:8px;}
 .server-settings-section-title{font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;padding-bottom:3px;border-bottom:.5px solid var(--border);}
 .server-settings-section .server-setting{background:transparent;border:0;border-radius:0;padding:4px 0;}
@@ -218,6 +238,7 @@ body{font-family:var(--font-sans);}
 
 /* PROFILE DETAIL */
 .profile-detail{display:flex;flex-direction:column;height:100%;overflow:hidden;}
+#pd-settings-view{flex:1;min-height:0;overflow:hidden;}
 .pd-header{padding:14px 16px;border-bottom:0.5px solid var(--bg-surface-2);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;}
 .pd-back{color:var(--text-secondary);cursor:pointer;font-size:var(--text-lg);margin-right:6px;}
 .pd-back:hover{color:#999;}
@@ -308,7 +329,7 @@ body{font-family:var(--font-sans);}
 @media (max-width:700px){#browseModal .modal-box.wide{width:calc(100vw - 24px);height:calc(100vh - 24px);max-height:none;padding:14px;}.browse-card{padding:8px;}.mod-attribution-meta{white-space:normal;}.browse-footer{gap:8px;}}
 
 /* PROFILE SETTINGS TAB */
-.pd-settings{padding:16px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;height:100%;max-width:760px;width:100%;min-height:0;}
+.pd-settings{padding:16px;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;gap:10px;height:100%;max-width:760px;width:100%;min-height:0;box-sizing:border-box;scrollbar-width:thin;}
 .pd-settings-row{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:0.5px solid var(--bg-surface-2);}
 .pd-settings-row.column{flex-direction:column;align-items:stretch;gap:7px;}
 .pd-settings-row:last-child{margin-top:auto;}
@@ -390,6 +411,237 @@ div[onclick]:focus-visible,span[onclick]:focus-visible{box-shadow:0 0 0 2px var(
 .ti-arrow-left::before{content:"←";}.ti-package::before{content:"▣";}.ti-sun::before{content:"☀";}
 .ti-photo::before{content:"▦";}.ti-map::before{content:"▧";}.ti-x::before{content:"×";}
 .ti-folder::before{content:"📁";}.ti-puzzle::before{content:"♢";}.ti-file-json::before{content:"{}";font-size:.75em;}.ti-file-config::before{content:"⚙";}.ti-file-text::before{content:"≡";}.ti-file-log::before{content:"▤";}.ti-file-archive::before{content:"▥";}.ti-file-generic::before{content:"•";}
+.ti-copy::before{content:"⧉";}.ti-download::before{content:"↓";}.ti-upload::before{content:"↑";}.ti-file-upload::before{content:"↑";}
+.ti-dots-vertical::before{content:"⋮";}.ti-device-floppy::before{content:"▣";}.ti-database-export::before{content:"⇩";}.ti-database-import::before{content:"⇧";}.ti-folder-open::before{content:"📂";}
+
+/* PHASE 1 UI SYSTEM: centralized tokens and safe presentation overrides */
+:root{
+  --ui-bg:var(--bg-void);
+  --ui-bg-secondary:var(--bg-surface);
+  --ui-bg-tertiary:var(--bg-surface-2);
+  --ui-surface:var(--bg-surface);
+  --ui-surface-hover:#1a2128;
+  --ui-surface-selected:#18251a;
+  --ui-border:var(--border);
+  --ui-border-strong:var(--border-strong);
+  --ui-primary:var(--accent-green);
+  --ui-primary-hover:#91f270;
+  --ui-secondary:var(--accent-purple);
+  --ui-secondary-hover:#aaa3ff;
+  --ui-text:var(--text-primary);
+  --ui-text-secondary:#a1aab4;
+  --ui-text-muted:#77818c;
+  --ui-success:var(--accent-green);
+  --ui-warning:#e5b84e;
+  --ui-error:#f06a6a;
+  --ui-info:#69b9ee;
+  --ui-space-xs:4px;
+  --ui-space-sm:8px;
+  --ui-space-md:12px;
+  --ui-space-lg:16px;
+  --ui-space-xl:24px;
+  --ui-space-2xl:32px;
+  --ui-radius-small:6px;
+  --ui-radius-medium:9px;
+  --ui-radius-large:12px;
+  --ui-radius-pill:999px;
+  --ui-shadow-small:0 2px 8px rgba(0,0,0,.22);
+  --ui-shadow-medium:0 8px 24px rgba(0,0,0,.3);
+  --ui-shadow-large:0 18px 48px rgba(0,0,0,.4);
+  --ui-transition-fast:120ms ease;
+  --ui-transition-normal:180ms ease;
+  --ui-transition-slow:280ms ease;
+  --font-sans:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:"Cascadia Code", Consolas, monospace;
+}
+
+body{background:var(--ui-bg);color:var(--ui-text);font-size:13px;}
+.app{background:var(--ui-bg);border-radius:0;}
+.titlebar{height:46px;background:linear-gradient(180deg,#10151a,var(--ui-bg));border-bottom:1px solid var(--ui-border);padding:0 var(--ui-space-lg);gap:var(--ui-space-md);}
+.titlebar-logo{width:30px;height:30px;border-radius:var(--ui-radius-medium);background:linear-gradient(145deg,#3c9b25,#1b5412);box-shadow:var(--ui-shadow-small);}
+.titlebar-name{font-size:14px;color:var(--ui-text);font-weight:650;letter-spacing:.01em;}
+.titlebar-acc{background:var(--ui-surface);border:1px solid var(--ui-border);border-radius:var(--ui-radius-pill);padding:4px 12px 4px 5px;transition:background var(--ui-transition-fast),border-color var(--ui-transition-fast);}
+.titlebar-acc:hover{background:var(--ui-surface-hover);border-color:var(--ui-border-strong);}
+.acc-name{color:var(--ui-text-secondary);}
+.body{background:var(--ui-bg);}
+.sidebar{width:64px;background:var(--ui-bg-secondary);border-right:1px solid var(--ui-border);padding:var(--ui-space-md) 0;gap:var(--ui-space-xs);}
+.si{appearance:none;width:40px;height:40px;border-radius:var(--ui-radius-medium);color:var(--ui-text-muted);font-size:18px;font-family:inherit;transition:background var(--ui-transition-fast),color var(--ui-transition-fast),border-color var(--ui-transition-fast);}
+.si:hover{color:var(--ui-text);background:var(--ui-surface-hover);border-color:var(--ui-border);}
+.si.on{color:var(--ui-primary);background:var(--ui-surface-selected);border-color:#315a2a;box-shadow:inset 3px 0 0 var(--ui-primary);}
+.si:focus-visible{outline:2px solid var(--ui-secondary);outline-offset:2px;}
+.panel{background:var(--ui-bg);}
+.profiles-view,.servers-view,.accounts-panel,.settings-panel,.logs-panel{padding:var(--ui-space-xl);gap:var(--ui-space-lg);}
+.profiles-toolbar,.servers-toolbar{min-height:40px;}
+.profile-grid{gap:var(--ui-space-md);}
+.profile-card,.server-card,.library-item,.acc-card,.settings-section,.fix-step,.server-card-row,.server-setting,.server-settings-section,.server-stat,.server-chart-wrap,.server-form,.server-playit-card{background:var(--ui-surface);border:1px solid var(--ui-border);border-radius:var(--ui-radius-medium);box-shadow:var(--ui-shadow-small);}
+.profile-card,.server-card{padding:var(--ui-space-lg);transition:transform var(--ui-transition-fast),background var(--ui-transition-fast),border-color var(--ui-transition-fast),box-shadow var(--ui-transition-fast);}
+.profile-card:hover,.server-card:hover{background:var(--ui-surface-hover);border-color:var(--ui-border-strong);box-shadow:var(--ui-shadow-medium);transform:translateY(-1px);}
+.profile-card:active,.server-card:active{transform:translateY(0);}
+.profile-card-name,.server-card-name,.acc-info-name,.li-name{color:var(--ui-text);}
+.profile-card-sub,.server-card-meta,.acc-info-type,.li-type,.server-row-sub{color:var(--ui-text-secondary);}
+.new-profile-btn,.pd-play,.server-btn{min-height:36px;border-radius:var(--ui-radius-medium);background:#285f20;border:1px solid #3f8b32;color:#e3f8dc;transition:background var(--ui-transition-fast),border-color var(--ui-transition-fast),transform var(--ui-transition-fast);}
+.new-profile-btn:hover,.pd-play:hover,.server-btn:hover{background:#367d2c;border-color:#66bd54;}
+.new-profile-btn:active,.pd-play:active,.server-btn:active{transform:translateY(1px);}
+.add-content-btn,.server-mini-btn,.modal-btn,.server-console-send,.log-tab,.chip,.install-btn{min-height:32px;border-radius:var(--ui-radius-small);border:1px solid var(--ui-border-strong);background:var(--ui-surface);color:var(--ui-text-secondary);transition:background var(--ui-transition-fast),border-color var(--ui-transition-fast),color var(--ui-transition-fast);}
+.add-content-btn:hover,.server-mini-btn:hover,.modal-btn:hover,.server-console-send:hover,.log-tab:hover,.chip:hover,.install-btn:hover{background:var(--ui-surface-hover);border-color:#4d5e6d;color:var(--ui-text);}
+.add-content-btn{background:#211e4b;border-color:#5148a2;color:#c5c0ff;}
+.add-content-btn:hover{background:#2e2967;border-color:#746bea;color:#e2dfff;}
+.danger-btn,.server-mini-btn.danger{background:#35191b;border-color:#713033;color:#ffb6b6;}
+.danger-btn:hover,.server-mini-btn.danger:hover{background:#4a2023;border-color:#a24a50;color:#ffd2d2;}
+.pd-header,.server-detail-header{padding:var(--ui-space-lg) var(--ui-space-xl);border-bottom:1px solid var(--ui-border);}
+.pd-tabs,.server-tabs{gap:var(--ui-space-xs);padding:var(--ui-space-sm) var(--ui-space-xl) 0;border-bottom:1px solid var(--ui-border);overflow-x:auto;scrollbar-width:thin;}
+.pd-tab,.server-tab{min-height:36px;padding:9px 12px;color:var(--ui-text-secondary);white-space:nowrap;transition:color var(--ui-transition-fast),border-color var(--ui-transition-fast);}
+.pd-tab.active,.server-tab.active{color:var(--ui-primary);border-color:var(--ui-primary);}
+.pd-tab:hover:not(.active),.server-tab:hover:not(.active){color:var(--ui-text);}
+.library-search,.search-box,.server-files-search{background:var(--ui-surface);border:1px solid var(--ui-border-strong);border-radius:var(--ui-radius-small);color:var(--ui-text);}
+.library-search{margin:var(--ui-space-md) var(--ui-space-xl) 0;min-height:38px;}
+.library-search:focus-within{border-color:var(--ui-primary);box-shadow:0 0 0 3px rgba(120,227,90,.12);}
+.library-list{gap:var(--ui-space-sm);padding:var(--ui-space-md) var(--ui-space-xl);}
+.library-item{padding:var(--ui-space-md);}
+.library-item:hover{border-color:var(--ui-border-strong);background:var(--ui-surface-hover);}
+.settings-section{padding:var(--ui-space-lg);}
+.ss-title,.server-settings-section-title{color:var(--ui-text-secondary);font-size:11px;letter-spacing:.09em;}
+.setting-row{min-height:42px;padding:var(--ui-space-sm) 0;border-bottom-color:var(--ui-border);gap:var(--ui-space-md);}
+.setting-label{color:var(--ui-text-secondary);}
+.setting-input,.setting-select,.modal-input,.modal-select,.server-setting input,.server-setting select{min-height:34px;background:var(--ui-bg-tertiary);border:1px solid var(--ui-border-strong);border-radius:var(--ui-radius-small);color:var(--ui-text);}
+.setting-input:focus,.setting-select:focus,.modal-input:focus,.modal-select:focus,.server-setting input:focus,.server-setting select:focus,.search-box:focus{border-color:var(--ui-primary);box-shadow:0 0 0 3px rgba(120,227,90,.12);outline:none;}
+.setting-slider{accent-color:var(--ui-primary);}
+.modal-overlay{background:rgba(3,5,7,.78);backdrop-filter:blur(4px);}
+.modal-box{background:var(--ui-surface);border:1px solid var(--ui-border-strong);border-radius:var(--ui-radius-large);box-shadow:var(--ui-shadow-large);padding:var(--ui-space-xl);gap:var(--ui-space-md);}
+.modal-title{color:var(--ui-text);font-size:16px;font-weight:650;}
+.modal-close{color:var(--ui-text-muted);padding:4px;border-radius:var(--ui-radius-small);}
+.modal-close:hover{color:var(--ui-text);background:var(--ui-surface-hover);}
+.modal-btn.primary{background:#285f20;border-color:#3f8b32;color:#e3f8dc;}
+.modal-btn.primary:hover{background:#367d2c;border-color:#66bd54;}
+.empty-state,.server-empty{color:var(--ui-text-secondary);}
+.empty-state-icon{color:var(--ui-text-muted);}
+.statusbar{height:30px;background:var(--ui-bg-secondary);border-top:1px solid var(--ui-border);padding:0 var(--ui-space-lg);}
+.sb-dot{background:var(--ui-success);box-shadow:0 0 8px rgba(120,227,90,.45);}
+.sb-txt{color:var(--ui-text-secondary);}
+button,input,select,textarea,[tabindex]{font-family:inherit;}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--ui-secondary);outline-offset:2px;}
+button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;cursor:not-allowed;}
+
+@media (max-width:900px){
+  .profiles-view,.servers-view,.accounts-panel,.settings-panel,.logs-panel{padding:var(--ui-space-lg);}
+  .pd-header,.server-detail-header,.pd-tabs,.server-tabs{padding-left:var(--ui-space-lg);padding-right:var(--ui-space-lg);}
+  .pd-actions{flex-wrap:wrap;justify-content:flex-end;}
+  .setting-row{flex-wrap:wrap;}
+  .setting-label{min-width:140px;}
+}
+@media (max-width:680px){
+  .titlebar-name{display:none;}
+  .sidebar{width:56px;}
+  .si{width:36px;height:36px;}
+  .profile-grid{grid-template-columns:repeat(auto-fill,minmax(132px,1fr));}
+  .pd-header,.server-detail-header{align-items:flex-start;flex-direction:column;}
+  .pd-actions{width:100%;justify-content:flex-start;}
+  .pd-actions button{flex:1;justify-content:center;}
+  .server-card{align-items:flex-start;flex-direction:column;}
+  .server-card-actions{width:100%;justify-content:flex-end;}
+  .server-card-actions button{flex:1;justify-content:center;}
+  .settings-panel{padding:var(--ui-space-md);}
+  .setting-row{align-items:flex-start;flex-direction:column;}
+  .setting-label{min-width:0;width:100%;}
+  .setting-slider{width:100%;max-width:none;}
+  #panel-capes [style*="grid-template-columns:minmax"]{grid-template-columns:1fr!important;}
+  #panel-capes [style*="grid-template-columns:repeat"]{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+}
+
+/* Sidebar navigation system */
+:root{
+  --sidebar-width:76px;
+  --sidebar-item-size:44px;
+  --sidebar-icon-size:20px;
+  --sidebar-gap:6px;
+  --sidebar-active:#78e35a;
+  --sidebar-hover:rgba(255,255,255,.055);
+  --sidebar-inactive:#74808b;
+  --sidebar-radius:10px;
+}
+.sidebar{width:var(--sidebar-width);padding:14px 0 12px;gap:0;background:linear-gradient(180deg,#0d1216 0%,#0b1014 100%);border-right:1px solid var(--ui-border);align-items:center;}
+.sidebar-brand{height:58px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:12px;flex-shrink:0;}
+.sidebar-brand-mark{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#3d9d26,#1c5413);border:1px solid #4aae35;color:#efffea;font-size:16px;font-weight:800;box-shadow:0 4px 14px rgba(57,151,36,.18);}
+.sidebar-brand-line{width:28px;height:1px;background:var(--ui-border-strong);}
+.sidebar-group{width:100%;display:flex;flex-direction:column;align-items:center;gap:var(--sidebar-gap);}
+.sidebar-main-nav{padding-top:8px;}
+.sidebar-utility-nav{margin-top:16px;padding-top:14px;border-top:1px solid var(--ui-border);}
+.sidebar-bottom-nav{padding-top:12px;border-top:1px solid var(--ui-border);}
+.sidebar-spacer{flex:1;min-height:16px;}
+.sidebar-nav-item{position:relative;width:var(--sidebar-item-size);height:var(--sidebar-item-size);padding:0;display:flex;align-items:center;justify-content:center;appearance:none;background:transparent;border:1px solid transparent;border-radius:var(--sidebar-radius);color:var(--sidebar-inactive);cursor:pointer;transition:background var(--ui-transition-normal),color var(--ui-transition-normal),border-color var(--ui-transition-normal),transform var(--ui-transition-fast);}
+.sidebar-nav-item:hover{background:var(--sidebar-hover);border-color:rgba(255,255,255,.06);color:var(--ui-text);}
+.sidebar-nav-item:active{transform:scale(.96);}
+.sidebar-nav-item.on{background:rgba(46,102,38,.28);border-color:rgba(120,227,90,.08);color:var(--sidebar-active);box-shadow:inset 3px 0 0 var(--sidebar-active),0 0 14px rgba(120,227,90,.08);}
+.sidebar-nav-item.on:hover{background:rgba(55,116,43,.35);}
+.sidebar-nav-item:disabled{background:transparent;border-color:transparent;color:#46505a;opacity:.45;}
+.sidebar-icon{width:var(--sidebar-icon-size);height:var(--sidebar-icon-size);display:block;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+.sidebar-nav-item.on .sidebar-icon{stroke-width:1.9;}
+.sidebar-notification-dot{position:absolute;top:8px;right:8px;width:6px;height:6px;border-radius:50%;background:var(--ui-error);border:1.5px solid #0d1216;box-shadow:0 0 7px rgba(240,106,106,.35);}
+.sidebar-nav-item[data-tooltip]::after{content:attr(data-tooltip);position:absolute;left:calc(100% + 10px);top:50%;z-index:80;transform:translateY(-50%) translateX(-3px);padding:7px 9px;border:1px solid var(--ui-border-strong);border-radius:var(--ui-radius-small);background:#171e24;color:var(--ui-text);font-size:11px;font-weight:550;line-height:1;white-space:nowrap;box-shadow:var(--ui-shadow-medium);opacity:0;visibility:hidden;pointer-events:none;transition:opacity var(--ui-transition-fast),transform var(--ui-transition-fast),visibility var(--ui-transition-fast);transition-delay:0ms;}
+.sidebar-nav-item[data-tooltip]:hover::after,.sidebar-nav-item[data-tooltip]:focus-visible::after{opacity:1;visibility:visible;transform:translateY(-50%) translateX(0);transition-delay:420ms;}
+.sidebar-nav-item[data-tooltip]::before{content:'';position:absolute;left:calc(100% + 5px);top:50%;width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-right:5px solid var(--ui-border-strong);opacity:0;visibility:hidden;transition:opacity var(--ui-transition-fast),visibility var(--ui-transition-fast);transition-delay:0ms;}
+.sidebar-nav-item[data-tooltip]:hover::before,.sidebar-nav-item[data-tooltip]:focus-visible::before{opacity:1;visibility:visible;transition-delay:420ms;}
+.sidebar-nav-item:focus-visible{outline:2px solid var(--ui-secondary);outline-offset:3px;}
+.sidebar-nav-item[aria-current="page"]{color:var(--sidebar-active);}
+.theme-control-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;}
+.theme-control-grid label{display:flex;flex-direction:column;gap:5px;color:var(--ui-text-secondary);font-size:10px;}
+.theme-control-grid input,.theme-control-grid select{min-height:32px;width:100%;padding:6px 8px;background:var(--ui-bg-tertiary);border:1px solid var(--ui-border-strong);border-radius:var(--ui-radius-small);color:var(--ui-text);font:inherit;}
+.theme-control-grid input[type=color]{padding:2px;height:32px;cursor:pointer;}
+.theme-control-grid .theme-check{display:flex;flex-direction:row;align-items:center;justify-content:space-between;padding:8px;background:var(--ui-bg-tertiary);border:1px solid var(--ui-border);border-radius:var(--ui-radius-small);}
+.theme-control-grid .theme-check input{width:16px;min-height:16px;accent-color:var(--ui-primary);}
+.theme-help{color:var(--ui-text-secondary);font-size:11px;line-height:1.5;margin-bottom:12px;}
+.theme-preset-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;}
+.theme-preset-grid button{display:flex;flex-direction:column;gap:5px;min-height:84px;padding:12px;text-align:left;border:1px solid var(--ui-border);border-radius:var(--ui-radius-medium);background:var(--ui-bg-tertiary);color:var(--ui-text);cursor:pointer;transition:background var(--ui-transition-fast),border-color var(--ui-transition-fast),transform var(--ui-transition-fast);}
+.theme-preset-grid button:hover{background:var(--ui-surface-hover);border-color:var(--ui-primary);transform:translateY(-1px);}
+.theme-preset-grid strong{font-size:12px;}
+.theme-preset-grid small{color:var(--ui-text-secondary);font-size:10px;line-height:1.4;}
+.theme-element-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;}
+.theme-element-list button{min-height:34px;padding:7px 10px;border:1px solid var(--ui-border);border-radius:var(--ui-radius-small);background:var(--ui-bg-tertiary);color:var(--ui-text-secondary);cursor:pointer;text-align:left;transition:background var(--ui-transition-fast),border-color var(--ui-transition-fast),color var(--ui-transition-fast);}
+.theme-element-list button:hover,.theme-element-list button:focus-visible{background:var(--ui-surface-hover);border-color:var(--ui-secondary);color:var(--ui-text);}
+.theme-selected-element{margin-top:12px;padding:10px 12px;border:1px solid var(--ui-border);border-radius:var(--ui-radius-small);background:var(--ui-bg-tertiary);color:var(--ui-text-secondary);font-size:11px;}
+.appearance-panel{height:100%;min-height:0;display:flex;flex-direction:column;background:var(--ui-bg);}
+.panel#panel-appearance{overflow:hidden!important;}
+.appearance-header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding:24px 24px 16px;background:linear-gradient(180deg,var(--ui-bg-secondary),var(--ui-bg));}
+.appearance-title{font-size:22px;line-height:1.15;font-weight:var(--heading-weight,650);color:var(--ui-text);}
+.appearance-subtitle{max-width:680px;margin-top:7px;color:var(--ui-text-secondary);font-size:12px;line-height:1.5;}
+.appearance-status{padding:6px 10px;border:1px solid var(--ui-border);border-radius:var(--ui-radius-pill);color:var(--ui-text-secondary);font-size:10px;white-space:nowrap;}
+.appearance-workspace{display:grid;grid-template-columns:minmax(0,1fr);gap:0;flex:1;min-height:0;overflow:hidden;}
+.appearance-editor-column{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
+.appearance-editor-column #simpleMode,.appearance-editor-column #advancedMode{display:flex;flex:1;flex-direction:column;min-height:0;overflow:hidden;}
+.appearance-editor-column .app-content{flex:1;min-height:0;height:auto;padding:18px 24px 32px;overflow-y:auto;overflow-x:hidden;}
+.appearance-editor-column .app-categories{padding:14px 24px 0!important;border-bottom:0!important;overflow-x:auto;flex-wrap:nowrap!important;scrollbar-width:thin;}
+.appearance-editor-column .cat-btn{flex:0 0 auto;min-height:34px;border-radius:var(--ui-radius-pill)!important;background:var(--ui-surface)!important;border-color:var(--ui-border)!important;color:var(--ui-text-secondary)!important;}
+.appearance-editor-column .cat-btn:hover{background:var(--ui-surface-hover)!important;color:var(--ui-text)!important;}
+.appearance-editor-column .cat-btn.active{background:var(--ui-surface-selected)!important;border-color:rgba(120,227,90,.45)!important;color:var(--ui-primary)!important;box-shadow:0 0 0 2px rgba(120,227,90,.08);}
+.appearance-editor-column .app-section{padding:18px;border:1px solid var(--ui-border);border-radius:var(--ui-radius-medium);background:var(--ui-surface);box-shadow:var(--ui-shadow-small);}
+.appearance-editor-column .app-section-title{font-size:13px;color:var(--ui-text);letter-spacing:0;font-weight:650;text-transform:none;}
+.appearance-editor-column .app-section-title + .app-color-row,.appearance-editor-column .app-section-title + .theme-control-grid{margin-top:12px;}
+.appearance-editor-column .color-input label,.appearance-editor-column .theme-control-grid label{color:var(--ui-text-secondary)!important;}
+.appearance-editor-column .color-input input[type=color]{width:100%;height:36px!important;border:1px solid var(--ui-border-strong)!important;border-radius:var(--ui-radius-small)!important;}
+.theme-color-control{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:6px;align-items:center;margin-top:5px;}
+.theme-color-control input[type=color]{width:38px!important;height:34px!important;padding:2px!important;}
+.theme-color-value{min-width:0;height:34px;padding:0 8px;background:var(--ui-bg-tertiary);border:1px solid var(--ui-border-strong);border-radius:var(--ui-radius-small);color:var(--ui-text);font:11px var(--font-mono);}
+.theme-color-reset{height:34px;padding:0 8px;border:1px solid var(--ui-border);border-radius:var(--ui-radius-small);background:transparent;color:var(--ui-text-muted);cursor:pointer;font:10px inherit;}
+.theme-color-reset:hover{background:var(--ui-surface-hover);color:var(--ui-text);}
+.appearance-editor-column .app-text-input,.appearance-editor-column .app-size-input{min-height:34px!important;background:var(--ui-bg-tertiary)!important;border:1px solid var(--ui-border-strong)!important;border-radius:var(--ui-radius-small)!important;color:var(--ui-text)!important;}
+.appearance-editor-column .app-toolbar-bottom{flex:0 0 auto;min-height:58px;background:var(--ui-bg-secondary);box-shadow:0 -8px 18px rgba(0,0,0,.18);z-index:2;}
+.appearance-editor-column .app-content,.appearance-editor-column .app-categories{scrollbar-color:var(--accent-green) var(--ui-bg-tertiary);scrollbar-width:auto;}
+.appearance-editor-column .app-content::-webkit-scrollbar,.appearance-editor-column .app-categories::-webkit-scrollbar{width:8px;height:8px;}
+.appearance-editor-column .app-content::-webkit-scrollbar-track,.appearance-editor-column .app-categories::-webkit-scrollbar-track{background:var(--ui-bg-tertiary);border-radius:999px;}
+.appearance-editor-column .app-content::-webkit-scrollbar-thumb,.appearance-editor-column .app-categories::-webkit-scrollbar-thumb{background:var(--accent-green);border:2px solid var(--ui-bg-tertiary);border-radius:999px;}
+.appearance-editor-column .app-content::-webkit-scrollbar-thumb:hover,.appearance-editor-column .app-categories::-webkit-scrollbar-thumb:hover{background:var(--accent-green-bg-hover);}
+@media (max-width:680px){
+  :root{--sidebar-width:64px;--sidebar-item-size:40px;--sidebar-icon-size:19px;}
+  .sidebar{padding-top:10px;}
+  .sidebar-brand{height:52px;}
+  .sidebar-brand-mark{width:29px;height:29px;border-radius:9px;font-size:14px;}
+  .sidebar-nav-item[data-tooltip]::after,.sidebar-nav-item[data-tooltip]::before{display:none;}
+  .appearance-header{padding:18px 16px 12px;}
+  .appearance-workspace{display:block;overflow:auto;}
+  .appearance-editor-column{overflow:visible;}
+  .appearance-editor-column #simpleMode,.appearance-editor-column #advancedMode{overflow:visible;}
+  .appearance-editor-column .app-content{overflow-y:visible;height:auto;}
+}
 </style>
 
 <div class="app" style="position:relative;">
@@ -404,21 +656,59 @@ div[onclick]:focus-visible,span[onclick]:focus-visible{box-shadow:0 0 0 2px var(
     </div>
   </div>
   <div class="body">
-    <div class="sidebar">
-      <div class="si on" id="nav-home" title="Profiles" onclick="showPanel('home')"><i class="ti ti-home" aria-hidden="true"></i></div>
-      <div class="si" id="nav-servers" title="Servers" onclick="showPanel('servers')"><i class="ti ti-terminal-2" aria-hidden="true"></i></div>
-      <div class="si" id="nav-accounts" title="Accounts" onclick="showPanel('accounts')"><i class="ti ti-user" aria-hidden="true"></i></div>
-      <div class="si" id="nav-settings" title="Settings" onclick="showPanel('settings')"><i class="ti ti-settings" aria-hidden="true"></i></div>
-      <div class="si has-badge" id="nav-logs" title="Logs" onclick="showPanel('logs')"><i class="ti ti-terminal-2" aria-hidden="true"></i></div>
-      <div class="si-gap"></div>
-      <div class="si" title="Changelog"><i class="ti ti-bell" aria-hidden="true"></i></div>
-    </div>
+    <nav class="sidebar" aria-label="Launcher navigation">
+      <div class="sidebar-brand" aria-label="Bald Launcher home">
+        <span class="sidebar-brand-mark" aria-hidden="true">B</span>
+        <span class="sidebar-brand-line" aria-hidden="true"></span>
+      </div>
+      <div class="sidebar-group sidebar-main-nav" aria-label="Main navigation">
+        <button class="sidebar-nav-item on" id="nav-home" title="Profiles" data-tooltip="Profiles" type="button" aria-label="Profiles" aria-current="page" onclick="showPanel('home')">
+          <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5v8a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/></svg>
+        </button>
+        <button class="sidebar-nav-item" id="nav-servers" title="Host Server" data-tooltip="Host Server" type="button" aria-label="Host Server" onclick="showPanel('servers')">
+          <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01M10 7h6M10 17h6"/></svg>
+        </button>
+        <button class="sidebar-nav-item" id="nav-accounts" title="Accounts" data-tooltip="Accounts" type="button" aria-label="Accounts" onclick="showPanel('accounts')">
+          <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 20c.7-3.2 3-5 6.5-5s5.8 1.8 6.5 5"/></svg>
+        </button>
+        <button class="sidebar-nav-item" id="nav-settings" title="Settings" data-tooltip="Settings" type="button" aria-label="Settings" onclick="showPanel('settings')">
+          <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.8v2M12 18.2v2M20.2 12h-2M5.8 12h-2M17.8 6.2l-1.4 1.4M7.6 16.4l-1.4 1.4M17.8 17.8l-1.4-1.4M7.6 7.6 6.2 6.2"/><circle cx="12" cy="12" r="3.5"/></svg>
+        </button>
+      </div>
+      <div class="sidebar-group sidebar-utility-nav" aria-label="Launcher tools">
+        <button class="sidebar-nav-item" id="nav-performance" title="Performance Center" data-tooltip="Performance Center" type="button" aria-label="Performance Center" onclick="showPanel('performance')">
+          <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18V6M4 18h16M7 15l3-4 3 2 4-6"/><path d="M16 7h3v3"/></svg>
+        </button>
+        <button class="sidebar-nav-item" id="nav-appearance" title="Appearance" data-tooltip="Appearance" type="button" aria-label="Appearance" onclick="showPanel('appearance')">
+          <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 1 0 0 16h1.2a1.8 1.8 0 0 0 0-3.6h-.7a1.8 1.8 0 0 1 0-3.6H16a4 4 0 0 0 4-4A8 8 0 0 0 12 4z"/><circle cx="7.5" cy="10" r=".8" fill="currentColor" stroke="none"/><circle cx="10" cy="7.5" r=".8" fill="currentColor" stroke="none"/><circle cx="14" cy="7.2" r=".8" fill="currentColor" stroke="none"/></svg>
+        </button>
+        <button class="sidebar-nav-item" id="nav-capes" title="Capes" data-tooltip="Capes" type="button" aria-label="Capes" onclick="showPanel('capes')">
+          <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5 12 4l4 1.5 2 3.5-2.2 1.2v7.3L12 20l-3.8-2.5v-7.3L6 9z"/><path d="M9 7.5 12 9l3-1.5M9 10.5l3 1.5 3-1.5"/></svg>
+        </button>
+        <button class="sidebar-nav-item has-badge" id="nav-logs" title="Logs" data-tooltip="Logs" type="button" aria-label="Logs" onclick="showPanel('logs')">
+          <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="16" rx="2"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>
+          <span class="sidebar-notification-dot" aria-label="Unread logs"></span>
+        </button>
+      </div>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-group sidebar-bottom-nav" aria-label="Utilities">
+        <button class="sidebar-nav-item" id="nav-notifications" title="Notifications" data-tooltip="Notifications" type="button" aria-label="Notifications" onclick="toggleNotificationCenter()">
+          <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 10a6 6 0 0 0-12 0c0 6-2.5 6-2.5 7.5h17C20.5 16 18 16 18 10zM10 20h4"/></svg>
+        </button>
+        <button class="sidebar-nav-item" id="nav-account-access" title="Account" data-tooltip="Account" type="button" aria-label="Account" onclick="showPanel('accounts')">
+          <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"/><path d="M5 20c.8-3.3 3.1-5 7-5s6.2 1.7 7 5"/></svg>
+        </button>
+      </div>
+    </nav>
 
     <!-- PROFILES (home) -->
     <div class="panel" id="panel-home">
       <div class="profiles-view">
         <div class="profiles-toolbar">
-          <button class="new-profile-btn" type="button" onclick="openNewProfileModal()"><i class="ti ti-plus" aria-hidden="true"></i> New profile</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="new-profile-btn" type="button" onclick="openNewProfileModal()"><i class="ti ti-plus" aria-hidden="true"></i> New profile</button>
+            <button class="modal-btn" type="button" onclick="importProfileExport()"><i class="ti ti-upload" aria-hidden="true"></i> Import profile</button>
+          </div>
           <span class="profiles-count" id="profileCount"></span>
         </div>
         <div class="profile-grid" id="profileGrid"></div>
@@ -502,6 +792,16 @@ div[onclick]:focus-visible,span[onclick]:focus-visible{box-shadow:0 0 0 2px var(
       </div>
     </div>
 
+    <div class="panel" id="panel-performance" style="display:none;">
+      <div class="settings-panel">
+        <div class="appearance-header"><div><div class="appearance-title">Performance Center</div><div class="appearance-subtitle">Measured launcher and Minecraft process telemetry. FPS metrics require a game-side telemetry source.</div></div></div>
+        <div class="settings-section"><div class="ss-title">Live performance</div><pre id="performanceLiveOutput" style="white-space:pre-wrap;color:var(--text-secondary);font:12px/1.7 var(--font-mono);">Minecraft is not running.</pre><button class="modal-btn" type="button" onclick="refreshPerformanceCenter()"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh metrics</button></div>
+        <div class="settings-section"><div class="ss-title">Recommendations</div><div id="performanceRecommendations" style="color:var(--text-secondary);font-size:var(--text-sm);">No recommendations collected.</div></div>
+        <div class="settings-section"><div class="ss-title">Controlled benchmark</div><div style="color:var(--text-secondary);font-size:var(--text-sm);margin-bottom:8px;">Measures process CPU and RAM for 15 seconds. FPS, frame time, 1% low, 0.1% low, and VRAM remain unavailable unless exposed by Minecraft.</div><button class="modal-btn primary" type="button" onclick="runPerformanceBenchmark()"><i class="ti ti-chart-line" aria-hidden="true"></i> Run benchmark</button><pre id="benchmarkOutput" style="white-space:pre-wrap;color:var(--text-secondary);font:12px/1.7 var(--font-mono);margin-top:10px;">No benchmark results.</pre></div>
+        <div class="settings-section"><div class="ss-title">Performance history</div><div id="performanceHistory" style="color:var(--text-secondary);font-size:var(--text-sm);">No benchmark history.</div></div>
+      </div>
+    </div>
+
     <!-- PROFILE DETAIL -->
     <div class="panel" id="panel-profile" style="display:none;">
       <div class="profile-detail">
@@ -516,6 +816,8 @@ div[onclick]:focus-visible,span[onclick]:focus-visible{box-shadow:0 0 0 2px var(
           </div>
           <div class="pd-actions">
             <button class="add-content-btn" type="button" onclick="openBrowseModal()"><i class="ti ti-compass" aria-hidden="true"></i> Add content</button>
+            <button class="modal-btn" type="button" onclick="duplicateCurrentProfile()" title="Duplicate profile"><i class="ti ti-copy" aria-hidden="true"></i></button>
+            <button class="modal-btn" type="button" onclick="exportCurrentProfile()" title="Export profile"><i class="ti ti-download" aria-hidden="true"></i></button>
             <button class="pd-play" id="pdPlayButton" type="button"><i class="ti ti-player-play" aria-hidden="true"></i> Play</button>
           </div>
         </div>
@@ -549,11 +851,21 @@ div[onclick]:focus-visible,span[onclick]:focus-visible{box-shadow:0 0 0 2px var(
               <span class="setting-label">Renderer mode</span>
               <div id="pdRendererOptions" style="display:flex;flex-direction:column;gap:6px;"></div>
             </div>
+            <div class="pd-settings-row"><span class="setting-label">Java executable</span><input class="modal-input" id="pdJavaPath" placeholder="Automatic Java detection" style="max-width:280px;" /></div>
+            <div class="pd-settings-row"><span class="setting-label">Maximum RAM (GB)</span><input class="modal-input" id="pdMemoryMax" type="number" min="1" max="32" step="1" style="max-width:100px;" /></div>
+            <div class="pd-settings-row"><span class="setting-label">JVM profile</span><select class="modal-select" id="pdJvmProfile" style="max-width:180px;"><option value="default">Tuned G1GC</option><option value="zgc">Ultra low-stutter (ZGC)</option><option value="custom">Custom</option></select></div>
+            <div class="pd-settings-row"><span class="setting-label">Custom JVM arguments</span><input class="modal-input" id="pdCustomJvmArgs" placeholder="Only used with Custom" style="max-width:280px;" /></div>
             <div class="pd-settings-row"><span class="setting-label">Mods / resource pack folders</span>
               <button class="modal-btn" onclick="openFolder('mods')" style="padding:6px 11px;font-size:11px;"><i class="ti ti-folder" aria-hidden="true"></i> Open mods folder</button>
             </div>
+            <div class="pd-settings-row" style="gap:8px;flex-wrap:wrap;">
+              <span class="setting-label">Profile files</span>
+              <button class="modal-btn" onclick="importLocalJar()"><i class="ti ti-file-upload" aria-hidden="true"></i> Import JAR</button>
+              <button class="modal-btn" onclick="backupCurrentProfile()"><i class="ti ti-database-export" aria-hidden="true"></i> Backup</button>
+              <button class="modal-btn" onclick="restoreCurrentProfile()"><i class="ti ti-database-import" aria-hidden="true"></i> Restore latest</button>
+            </div>
             <div class="pd-settings-row" style="border-bottom:none;justify-content:space-between;">
-              <button class="modal-btn primary" onclick="savePdSettings()">Save changes</button>
+              <button class="modal-btn primary" onclick="savePdSettings()"><i class="ti ti-device-floppy" aria-hidden="true"></i> Save changes</button>
               <button class="danger-btn" onclick="deleteCurrentProfile()"><i class="ti ti-trash" aria-hidden="true"></i> Delete profile</button>
             </div>
           </div>
@@ -636,6 +948,274 @@ div[onclick]:focus-visible,span[onclick]:focus-visible{box-shadow:0 0 0 2px var(
         <div class="settings-section"><div class="ss-title">Diagnostics</div>
           <button class="modal-btn" type="button" onclick="loadDiagnostics()"><i class="ti ti-terminal-2" aria-hidden="true"></i> Refresh diagnostics</button>
           <pre id="diagnosticsOutput" style="white-space:pre-wrap;color:#666;font:10px/1.5 var(--font-mono);margin-top:8px;">No diagnostics collected.</pre>
+          <div id="crashAnalysisOutput" style="margin-top:10px;color:var(--text-secondary);font-size:var(--text-sm);">No crash analysis available.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- APPEARANCE -->
+    <div class="panel" id="panel-appearance" style="display:none;overflow-y:auto;">
+      <div class="appearance-panel">
+        <div class="appearance-header">
+          <div><div class="appearance-title">Appearance</div><div class="appearance-subtitle">Customize the look and feel of Bald Launcher. Changes apply instantly and can be saved as a reusable theme.</div></div>
+          <div class="appearance-status" id="themeSaveStatus">Saved theme</div>
+        </div>
+        <div class="app-toolbar" style="padding:16px;border-bottom:0.5px solid var(--border);display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+          <div style="flex:1;display:flex;gap:8px;align-items:center;">
+            <label style="font-size:11px;color:#888;">Theme:</label>
+            <select id="themePresetSelect" onchange="loadThemePreset(this.value)" style="padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;">
+              <option value="1">Preset 1</option>
+              <option value="2">Preset 2</option>
+              <option value="3">Preset 3</option>
+              <option value="4">Preset 4</option>
+              <option value="5">Preset 5</option>
+            </select>
+          </div>
+          <button class="app-btn" onclick="backupThemesBeforeChange()" title="Backup all themes" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;"><i class="ti ti-backup" aria-hidden="true"></i> Backup</button>
+          <button class="app-btn" onclick="renameCurrentTheme()" title="Rename theme" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;">Rename</button>
+          <button class="app-btn" onclick="duplicateCurrentTheme()" title="Duplicate theme" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;">Duplicate</button>
+          <button class="app-btn" onclick="deleteCurrentTheme()" title="Delete theme" style="padding:6px 12px;border:0.5px solid #713033;background:#35191b;color:#ffb6b6;border-radius:6px;font-size:11px;cursor:pointer;">Delete</button>
+          <button class="app-btn" onclick="resetCurrentCategory()" title="Reset the selected category" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;">Reset category</button>
+          <button class="app-btn" onclick="resetThemeToDefault()" title="Reset to default" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;"><i class="ti ti-refresh" aria-hidden="true"></i> Reset</button>
+        </div>
+
+        <div class="app-mode-toggle" style="padding:12px 16px;border-bottom:0.5px solid var(--border);display:flex;gap:8px;">
+          <button class="mode-btn active" id="modeSimpleBtn" onclick="setAppearanceMode('simple')" style="padding:6px 14px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;">Simple</button>
+          <button class="mode-btn" id="modeAdvancedBtn" onclick="setAppearanceMode('advanced')" style="padding:6px 14px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;">Advanced</button>
+        </div>
+
+        <div class="appearance-workspace">
+          <div class="appearance-editor-column">
+
+        <!-- SIMPLE MODE -->
+        <div id="simpleMode" class="app-mode-content">
+          <div class="app-categories" style="padding:12px 16px;border-bottom:0.5px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="cat-btn active" data-category="overview" onclick="switchCategory(this, 'overview')" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;">Appearance</button>
+            <button class="cat-btn" data-category="colors" onclick="switchCategory(this, 'colors')" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;"><i class="ti ti-palette" aria-hidden="true"></i> Colors</button>
+            <button class="cat-btn" data-category="typography" onclick="switchCategory(this, 'typography')" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;"><i class="ti ti-typography" aria-hidden="true"></i> Typography</button>
+            <button class="cat-btn" data-category="spacing" onclick="switchCategory(this, 'spacing')" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;"><i class="ti ti-align-center" aria-hidden="true"></i> Spacing</button>
+            <button class="cat-btn" data-category="borders" onclick="switchCategory(this, 'borders')" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;"><i class="ti ti-square-rounded" aria-hidden="true"></i> Borders</button>
+            <button class="cat-btn" data-category="background" onclick="switchCategory(this, 'background')" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;"><i class="ti ti-image" aria-hidden="true"></i> Background</button>
+            <button class="cat-btn" data-category="corners" onclick="switchCategory(this, 'corners')" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;">Corners</button>
+            <button class="cat-btn" data-category="effects" onclick="switchCategory(this, 'effects')" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;">Effects</button>
+            <button class="cat-btn" data-category="shadows" onclick="switchCategory(this, 'shadows')" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;">Shadows</button>
+            <button class="cat-btn" data-category="sidebar" onclick="switchCategory(this, 'sidebar')" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;">Sidebar</button>
+            <button class="cat-btn" data-category="buttons" onclick="switchCategory(this, 'buttons')" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;">Buttons</button>
+            <button class="cat-btn" data-category="cards" onclick="switchCategory(this, 'cards')" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;">Cards</button>
+            <button class="cat-btn" data-category="inputs" onclick="switchCategory(this, 'inputs')" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--ui-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;">Inputs</button>
+            <button class="cat-btn" data-category="modals" onclick="switchCategory(this, 'modals')" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--ui-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;">Modals</button>
+            <button class="cat-btn" data-category="elements" onclick="switchCategory(this, 'elements')" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;">Customize Element</button>
+          </div>
+
+          <div class="app-content" style="padding:16px;overflow-y:auto;">
+            <div class="app-category active" id="category-overview"><div class="app-section"><div class="app-section-title">Theme presets</div><p class="theme-help">Start with a balanced preset, then customize any category. Your changes stay in the selected theme.</p><div class="theme-preset-grid"><button type="button" onclick="loadThemePreset('1')"><strong>Bald Dark</strong><small>Clean, dark, and balanced.</small></button><button type="button" onclick="loadThemePreset('2')"><strong>AMOLED</strong><small>Deep blacks for OLED displays.</small></button><button type="button" onclick="loadThemePreset('3')"><strong>Emerald</strong><small>Bright Minecraft-inspired accents.</small></button><button type="button" onclick="loadThemePreset('4')"><strong>Purple</strong><small>Cool secondary highlights.</small></button><button type="button" onclick="loadThemePreset('5')"><strong>Minecraft</strong><small>Earthy survival-inspired contrast.</small></button></div></div></div>
+            <!-- COLORS -->
+            <div class="app-category" id="category-colors" style="display:none;">
+              <div class="app-section" style="margin-bottom:16px;">
+                <div class="app-section-title" style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:12px;">Backgrounds</div><p class="theme-help">Control the main surfaces used behind pages and panels.</p>
+                <div class="app-color-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+                  <div class="color-input" style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Main Background</label><input type="color" id="bgVoidColor" onchange="updateThemeColor('bgVoid', this.value); updatePreview()" style="height:32px;border:0.5px solid var(--border);border-radius:4px;cursor:pointer;" /></div>
+                  <div class="color-input" style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Secondary Background</label><input type="color" id="bgSurfaceColor" onchange="updateThemeColor('bgSurface', this.value); updatePreview()" style="height:32px;border:0.5px solid var(--border);border-radius:4px;cursor:pointer;" /></div>
+                  <div class="color-input" style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Tertiary Background</label><input type="color" id="bgSurface2Color" onchange="updateThemeColor('bgSurface2', this.value); updatePreview()" style="height:32px;border:0.5px solid var(--border);border-radius:4px;cursor:pointer;" /></div>
+                </div>
+              </div>
+
+              <div class="app-section" style="margin-bottom:16px;">
+                <div class="app-section-title" style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:12px;">Borders</div><p class="theme-help">Subtle dividers separate surfaces; strong borders mark focused or important controls.</p>
+                <div class="app-color-row" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+                  <div class="color-input" style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Border</label><input type="color" id="borderColor" onchange="updateThemeColor('border', this.value); updatePreview()" style="height:32px;border:0.5px solid var(--border);border-radius:4px;cursor:pointer;" /></div>
+                  <div class="color-input" style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Strong Border</label><input type="color" id="borderStrongColor" onchange="updateThemeColor('borderStrong', this.value); updatePreview()" style="height:32px;border:0.5px solid var(--border);border-radius:4px;cursor:pointer;" /></div>
+                </div>
+              </div>
+
+              <div class="app-section" style="margin-bottom:16px;">
+                <div class="app-section-title" style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:12px;">Primary Accent</div><p class="theme-help">The main highlight used by active navigation, Play actions, and selected controls.</p>
+                <div class="app-color-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+                  <div class="color-input" style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Green</label><input type="color" id="accentGreenColor" onchange="updateThemeColor('accentGreen', this.value); updatePreview()" style="height:32px;border:0.5px solid var(--border);border-radius:4px;cursor:pointer;" /></div>
+                  <div class="color-input" style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Accent Button Background</label><input type="color" id="accentGreenBgColor" onchange="updateThemeColor('accentGreenBg', this.value); updatePreview()" style="height:32px;border:0.5px solid var(--border);border-radius:4px;cursor:pointer;" /></div>
+                  <div class="color-input" style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Accent Button Hover</label><input type="color" id="accentGreenBgHoverColor" onchange="updateThemeColor('accentGreenBgHover', this.value); updatePreview()" style="height:32px;border:0.5px solid var(--border);border-radius:4px;cursor:pointer;" /></div>
+                  <div class="color-input" style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Accent Text</label><input type="color" id="accentGreenTextColor" onchange="updateThemeColor('accentGreenText', this.value); updatePreview()" style="height:32px;border:0.5px solid var(--border);border-radius:4px;cursor:pointer;" /></div>
+                </div>
+              </div>
+
+              <div class="app-section" style="margin-bottom:16px;">
+                <div class="app-section-title" style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:12px;">Secondary Accent</div><p class="theme-help">A supporting highlight for secondary actions, tabs, and alternate emphasis.</p>
+                <div class="app-color-row" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+                  <div class="color-input" style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Purple</label><input type="color" id="accentPurpleColor" onchange="updateThemeColor('accentPurple', this.value); updatePreview()" style="height:32px;border:0.5px solid var(--border);border-radius:4px;cursor:pointer;" /></div>
+                  <div class="color-input" style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Purple BG</label><input type="color" id="accentPurpleBgColor" onchange="updateThemeColor('accentPurpleBg', this.value); updatePreview()" style="height:32px;border:0.5px solid var(--border);border-radius:4px;cursor:pointer;" /></div>
+                </div>
+              </div>
+
+              <div class="app-section">
+                <div class="app-section-title" style="font-weight:600;color:var(--text-primary);margin-bottom:4px;font-size:12px;">Text</div><p class="theme-help">Primary text is used for titles; secondary and muted text support scanning without competing for attention.</p>
+                <div class="app-color-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+                  <div class="color-input" style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Primary Text</label><input type="color" id="textPrimaryColor" onchange="updateThemeColor('textPrimary', this.value); updatePreview()" style="height:32px;border:0.5px solid var(--border);border-radius:4px;cursor:pointer;" /></div>
+                  <div class="color-input" style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Secondary Text</label><input type="color" id="textSecondaryColor" onchange="updateThemeColor('textSecondary', this.value); updatePreview()" style="height:32px;border:0.5px solid var(--border);border-radius:4px;cursor:pointer;" /></div>
+                  <div class="color-input" style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Secondary / Muted Text</label><input type="color" id="textMutedColor" onchange="updateThemeColor('textMuted', this.value); updatePreview()" style="height:32px;border:0.5px solid var(--border);border-radius:4px;cursor:pointer;" /></div>
+                </div>
+              </div>
+              <div class="app-section" style="margin-top:16px;"><div class="app-section-title" style="font-weight:600;color:var(--text-primary);margin-bottom:10px;font-size:12px;">Surfaces, Actions and Status</div><div class="app-color-row" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+                <div class="color-input"><label>Sidebar</label><input type="color" data-theme-path="colors.bgSidebar" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Header</label><input type="color" data-theme-path="colors.bgHeader" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Card</label><input type="color" data-theme-path="colors.bgCard" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Card Hover</label><input type="color" data-theme-path="colors.bgCardHover" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Selected</label><input type="color" data-theme-path="colors.bgSelected" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Input</label><input type="color" data-theme-path="colors.bgInput" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Input Focus</label><input type="color" data-theme-path="colors.inputFocus" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Primary Hover</label><input type="color" data-theme-path="colors.accentPrimaryHover" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Secondary Hover</label><input type="color" data-theme-path="colors.accentSecondaryHover" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Success</label><input type="color" data-theme-path="colors.success" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Warning</label><input type="color" data-theme-path="colors.warning" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Error</label><input type="color" data-theme-path="colors.error" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Info</label><input type="color" data-theme-path="colors.info" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Play</label><input type="color" data-theme-path="colors.playButton" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Browse</label><input type="color" data-theme-path="colors.browseButton" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Download</label><input type="color" data-theme-path="colors.downloadButton" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Danger</label><input type="color" data-theme-path="colors.dangerButton" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Scrollbar</label><input type="color" data-theme-path="colors.scrollbar" onchange="updateThemePath(this)" /></div><div class="color-input"><label>Notifications</label><input type="color" data-theme-path="colors.notification" onchange="updateThemePath(this)" /></div>
+              </div></div>
+            </div>
+
+            <!-- TYPOGRAPHY -->
+            <div class="app-category" id="category-typography" style="display:none;">
+              <div class="app-section" style="margin-bottom:16px;">
+                <div class="app-section-title" style="font-weight:600;color:var(--text-primary);margin-bottom:10px;font-size:12px;">Font Family</div>
+                <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Font</label><input type="text" id="fontFamilyInput" class="app-text-input" onchange="updateThemeTypography('fontFamily', this.value); updatePreview()" placeholder="e.g., 'system-ui, sans-serif'" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+              </div>
+
+              <div class="app-section">
+                <div class="app-section-title" style="font-weight:600;color:var(--text-primary);margin-bottom:10px;font-size:12px;">Font Sizes</div>
+                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;">
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Extra Small</label><input type="text" id="fontSizeXs" class="app-size-input" onchange="updateThemeTypography('fontSizeXs', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Small</label><input type="text" id="fontSizeSm" class="app-size-input" onchange="updateThemeTypography('fontSizeSm', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Base</label><input type="text" id="fontSizeBase" class="app-size-input" onchange="updateThemeTypography('fontSizeBase', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Medium</label><input type="text" id="fontSizeMd" class="app-size-input" onchange="updateThemeTypography('fontSizeMd', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Large</label><input type="text" id="fontSizeLg" class="app-size-input" onchange="updateThemeTypography('fontSizeLg', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Extra Large</label><input type="text" id="fontSizeXl" class="app-size-input" onchange="updateThemeTypography('fontSizeXl', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                </div>
+              </div>
+              <div class="app-section" style="margin-top:16px;"><div class="app-section-title">Font Behavior</div><div class="theme-control-grid"><label>Font weight<input data-theme-path="typography.fontWeight" onchange="updateThemePath(this)" /></label><label>Heading weight<input data-theme-path="typography.headingWeight" onchange="updateThemePath(this)" /></label><label>Letter spacing<input data-theme-path="typography.letterSpacing" onchange="updateThemePath(this)" /></label><label>Line height<input data-theme-path="typography.lineHeight" onchange="updateThemePath(this)" /></label></div></div>
+            </div>
+
+            <!-- SPACING -->
+            <div class="app-category" id="category-spacing" style="display:none;">
+              <div class="app-section" style="margin-bottom:16px;">
+                <div class="app-section-title" style="font-weight:600;color:var(--text-primary);margin-bottom:10px;font-size:12px;">Padding</div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Small</label><input type="text" id="paddingSmall" class="app-size-input" onchange="updateThemeSpacing('paddingSmall', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Base</label><input type="text" id="paddingBase" class="app-size-input" onchange="updateThemeSpacing('paddingBase', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Large</label><input type="text" id="paddingLarge" class="app-size-input" onchange="updateThemeSpacing('paddingLarge', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                </div>
+              </div>
+
+              <div class="app-section">
+                <div class="app-section-title" style="font-weight:600;color:var(--text-primary);margin-bottom:10px;font-size:12px;">Gaps</div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Small Gap</label><input type="text" id="gapSmall" class="app-size-input" onchange="updateThemeSpacing('gapSmall', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Base Gap</label><input type="text" id="gapBase" class="app-size-input" onchange="updateThemeSpacing('gapBase', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Large Gap</label><input type="text" id="gapLarge" class="app-size-input" onchange="updateThemeSpacing('gapLarge', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- BORDERS & CORNERS -->
+            <div class="app-category" id="category-borders" style="display:none;">
+              <div class="app-section" style="margin-bottom:16px;">
+                <div class="app-section-title" style="font-weight:600;color:var(--text-primary);margin-bottom:10px;font-size:12px;">Border Radius</div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Small</label><input type="text" id="radiusSmall" class="app-size-input" onchange="updateThemeBorders('radiusSmall', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Base</label><input type="text" id="radiusBase" class="app-size-input" onchange="updateThemeBorders('radiusBase', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Medium</label><input type="text" id="radiusMd" class="app-size-input" onchange="updateThemeBorders('radiusMd', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                </div>
+              </div>
+
+              <div class="app-section">
+                <div class="app-section-title" style="font-weight:600;color:var(--text-primary);margin-bottom:10px;font-size:12px;">Border Width</div>
+                <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Width</label><input type="text" id="borderWidth" class="app-text-input" onchange="updateThemeBorders('borderWidth', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+              </div>
+              <div class="app-section" style="margin-top:16px;"><div class="app-section-title">Border System</div><div class="theme-control-grid"><label class="theme-check">Borders enabled<input type="checkbox" data-theme-path="borders.enabled" onchange="updateThemePath(this)" /></label><label>Opacity (%)<input type="number" min="0" max="100" data-theme-path="borders.opacity" onchange="updateThemePath(this)" /></label><label>Style<select data-theme-path="borders.style" onchange="updateThemePath(this)"><option>solid</option><option>dashed</option><option>dotted</option><option>double</option></select></label></div></div>
+            </div>
+
+            <!-- BACKGROUND -->
+            <div class="app-category" id="category-background" style="display:none;">
+              <div class="app-section" style="margin-bottom:16px;">
+                <div class="app-section-title" style="font-weight:600;color:var(--text-primary);margin-bottom:10px;font-size:12px;">Background Type</div>
+                <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Type</label><select id="bgType" onchange="updateThemeBackground('type', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;"><option value="solid">Solid</option><option value="gradient">Gradient</option><option value="image">Image</option></select></div>
+              </div>
+
+              <div class="app-section" id="bgImageSection" style="display:none;">
+                <div class="app-section-title" style="font-weight:600;color:var(--text-primary);margin-bottom:10px;font-size:12px;">Image Settings</div>
+                <div style="display:flex;flex-direction:column;gap:12px;">
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Image URL</label><input type="text" id="bgImage" class="app-text-input" onchange="updateThemeBackground('image', this.value); updatePreview()" placeholder="https://..." style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Blur (0-50px)</label><input type="number" id="bgBlur" min="0" max="50" onchange="updateThemeBackground('blur', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Opacity (%)</label><input type="number" id="bgOpacity" min="0" max="100" onchange="updateThemeBackground('opacity', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Overlay Color</label><input type="color" id="bgOverlayColor" onchange="updateThemeBackground('overlayColor', this.value); updatePreview()" style="height:32px;border:0.5px solid var(--border);border-radius:4px;cursor:pointer;" /></div>
+                  <div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;color:#888;">Overlay Opacity (%)</label><input type="number" id="bgOverlayOpacity" min="0" max="100" onchange="updateThemeBackground('overlayOpacity', this.value); updatePreview()" style="padding:6px 8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-size:11px;" /></div>
+                  <div class="theme-control-grid"><label>Brightness (%)<input type="number" min="25" max="200" data-theme-path="background.brightness" onchange="updateThemePath(this)" /></label><label>Saturation (%)<input type="number" min="0" max="200" data-theme-path="background.saturation" onchange="updateThemePath(this)" /></label><label>Fit<select data-theme-path="background.fit" onchange="updateThemePath(this)"><option>cover</option><option>contain</option><option>fill</option></select></label><label>Gradient<input data-theme-path="background.gradient" onchange="updateThemePath(this)" /></label></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="app-category" id="category-corners" style="display:none;"><div class="app-section"><div class="app-section-title">Component Corners</div><div class="theme-control-grid">
+              <label>Cards<input data-theme-path="corners.card" onchange="updateThemePath(this)" /></label><label>Buttons<input data-theme-path="corners.button" onchange="updateThemePath(this)" /></label><label>Inputs<input data-theme-path="corners.input" onchange="updateThemePath(this)" /></label><label>Tabs<input data-theme-path="corners.tab" onchange="updateThemePath(this)" /></label><label>Mod cards<input data-theme-path="corners.modCard" onchange="updateThemePath(this)" /></label><label>Server cards<input data-theme-path="corners.serverCard" onchange="updateThemePath(this)" /></label><label>Profile cards<input data-theme-path="corners.profileCard" onchange="updateThemePath(this)" /></label><label>Modals<input data-theme-path="corners.modal" onchange="updateThemePath(this)" /></label><label>Notifications<input data-theme-path="corners.notification" onchange="updateThemePath(this)" /></label>
+            </div></div></div>
+
+            <div class="app-category" id="category-effects" style="display:none;"><div class="app-section"><div class="app-section-title">Effects and Motion</div><div class="theme-control-grid">
+              <label>Card opacity (%)<input type="number" min="30" max="100" data-theme-path="effects.cardOpacity" onchange="updateThemePath(this)" /></label><label>Background blur<input type="number" min="0" max="32" data-theme-path="effects.backgroundBlur" onchange="updateThemePath(this)" /></label><label>Button glow<input type="number" min="0" max="24" data-theme-path="effects.buttonGlow" onchange="updateThemePath(this)" /></label><label>Transition (ms)<input type="number" min="0" max="1000" data-theme-path="effects.transitionSpeed" onchange="updateThemePath(this)" /></label><label>Hover lift<input type="number" min="0" max="6" data-theme-path="effects.hoverLift" onchange="updateThemePath(this)" /></label><label class="theme-check">Reduced animations<input type="checkbox" data-theme-path="effects.reducedMotion" onchange="updateThemePath(this)" /></label><label class="theme-check">Shadows enabled<input type="checkbox" data-theme-path="effects.shadowEnabled" onchange="updateThemePath(this)" /></label><label class="theme-check">Glow enabled<input type="checkbox" data-theme-path="effects.glowEnabled" onchange="updateThemePath(this)" /></label>
+            </div></div></div>
+
+            <div class="app-category" id="category-sidebar" style="display:none;"><div class="app-section"><div class="app-section-title">Sidebar</div><div class="theme-control-grid">
+              <label>Width<input data-theme-path="sidebar.width" onchange="updateThemePath(this)" /></label><label>Icon size<input data-theme-path="sidebar.iconSize" onchange="updateThemePath(this)" /></label><label>Text size<input data-theme-path="sidebar.textSize" onchange="updateThemePath(this)" /></label><label>Spacing<input data-theme-path="sidebar.spacing" onchange="updateThemePath(this)" /></label><label>Background<input type="color" data-theme-path="sidebar.background" onchange="updateThemePath(this)" /></label><label>Border<input type="color" data-theme-path="sidebar.border" onchange="updateThemePath(this)" /></label><label>Selected background<input type="color" data-theme-path="sidebar.selectedBackground" onchange="updateThemePath(this)" /></label><label>Selected text<input type="color" data-theme-path="sidebar.selectedText" onchange="updateThemePath(this)" /></label><label>Hover background<input type="color" data-theme-path="sidebar.hoverBackground" onchange="updateThemePath(this)" /></label><label>Hover text<input type="color" data-theme-path="sidebar.hoverText" onchange="updateThemePath(this)" /></label><label>Radius<input data-theme-path="sidebar.radius" onchange="updateThemePath(this)" /></label>
+            </div></div></div>
+
+            <div class="app-category" id="category-components" style="display:none;"><div class="app-section"><div class="app-section-title">Buttons, Cards, Inputs and Modals</div><div class="theme-control-grid">
+              <label>Button radius<input data-theme-path="buttons.radius" onchange="updateThemePath(this)" /></label><label>Button height<input data-theme-path="buttons.height" onchange="updateThemePath(this)" /></label><label>Button weight<input data-theme-path="buttons.weight" onchange="updateThemePath(this)" /></label><label>Card background<input type="color" data-theme-path="cards.background" onchange="updateThemePath(this)" /></label><label>Card hover<input type="color" data-theme-path="cards.hover" onchange="updateThemePath(this)" /></label><label>Selected card<input type="color" data-theme-path="cards.selected" onchange="updateThemePath(this)" /></label><label>Input focus<input type="color" data-theme-path="inputs.focus" onchange="updateThemePath(this)" /></label><label>Modal opacity (%)<input type="number" min="40" max="100" data-theme-path="modals.opacity" onchange="updateThemePath(this)" /></label><label>Modal blur<input type="number" min="0" max="24" data-theme-path="modals.blur" onchange="updateThemePath(this)" /></label>
+            </div></div></div>
+
+            <div class="app-category" id="category-shadows" style="display:none;"><div class="app-section"><div class="app-section-title">Shadows</div><p class="theme-help">Control how much depth appears around elevated launcher surfaces. Keep shadows subtle for the clearest interface.</p><div class="theme-control-grid"><label class="theme-check">Enable shadows<input type="checkbox" data-theme-path="effects.shadowEnabled" onchange="updateThemePath(this)" /></label><label>Small shadow<input data-theme-path="shadows.small" onchange="updateThemePath(this)" /></label><label>Medium shadow<input data-theme-path="shadows.medium" onchange="updateThemePath(this)" /></label><label>Large shadow<input data-theme-path="shadows.large" onchange="updateThemePath(this)" /></label></div></div></div>
+            <div class="app-category" id="category-buttons" style="display:none;"><div class="app-section"><div class="app-section-title">Buttons</div><p class="theme-help">Set the shared shape and scale used by Play, Browse, Save, and other launcher actions.</p><div class="theme-control-grid"><label>Height<input data-theme-path="buttons.height" onchange="updateThemePath(this)" /></label><label>Radius<input data-theme-path="buttons.radius" onchange="updateThemePath(this)" /></label><label>Font weight<input data-theme-path="buttons.weight" onchange="updateThemePath(this)" /></label><label>Glow<input type="number" min="0" max="24" data-theme-path="buttons.glow" onchange="updateThemePath(this)" /></label><label>Play color<input type="color" data-theme-path="colors.playButton" onchange="updateThemePath(this)" /></label><label>Browse color<input type="color" data-theme-path="colors.browseButton" onchange="updateThemePath(this)" /></label><label>Download color<input type="color" data-theme-path="colors.downloadButton" onchange="updateThemePath(this)" /></label><label>Danger color<input type="color" data-theme-path="colors.dangerButton" onchange="updateThemePath(this)" /></label></div></div></div>
+            <div class="app-category" id="category-cards" style="display:none;"><div class="app-section"><div class="app-section-title">Cards</div><p class="theme-help">Card surfaces are used for profiles, installed content, servers, and settings sections.</p><div class="theme-control-grid"><label>Card background<input type="color" data-theme-path="cards.background" onchange="updateThemePath(this)" /></label><label>Card hover<input type="color" data-theme-path="cards.hover" onchange="updateThemePath(this)" /></label><label>Selected card<input type="color" data-theme-path="cards.selected" onchange="updateThemePath(this)" /></label><label>Radius<input data-theme-path="cards.radius" onchange="updateThemePath(this)" /></label><label>Opacity (%)<input type="number" min="30" max="100" data-theme-path="cards.opacity" onchange="updateThemePath(this)" /></label><label class="theme-check">Card shadow<input type="checkbox" data-theme-path="cards.shadow" onchange="updateThemePath(this)" /></label></div></div></div>
+            <div class="app-category" id="category-inputs" style="display:none;"><div class="app-section"><div class="app-section-title">Inputs</div><p class="theme-help">Customize search boxes, text fields, dropdowns, and their focus state.</p><div class="theme-control-grid"><label>Input background<input type="color" data-theme-path="inputs.background" onchange="updateThemePath(this)" /></label><label>Input border<input type="color" data-theme-path="inputs.border" onchange="updateThemePath(this)" /></label><label>Focus color<input type="color" data-theme-path="inputs.focus" onchange="updateThemePath(this)" /></label><label>Radius<input data-theme-path="inputs.radius" onchange="updateThemePath(this)" /></label><label>Placeholder text<input type="color" data-theme-path="colors.textMuted" onchange="updateThemePath(this)" /></label><label>Text color<input type="color" data-theme-path="colors.textPrimary" onchange="updateThemePath(this)" /></label></div></div></div>
+            <div class="app-category" id="category-modals" style="display:none;"><div class="app-section"><div class="app-section-title">Modals</div><p class="theme-help">Set the dialog surface, overlay, blur, radius, and depth used by launcher dialogs.</p><div class="theme-control-grid"><label>Modal background<input type="color" data-theme-path="modals.background" onchange="updateThemePath(this)" /></label><label>Opacity (%)<input type="number" min="40" max="100" data-theme-path="modals.opacity" onchange="updateThemePath(this)" /></label><label>Radius<input data-theme-path="modals.radius" onchange="updateThemePath(this)" /></label><label>Blur<input type="number" min="0" max="24" data-theme-path="modals.blur" onchange="updateThemePath(this)" /></label><label class="theme-check">Modal shadow<input type="checkbox" data-theme-path="modals.shadow" onchange="updateThemePath(this)" /></label></div></div></div>
+
+            <div class="app-category" id="category-elements" style="display:none;"><div class="app-section"><div class="app-section-title">Customize Element</div><p class="theme-help">Choose a stable launcher component to edit its shared component tokens.</p><div class="theme-element-list"><button type="button" onclick="selectThemeElement('profile-card')">Profile card</button><button type="button" onclick="selectThemeElement('play-button')">Play button</button><button type="button" onclick="selectThemeElement('sidebar')">Sidebar</button><button type="button" onclick="selectThemeElement('search-bar')">Search bar</button><button type="button" onclick="selectThemeElement('mod-card')">Mod card</button><button type="button" onclick="selectThemeElement('server-card')">Server card</button><button type="button" onclick="selectThemeElement('modal')">Modal</button><button type="button" onclick="selectThemeElement('notification')">Notification</button><button type="button" onclick="selectThemeElement('console')">Console</button><button type="button" onclick="selectThemeElement('file-editor')">File editor</button></div><div id="selectedThemeElement" class="theme-selected-element">Select an element to see its shared customization controls.</div></div></div>
+          </div>
+        </div>
+
+        <!-- ADVANCED MODE -->
+        <div id="advancedMode" class="app-mode-content" style="display:none;padding:16px;overflow-y:auto;">
+          <div class="app-section" style="display:flex;flex-direction:column;gap:8px;">
+            <div class="app-section-title" style="font-weight:600;color:var(--text-primary);margin-bottom:10px;font-size:12px;">Custom CSS</div>
+            <textarea id="customCssInput" class="app-css-editor" placeholder="/* Custom CSS rules */" onchange="updateThemeAdvanced('customCss', this.value); updatePreview()" style="width:100%;height:300px;padding:8px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-surface);color:var(--text-primary);font-family:monospace;font-size:11px;resize:vertical;"></textarea>
+            <p style="color:#888;font-size:10px;margin-top:8px;">Add custom CSS rules that will be injected into the launcher. Use sparingly to avoid breaking the UI.</p>
+          </div>
+        </div>
+
+          </div>
+        </div>
+
+        <div class="app-toolbar-bottom" style="padding:12px 16px;border-top:0.5px solid var(--border);display:flex;gap:8px;justify-content:flex-end;">
+          <button class="app-btn" onclick="exportCurrentTheme()" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;"><i class="ti ti-download" aria-hidden="true"></i> Export</button>
+          <button class="app-btn" onclick="importThemeFile()" style="padding:6px 12px;border:0.5px solid var(--border);background:var(--bg-surface);color:var(--text-primary);border-radius:6px;font-size:11px;cursor:pointer;"><i class="ti ti-upload" aria-hidden="true"></i> Import</button>
+          <button class="app-btn" onclick="saveCurrentTheme()" style="padding:6px 12px;border:0.5px solid #3b6d11;background:var(--accent-green-bg);color:var(--accent-green-text-on-dark);border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;"><i class="ti ti-check" aria-hidden="true"></i> Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CAPES -->
+    <div class="panel" id="panel-capes" style="display:none;overflow-y:auto;">
+      <div style="padding:24px;max-width:980px;width:100%;box-sizing:border-box;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px;">
+          <div>
+            <div style="font-size:18px;font-weight:650;color:var(--text-primary);">Cape creator</div>
+            <div style="font-size:11px;color:var(--text-secondary);margin-top:5px;">Create and manage custom capes for your launcher library.</div>
+          </div>
+          <button class="modal-btn primary" type="button" onclick="openCapeFilePicker()"><i class="ti ti-upload" aria-hidden="true"></i> Add PNG</button>
+        </div>
+        <div style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(260px,.85fr);gap:16px;align-items:start;">
+          <div style="border:0.5px solid var(--border);border-radius:8px;background:var(--bg-surface);padding:16px;">
+            <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:12px;">Your capes</div>
+            <div id="capeLibrary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;"></div>
+            <div id="capeLibraryEmpty" style="padding:32px 12px;text-align:center;color:var(--text-secondary);font-size:11px;">No capes added yet. Upload a PNG or paste an image URL.</div>
+          </div>
+          <div style="border:0.5px solid var(--border);border-radius:8px;background:var(--bg-surface);padding:16px;">
+            <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:12px;">Create cape</div>
+            <label style="display:block;font-size:10px;color:var(--text-secondary);margin-bottom:5px;">Name</label>
+            <input id="capeNameInput" class="modal-input" maxlength="40" placeholder="My cape" style="width:100%;box-sizing:border-box;margin-bottom:12px;" />
+            <label style="display:block;font-size:10px;color:var(--text-secondary);margin-bottom:5px;">Image URL</label>
+            <div style="display:flex;gap:8px;margin-bottom:12px;">
+              <input id="capeUrlInput" class="modal-input" placeholder="https://.../cape.png" style="flex:1;min-width:0;" />
+              <button class="modal-btn" type="button" onclick="addCapeFromUrl()">Add</button>
+            </div>
+            <div style="font-size:10px;line-height:1.5;color:var(--text-secondary);margin-bottom:14px;">Use a transparent PNG. Minecraft cape textures commonly use a 64x32 layout. The preview is local to this launcher until a compatible cape mod or service is connected.</div>
+            <div style="height:180px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-void);display:flex;align-items:center;justify-content:center;overflow:hidden;">
+              <canvas id="capePreviewCanvas" width="128" height="128" style="image-rendering:pixelated;max-width:90%;max-height:90%;"></canvas>
+            </div>
+            <div id="capePreviewMeta" style="font-size:10px;color:var(--text-secondary);text-align:center;margin-top:8px;">Select a cape to preview it.</div>
+          </div>
         </div>
       </div>
     </div>
@@ -698,9 +1278,57 @@ div[onclick]:focus-visible,span[onclick]:focus-visible{box-shadow:0 0 0 2px var(
       <div><label class="modal-label">Renderer mode</label><div id="npRendererOptions" style="display:flex;flex-direction:column;gap:6px;"></div></div>
       <div class="modal-actions">
         <button class="modal-btn" onclick="closeNewProfileModal()">Cancel</button>
-        <button class="modal-btn primary" onclick="submitNewProfile()">Create profile</button>
+        <button class="modal-btn primary" onclick="submitNewProfile()"><i class="ti ti-plus" aria-hidden="true"></i> Create profile</button>
       </div>
     </div>
+  </div>
+
+  <div class="modal-overlay" id="duplicateProfileModal" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-title-row"><span class="modal-title">Duplicate profile</span><span class="modal-close" onclick="closeDuplicateProfileModal()">&times;</span></div>
+      <div id="duplicateProfileSource" class="modal-help"></div>
+      <div><label class="modal-label">New profile name</label><input class="modal-input" id="duplicateProfileName" maxlength="40" /></div>
+      <div class="modal-actions"><button class="modal-btn" onclick="closeDuplicateProfileModal()"><i class="ti ti-x" aria-hidden="true"></i> Cancel</button><button class="modal-btn primary" onclick="submitDuplicateProfile()"><i class="ti ti-copy" aria-hidden="true"></i> Duplicate</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="exportModpackModal" style="display:none;">
+    <div class="modal-box wide">
+      <div class="modal-title-row"><span class="modal-title">Export modpack</span><span class="modal-close" onclick="closeExportModpackModal()">&times;</span></div>
+      <div id="exportModpackProfile" class="modal-help"></div>
+      <div class="theme-control-grid" style="margin-top:12px;">
+        <label><input type="checkbox" id="exportMods" checked /> Mods</label>
+        <label><input type="checkbox" id="exportConfigs" checked /> Config files</label>
+        <label><input type="checkbox" id="exportResourcepacks" checked /> Resource packs</label>
+        <label><input type="checkbox" id="exportShaders" checked /> Shader packs</label>
+        <label><input type="checkbox" id="exportWorlds" /> Worlds</label>
+        <label><input type="checkbox" id="exportScreenshots" /> Screenshots</label>
+      </div>
+      <div><label class="modal-label">Modpack name</label><input class="modal-input" id="exportModpackName" maxlength="80" /></div>
+      <div><label class="modal-label">Version</label><input class="modal-input" id="exportModpackVersion" value="1.0.0" maxlength="24" /></div>
+      <div><label class="modal-label">Description</label><input class="modal-input" id="exportModpackDescription" maxlength="2000" /></div>
+      <div class="modal-actions"><button class="modal-btn" onclick="closeExportModpackModal()"><i class="ti ti-x" aria-hidden="true"></i> Cancel</button><button class="modal-btn primary" onclick="submitExportModpack()"><i class="ti ti-file-archive" aria-hidden="true"></i> Export Modpack</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="deleteProfileModal" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-title-row"><span class="modal-title">Delete profile</span><span class="modal-close" onclick="closeDeleteProfileModal()">&times;</span></div>
+      <div id="deleteProfileMessage" class="modal-help"></div>
+      <label class="options-source"><input type="checkbox" id="deleteProfileFiles" /> Also delete profile files from disk</label>
+      <div class="modal-actions"><button class="modal-btn" onclick="closeDeleteProfileModal()"><i class="ti ti-x" aria-hidden="true"></i> Cancel</button><button class="danger-btn" onclick="confirmDeleteProfile()"><i class="ti ti-trash" aria-hidden="true"></i> Delete</button></div>
+    </div>
+  </div>
+  <div id="profileActionMenu" class="profile-action-menu" style="display:none;"></div>
+  <div class="command-palette" id="commandPalette" style="display:none;" onclick="if(event.target===this)closeCommandPalette()">
+    <div class="command-palette-box" role="dialog" aria-label="Command palette">
+      <input class="command-palette-search" id="commandPaletteSearch" placeholder="Search profiles, mods, servers, settings, commands, logs..." autocomplete="off" />
+      <div class="command-palette-results" id="commandPaletteResults"></div>
+    </div>
+  </div>
+  <div class="notification-center" id="notificationCenter" style="display:none;">
+    <div class="notification-center-header"><span>Notifications</span><button class="modal-close" type="button" onclick="clearNotifications()" title="Clear notifications">&times;</button></div>
+    <div class="notification-list" id="notificationList"></div>
   </div>
 
   <!-- ADD CONTENT (browse/search) MODAL -->
@@ -843,9 +1471,9 @@ function renderProfileGrid(){
     return;
   }
   grid.innerHTML = state.profiles.map(p => `
-    <div class="profile-card" onclick="openProfile('${p.id}')">
+    <div class="profile-card" onclick="openProfile('${p.id}')" oncontextmenu="openProfileActionMenu(event,'${p.id}');return false;">
       <div class="profile-card-icon">${p.icon || p.name.slice(0,1).toUpperCase()}</div>
-      <div class="profile-card-name">${p.name}</div>
+      <div class="profile-card-footer"><div class="profile-card-name">${p.name}</div><button class="profile-card-menu-btn" type="button" title="Profile actions" aria-label="Profile actions" onclick="event.stopPropagation();openProfileActionMenu(event,'${p.id}')"><i class="ti ti-dots-vertical" aria-hidden="true"></i></button></div>
       <div class="profile-card-sub">${p.mcVersion} · ${capitalize(p.loader)}</div>
       <span class="profile-card-badge ${badgeClass(p.rendererMode)}">${badgeLabel(p.rendererMode)}</span>
     </div>`).join('');
@@ -992,6 +1620,7 @@ function openProfile(profileId){
   if (!p) return;
   currentProfileId = profileId;
   state.activeProfileId = profileId;
+  try { localStorage.setItem('bald:last-profile', profileId); } catch (_error) {}
   if (launcherBridge?.setActiveProfile) {
     launcherBridge.setActiveProfile(profileId).catch(() => {});
   }
@@ -1297,6 +1926,10 @@ async function installFromBrowse(id, name, type, iconUrl, source = browseSource)
 // ---------------- Profile settings tab ----------------
 function populatePdSettingsForm(p){
   document.getElementById('pdRename').value = p.name;
+  document.getElementById('pdJavaPath').value = p.javaPath || '';
+  document.getElementById('pdMemoryMax').value = p.memoryMax || 6;
+  document.getElementById('pdJvmProfile').value = p.jvmProfile || 'default';
+  document.getElementById('pdCustomJvmArgs').value = p.customJvmArgs || '';
   populateVersionLoaderSelects('pdVersionSel','pdLoaderSel', p.mcVersion, p.loader);
   onPdConfigChange(p.rendererMode);
 }
@@ -1317,6 +1950,10 @@ async function savePdSettings(){
     mcVersion: document.getElementById('pdVersionSel').value,
     loader: document.getElementById('pdLoaderSel').value,
     rendererMode: pdSelectedRenderer,
+    javaPath: document.getElementById('pdJavaPath').value.trim(),
+    memoryMax: Number(document.getElementById('pdMemoryMax').value) || 6,
+    jvmProfile: document.getElementById('pdJvmProfile').value,
+    customJvmArgs: document.getElementById('pdCustomJvmArgs').value.trim(),
   };
   let rendererChanged = false;
   let newRendererMode = null;
@@ -1334,19 +1971,77 @@ async function savePdSettings(){
     openBundleModal(newRendererMode, getProfile(p.id));
   }
 }
-async function deleteCurrentProfile(){
-  const profile = getProfile(currentProfileId);
-  if (!profile) return;
-  if (!confirm(`Delete profile "${profile.name}"? Its installed content and settings will be removed. This cannot be undone.`)) return;
-  if (launcherBridge?.deleteProfile){
-    const result = await launcherBridge.deleteProfile(currentProfileId);
-    if (result?.ok===false){ alert(result.error); return; }
-    state = result.state;
-  } else {
-    state.profiles = state.profiles.filter(p=>p.id!==currentProfileId);
-  }
+let profileActionTargetId = null;
+function closeProfileActionMenu(){ const menu = document.getElementById('profileActionMenu'); if (menu) menu.style.display='none'; }
+function openProfileActionMenu(event, profileId){
+  event?.stopPropagation?.();
+  profileActionTargetId = profileId;
+  const profile = getProfile(profileId);
+  const menu = document.getElementById('profileActionMenu');
+  if (!profile || !menu) return;
+  menu.innerHTML = `<button onclick="runProfileAction('play')"><i class="ti ti-player-play"></i> Play</button><button onclick="runProfileAction('open')"><i class="ti ti-folder"></i> Open Profile</button><button onclick="runProfileAction('edit')"><i class="ti ti-settings"></i> Edit Profile</button><button onclick="runProfileAction('duplicate')"><i class="ti ti-copy"></i> Duplicate Profile</button><button onclick="runProfileAction('export')"><i class="ti ti-download"></i> Export Profile</button><button onclick="runProfileAction('modpack')"><i class="ti ti-file-archive"></i> Export Modpack</button><button onclick="runProfileAction('backup')"><i class="ti ti-database-export"></i> Create Backup</button><button onclick="runProfileAction('reveal')"><i class="ti ti-folder-open"></i> Reveal in File Explorer</button><button class="danger" onclick="runProfileAction('delete')"><i class="ti ti-trash"></i> Delete Profile</button>`;
+  const x = Math.min((event?.clientX || 0), window.innerWidth - 230);
+  const y = Math.min((event?.clientY || 0), window.innerHeight - 360);
+  menu.style.left = `${Math.max(8, x)}px`; menu.style.top = `${Math.max(8, y)}px`; menu.style.display='block';
+}
+document.addEventListener('click', event => { if (!event.target.closest?.('#profileActionMenu,.profile-card-menu-btn')) closeProfileActionMenu(); });
+async function runProfileAction(action){
+  const profileId = profileActionTargetId; const profile = getProfile(profileId); closeProfileActionMenu(); if (!profile) return;
+  if (action === 'play'){ currentProfileId = profileId; openProfile(profileId); launchClick(); return; }
+  if (action === 'open' || action === 'edit'){ openProfile(profileId); setPdTab('settings'); return; }
+  if (action === 'duplicate'){ openDuplicateProfileModal(profileId); return; }
+  if (action === 'export'){ if (launcherBridge?.exportProfile) { const result = await launcherBridge.exportProfile(profileId); if (result?.ok === false && !result.canceled) alert(result.error || 'Could not export profile.'); } return; }
+  if (action === 'modpack'){ openExportModpackModal(profileId); return; }
+  if (action === 'backup'){ if (launcherBridge?.backupProfile) { const result = await launcherBridge.backupProfile(profileId); if (result?.ok === false) alert(result.error || 'Could not back up profile.'); else alert('Profile backup created.'); } return; }
+  if (action === 'reveal'){ if (launcherBridge?.revealProfile) await launcherBridge.revealProfile(profileId); return; }
+  if (action === 'delete'){ openDeleteProfileModal(profileId); }
+}
+function openDuplicateProfileModal(profileId){ const profile=getProfile(profileId); if(!profile)return; profileActionTargetId=profileId; document.getElementById('duplicateProfileSource').textContent=`Create a copy of "${profile.name}"`; document.getElementById('duplicateProfileName').value=`${profile.name} Copy`; document.getElementById('duplicateProfileModal').style.display='flex'; document.getElementById('duplicateProfileName').focus(); }
+function closeDuplicateProfileModal(){ document.getElementById('duplicateProfileModal').style.display='none'; }
+async function submitDuplicateProfile(){ const name=document.getElementById('duplicateProfileName').value.trim(); if(!name)return; const result=await launcherBridge.duplicateProfile(profileActionTargetId,name); if(result?.ok===false){alert(result.error||'Could not duplicate profile.');return;} state=result.state||state; closeDuplicateProfileModal(); renderProfileGrid(); openProfile(result.profile?.id||state.activeProfileId); alert('Profile duplicated'); }
+function openExportModpackModal(profileId){ const profile=getProfile(profileId); if(!profile)return; profileActionTargetId=profileId; document.getElementById('exportModpackProfile').textContent=`${profile.name} · ${profile.mcVersion} · ${capitalize(profile.loader)}`; document.getElementById('exportModpackName').value=profile.name; document.getElementById('exportModpackDescription').value=''; document.getElementById('exportModpackModal').style.display='flex'; }
+function closeExportModpackModal(){ document.getElementById('exportModpackModal').style.display='none'; }
+async function submitExportModpack(){ const result=await launcherBridge.exportModpack({profileId:profileActionTargetId,name:document.getElementById('exportModpackName').value.trim(),version:document.getElementById('exportModpackVersion').value.trim(),description:document.getElementById('exportModpackDescription').value.trim(),options:{mods:document.getElementById('exportMods').checked,configs:document.getElementById('exportConfigs').checked,resourcepacks:document.getElementById('exportResourcepacks').checked,shaders:document.getElementById('exportShaders').checked,worlds:document.getElementById('exportWorlds').checked,screenshots:document.getElementById('exportScreenshots').checked}}); if(result?.ok===false){if(!result.canceled)alert(result.error||'Could not export modpack.');return;} closeExportModpackModal(); if(result.warnings?.length)alert(`Modpack exported with warnings:\n\n${result.warnings.join('\n')}`); else alert('Modpack exported successfully.'); }
+function openDeleteProfileModal(profileId){ const profile=getProfile(profileId); if(!profile)return; profileActionTargetId=profileId; document.getElementById('deleteProfileMessage').textContent=`"${profile.name}" will be removed from Bald Launcher.`; document.getElementById('deleteProfileFiles').checked=false; document.getElementById('deleteProfileModal').style.display='flex'; }
+function closeDeleteProfileModal(){ document.getElementById('deleteProfileModal').style.display='none'; }
+async function confirmDeleteProfile(){ const result=await launcherBridge.deleteProfile(profileActionTargetId,document.getElementById('deleteProfileFiles').checked); if(result?.ok===false){alert(result.error||'Could not delete profile.');return;} state=result.state||state; closeDeleteProfileModal(); renderProfileGrid(); showPanel('home'); }
+async function deleteCurrentProfile(){ openDeleteProfileModal(currentProfileId); }
+async function duplicateCurrentProfile(){
+  openDuplicateProfileModal(currentProfileId);
+}
+async function exportCurrentProfile(){
+  if (!currentProfileId || !launcherBridge?.exportProfile) return;
+  const result = await launcherBridge.exportProfile(currentProfileId);
+  if (result?.ok === false && !result.canceled) alert(result.error || 'Could not export profile.');
+}
+async function importProfileExport(){
+  if (!launcherBridge?.importProfile) return;
+  const result = await launcherBridge.importProfile();
+  if (result?.ok === false){ if (!result.canceled) alert(result.error || 'Could not import profile.'); return; }
+  state = result.state || state;
   renderProfileGrid();
-  showPanel('home');
+  openProfile(result.profile?.id || state.activeProfileId);
+}
+async function backupCurrentProfile(){
+  if (!currentProfileId || !launcherBridge?.backupProfile) return;
+  const result = await launcherBridge.backupProfile(currentProfileId);
+  if (result?.ok === false) alert(result.error || 'Could not back up profile.');
+  else alert('Profile backup created.');
+}
+async function restoreCurrentProfile(){
+  if (!currentProfileId || !launcherBridge?.restoreProfile) return;
+  if (!confirm('Restore the latest backup? Current profile files will be replaced.')) return;
+  const result = await launcherBridge.restoreProfile(currentProfileId);
+  if (result?.ok === false){ alert(result.error || 'Could not restore profile.'); return; }
+  state = result.state || state;
+  openProfile(currentProfileId);
+}
+async function importLocalJar(){
+  if (!currentProfileId || !launcherBridge?.importLocalContent) return;
+  const result = await launcherBridge.importLocalContent(currentProfileId);
+  if (result?.ok === false){ if (!result.canceled) alert(result.error || 'Could not import JAR.'); return; }
+  state = result.state || state;
+  openProfile(currentProfileId);
 }
 async function openFolder(type){ if (launcherBridge?.openFolder) await launcherBridge.openFolder(type); }
 
@@ -1440,6 +2135,139 @@ function syncSettings(){
   };
   state.settings = { ...(state.settings || {}), ...settings };
   if (launcherBridge?.syncState) launcherBridge.syncState(state);
+}
+async function loadDiagnostics(){
+  const output = document.getElementById('diagnosticsOutput');
+  const analysisOutput = document.getElementById('crashAnalysisOutput');
+  if (!launcherBridge?.getDiagnostics){ if (output) output.textContent = 'Diagnostics are available in the native launcher.'; return; }
+  if (output) output.textContent = 'Collecting local diagnostics...';
+  const result = await launcherBridge.getDiagnostics();
+  const labels = { good: '✓ Good', warning: '⚠ Warning', problem: '✕ Problem' };
+  const checks = Object.entries(result.checks || {}).map(([name, status]) => `${labels[status] || status}  ${name}`).join('\n');
+  if (output) output.textContent = [
+    `Java: ${result.javaVersion || result.javaPath || 'Unavailable'}`,
+    `GPU: ${result.gpu || 'Unavailable'}`,
+    `RAM: ${result.memoryGB || '?'} GB`,
+    `Disk: ${result.disk ? `${result.disk.freeGB} GB free / ${result.disk.totalGB} GB` : 'Unavailable'}`,
+    `Profile: ${result.profile || 'None'}`,
+    '', checks,
+  ].join('\n');
+  if (analysisOutput) {
+    const report = result.latestCrash;
+    analysisOutput.innerHTML = report?.crashed
+      ? `<strong>Minecraft crash detected</strong><br>${(report.findings || []).map(item => `<div style="margin-top:8px;"><strong>Likely cause:</strong> ${escapeHtml(item.cause)}<br><strong>Confidence:</strong> ${item.confidence}%<br><strong>Evidence:</strong> ${escapeHtml(item.evidence)}<br><strong>Suggested fix:</strong> ${escapeHtml(item.suggestedFix)}</div>`).join('')}`
+      : 'No crash detected for the active profile. Normal exits are not reported as crashes.';
+  }
+}
+
+
+const notificationHistory = (() => {
+  try { return JSON.parse(localStorage.getItem('bald:notifications') || '[]'); } catch (_error) { return []; }
+})();
+function persistNotifications(){ try { localStorage.setItem('bald:notifications', JSON.stringify(notificationHistory.slice(-100))); } catch (_error) {} }
+function addNotification(title, message, kind = 'info'){
+  notificationHistory.push({ id: `notification-${Date.now()}-${Math.random()}`, title, message, kind, createdAt: new Date().toISOString() });
+  while (notificationHistory.length > 100) notificationHistory.shift();
+  persistNotifications(); renderNotifications();
+}
+function renderNotifications(){
+  const list = document.getElementById('notificationList');
+  if (!list) return;
+  list.innerHTML = notificationHistory.slice().reverse().map(item => `<div class="notification-item"><strong>${escapeHtml(item.title)}</strong>${escapeHtml(item.message)}<div style="margin-top:4px;font-size:10px;color:var(--ui-text-secondary);">${new Date(item.createdAt).toLocaleString()}</div></div>`).join('') || '<div class="notification-item">No notifications yet.</div>';
+}
+function toggleNotificationCenter(){
+  const center = document.getElementById('notificationCenter');
+  if (!center) return;
+  center.style.display = center.style.display === 'none' ? 'block' : 'none';
+  renderNotifications();
+}
+function clearNotifications(){ notificationHistory.splice(0); persistNotifications(); renderNotifications(); }
+
+let commandPaletteResults = [];
+let commandPaletteSelection = 0;
+function getCommandPaletteItems(query = ''){
+  const normalized = String(query).trim().toLowerCase();
+  const items = [];
+  (state.profiles || []).forEach(profile => {
+    items.push({ label: `Launch ${profile.name}`, kind: 'Profile', action: () => { currentProfileId = profile.id; openProfile(profile.id); launchClick(); } });
+    items.push({ label: `Open ${profile.name}`, kind: 'Profile', action: () => openProfile(profile.id) });
+    (profile.mods || []).forEach(mod => items.push({ label: `Search ${mod.name}`, kind: 'Mod', action: () => { currentProfileId = profile.id; openProfile(profile.id); setLibrarySearch(mod.name); } }));
+  });
+  (state.servers || []).forEach(server => items.push({ label: `Open ${server.name}`, kind: 'Server', action: () => openServerDetail(server.id) }));
+  items.push(
+    { label: 'Open Settings', kind: 'Command', action: () => showPanel('settings') },
+    { label: 'Open Logs', kind: 'Command', action: () => showPanel('logs') },
+    { label: 'Open Performance Center', kind: 'Command', action: () => showPanel('performance') },
+    { label: 'Open Profiles', kind: 'Command', action: () => showPanel('home') },
+    { label: 'Open Servers', kind: 'Command', action: () => showPanel('servers') },
+    { label: 'Open Accounts', kind: 'Command', action: () => showPanel('accounts') },
+  );
+  return normalized ? items.filter(item => item.label.toLowerCase().includes(normalized) || item.kind.toLowerCase().includes(normalized)) : items;
+}
+function renderCommandPalette(){
+  const results = document.getElementById('commandPaletteResults');
+  if (!results) return;
+  commandPaletteResults = getCommandPaletteItems(document.getElementById('commandPaletteSearch')?.value || '');
+  commandPaletteSelection = Math.min(commandPaletteSelection, Math.max(0, commandPaletteResults.length - 1));
+  results.innerHTML = commandPaletteResults.map((item, index) => `<button class="command-palette-item ${index === commandPaletteSelection ? 'selected' : ''}" type="button" onclick="executeCommandPaletteItem(${index})"><i class="ti ${item.kind === 'Profile' ? 'ti-user' : item.kind === 'Server' ? 'ti-terminal-2' : 'ti-search'}" aria-hidden="true"></i><span>${escapeHtml(item.label)}</span><span class="command-palette-kind">${escapeHtml(item.kind)}</span></button>`).join('') || '<div class="notification-item">No matching commands.</div>';
+}
+function openCommandPalette(){ const palette=document.getElementById('commandPalette'); if(!palette)return; palette.style.display='flex'; commandPaletteSelection=0; renderCommandPalette(); document.getElementById('commandPaletteSearch')?.focus(); }
+function closeCommandPalette(){ const palette=document.getElementById('commandPalette'); if(palette) palette.style.display='none'; }
+function executeCommandPaletteItem(index){ const item=commandPaletteResults[index]; if(!item)return; closeCommandPalette(); item.action(); }
+document.addEventListener('keydown', event => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); openCommandPalette(); return; }
+  if ((event.ctrlKey || event.metaKey) && event.key === ',') { event.preventDefault(); showPanel('settings'); return; }
+  const palette = document.getElementById('commandPalette');
+  if (palette?.style.display !== 'none') {
+    if (event.key === 'Escape') { closeCommandPalette(); return; }
+    if (event.key === 'ArrowDown') { event.preventDefault(); commandPaletteSelection = Math.min(commandPaletteSelection + 1, commandPaletteResults.length - 1); renderCommandPalette(); return; }
+    if (event.key === 'ArrowUp') { event.preventDefault(); commandPaletteSelection = Math.max(commandPaletteSelection - 1, 0); renderCommandPalette(); return; }
+    if (event.key === 'Enter') { event.preventDefault(); executeCommandPaletteItem(commandPaletteSelection); }
+  }
+});
+document.getElementById('commandPaletteSearch')?.addEventListener('input', renderCommandPalette);
+async function refreshPerformanceCenter(){
+  const output = document.getElementById('performanceLiveOutput');
+  const recommendationBox = document.getElementById('performanceRecommendations');
+  const profile = getProfile(currentProfileId || state.activeProfileId);
+  if (!profile || !launcherBridge?.getPerformance) return;
+  const result = await launcherBridge.getPerformance(profile.id);
+  if (!result?.ok) { if (output) output.textContent = result?.error || 'Performance data unavailable.'; return; }
+  const snapshot = result.snapshot || {};
+  const value = metric => snapshot[metric] == null ? 'Unavailable' : snapshot[metric];
+  if (output) output.textContent = [`Profile: ${profile.name}`, `Minecraft: ${snapshot.minecraft} · ${snapshot.loader} · ${snapshot.renderer}`, `FPS: ${value('fps')} (not exposed by Minecraft)`, `Frame time: ${value('frameTimeMs')} (not exposed by Minecraft)`, `1% low: ${value('onePercentLow')}`, `0.1% low: ${value('zeroPointOnePercentLow')}`, `CPU: ${snapshot.cpuPercent == null ? 'Unavailable' : `${snapshot.cpuPercent}%`}`, `RAM: ${snapshot.memoryMb == null ? 'Unavailable' : `${snapshot.memoryMb} MB`}`, `GPU: ${snapshot.gpu || 'Unavailable'}`, `VRAM: ${value('vramMb')}`, `Java: ${snapshot.java}`, `Shaders: ${snapshot.shaderState}`].join('\n');
+  const recommendations = [];
+  if (Number(profile.memoryMax) < 4) recommendations.push('Increase RAM allocation|Low heap can cause stutter and loading failures.|More headroom for Minecraft and mod memory use.');
+  if (Number(profile.memoryMax) > 12) recommendations.push('Review RAM allocation|Excessive heap can increase garbage-collection pauses.|Reserve memory for Windows and other applications.');
+  if ((profile.mods || []).some(mod => /sodium|lithium|ferrite|modernfix/i.test(mod.name || ''))) recommendations.push('Optimization mods detected|This profile already contains common optimization projects.|Keep versions aligned with Minecraft and the loader.');
+  if (!recommendations.length) recommendations.push('No immediate rule-based recommendation|The launcher has no measured issue to act on.|No settings were changed.');
+  if (recommendationBox) recommendationBox.innerHTML = recommendations.map(item => { const [title, why, effect] = item.split('|'); const apply = title === 'Increase RAM allocation' ? `<button class="modal-btn" style="margin-top:7px;" onclick="applyPerformanceRecommendation('ram')"><i class="ti ti-check" aria-hidden="true"></i> Apply</button>` : ''; return `<div style="padding:8px 0;border-bottom:1px solid var(--ui-border);"><strong>${escapeHtml(title)}</strong><br>Why: ${escapeHtml(why)}<br>Expected effect: ${escapeHtml(effect)}${apply}</div>`; }).join('');
+  renderPerformanceHistory(result.history || []);
+}
+async function applyPerformanceRecommendation(kind){
+  const profile = getProfile(currentProfileId || state.activeProfileId);
+  if (!profile || kind !== 'ram' || !launcherBridge?.updateProfile) return;
+  const nextMemory = Math.min(32, Math.max(4, Number(profile.memoryMax) || 6));
+  const result = await launcherBridge.updateProfile({ id: profile.id, memoryMax: nextMemory });
+  if (result?.state) state = result.state;
+  refreshPerformanceCenter();
+}
+function renderPerformanceHistory(history){
+  const box = document.getElementById('performanceHistory');
+  if (!box) return;
+  if (!history.length) { box.textContent = 'No benchmark history.'; return; }
+  box.innerHTML = history.slice().reverse().map((item, index, list) => { const previous = list[index + 1]; const cpu = item.averageCpuPercent == null ? 'Unavailable' : `${item.averageCpuPercent}% CPU`; const memory = item.peakMemoryMb == null ? 'Unavailable' : `${item.peakMemoryMb} MB peak RAM`; const comparison = previous && item.averageCpuPercent != null && previous.averageCpuPercent != null ? ` · CPU ${item.averageCpuPercent <= previous.averageCpuPercent ? 'better' : 'higher'}` : ''; return `<div style="padding:7px 0;border-bottom:1px solid var(--ui-border);"><strong>${new Date(item.startedAt).toLocaleString()}</strong><br>${cpu} · ${memory}${comparison}<br>FPS: unavailable · frame time: unavailable</div>`; }).join('');
+}
+async function runPerformanceBenchmark(){
+  const output = document.getElementById('benchmarkOutput');
+  const profile = getProfile(currentProfileId || state.activeProfileId);
+  if (!profile || !launcherBridge?.runBenchmark) return;
+  if (output) output.textContent = 'Benchmark running for 15 seconds...';
+  const result = await launcherBridge.runBenchmark({ profileId: profile.id, durationMs: 15000 });
+  if (!result?.ok) { if (output) output.textContent = result?.error || 'Benchmark unavailable.'; return; }
+  const item = result.result;
+  if (output) output.textContent = [`Run: ${new Date(item.startedAt).toLocaleString()}`, 'Average FPS: Unavailable', '1% low: Unavailable', '0.1% low: Unavailable', 'Frame time: Unavailable', `Average CPU: ${item.averageCpuPercent == null ? 'Unavailable' : `${item.averageCpuPercent}%`}`, `Peak RAM: ${item.peakMemoryMb == null ? 'Unavailable' : `${item.peakMemoryMb} MB`}`, `Stored as benchmark ${item.id}`].join('\n');
+  renderPerformanceHistory(result.history || []);
 }
 
 // ---------------- Logs ----------------
@@ -1538,7 +2366,7 @@ function renderPlayButton(){
 }
 
 function showPanel(name){
-  const panelNames = ['home','servers','profile','server-detail','accounts','settings','logs'];
+  const panelNames = ['home','servers','profile','server-detail','accounts','settings','performance','logs','appearance','capes'];
   panelNames.forEach(p=>{
     const el = document.getElementById('panel-'+p);
     if (el) el.style.display = p===name ? 'flex' : 'none';
@@ -1549,17 +2377,53 @@ function showPanel(name){
     profile: 'home',
     accounts: 'accounts',
     settings: 'settings',
+    performance: 'performance',
     logs: 'logs',
+    appearance: 'appearance',
+    capes: 'capes',
     'server-detail': 'servers',
   };
-  ['home','servers','accounts','settings','logs'].forEach(p=>{
+  ['home','servers','accounts','settings','performance','logs','appearance','capes'].forEach(p=>{
     const n = document.getElementById('nav-'+p);
-    if (n) n.classList.toggle('on', navMapping[name] === p);
+    if (n) {
+      const active = navMapping[name] === p;
+      n.classList.toggle('on', active);
+      if (active) n.setAttribute('aria-current', 'page');
+      else n.removeAttribute('aria-current');
+    }
   });
+  const accountAccess = document.getElementById('nav-account-access');
+  if (accountAccess) {
+    const active = navMapping[name] === 'accounts';
+    accountAccess.classList.toggle('on', active);
+    if (active) accountAccess.setAttribute('aria-current', 'page');
+    else accountAccess.removeAttribute('aria-current');
+  }
   if (name==='home') renderProfileGrid();
+  try { localStorage.setItem('bald:last-page', name); } catch (_error) {}
+  if (name==='performance') refreshPerformanceCenter();
   if (name==='accounts') renderAccounts();
   if (name==='servers') renderServers();
   if (name==='server-detail' && currentServerId) renderServerDetail();
+}
+
+function enhanceKeyboardAccess(){
+  document.querySelectorAll('div[onclick],span[onclick]').forEach(element => {
+    if (element.closest('.modal-overlay[style*="display:none"]')) return;
+    if (!element.hasAttribute('role')) element.setAttribute('role', 'button');
+    if (!element.hasAttribute('tabindex')) element.setAttribute('tabindex', '0');
+    if (!element.hasAttribute('aria-label')) {
+      const label = element.getAttribute('title') || element.textContent.trim().replace(/\s+/g, ' ');
+      if (label) element.setAttribute('aria-label', label.slice(0, 100));
+    }
+    if (element.dataset.keyboardEnhanced) return;
+    element.dataset.keyboardEnhanced = 'true';
+    element.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      element.click();
+    });
+  });
 }
 
 const serverConsoleLogs = {};
@@ -1569,6 +2433,7 @@ const serverEditorState = {};
 const serverFileSelection = {};
 let serverCodeMirror = null;
 const serverStatsState = {};
+const serverMetricsState = {};
 let currentServerId = null;
 let activeServerTab = 'console';
 
@@ -1762,10 +2627,19 @@ function refreshServerStats() {
   const ram = (serverStatsState[server.id]?.ram || []).slice(-1)[0]?.value ?? null;
   const tpsLabel = document.getElementById('serverStatisticTps');
   const ramLabel = document.getElementById('serverStatisticRam');
+  const metrics = serverMetricsState[server.id] || {};
+  const cpuLabel = document.getElementById('serverStatisticCPU');
+  const msptLabel = document.getElementById('serverStatisticMSPT');
+  const networkLabel = document.getElementById('serverStatisticNetwork');
+  const diskLabel = document.getElementById('serverStatisticDisk');
   const uptimeLabel = document.getElementById('serverStatisticUptime');
   if (tpsLabel) tpsLabel.textContent = status === 'running' && tps != null ? `${Number(tps).toFixed(2)}` : '--';
   if (ramLabel) ramLabel.textContent = status === 'running' && ram != null ? `${ram.toFixed(1)} MB` : '--';
-  if (uptimeLabel) uptimeLabel.textContent = status === 'running' ? 'Live' : '--';
+  if (uptimeLabel) uptimeLabel.textContent = status === 'running' && metrics.uptimeSeconds != null ? formatServerUptime(metrics.uptimeSeconds) : '--';
+  if (cpuLabel) cpuLabel.textContent = status === 'running' && metrics.cpuPercent != null ? `${metrics.cpuPercent}%` : '--';
+  if (msptLabel) msptLabel.textContent = status === 'running' && metrics.mspt != null ? `${metrics.mspt}` : '--';
+  if (networkLabel) networkLabel.textContent = status === 'running' && metrics.networkAddress ? metrics.networkAddress : '--';
+  if (diskLabel) diskLabel.textContent = status === 'running' && metrics.diskFreeGb != null ? `${metrics.diskFreeGb} GB free` : '--';
 }
 
 function renderServerActionButton(server){
@@ -1913,6 +2787,7 @@ function setServerTab(tab){
 
 function openServerDetail(serverId){
   currentServerId = serverId;
+  try { localStorage.setItem('bald:last-server', serverId); } catch (_error) {}
   const server = getServer(serverId);
   if (!server) return;
   document.getElementById('serverDetailIcon').textContent = String(server.name || 'S').slice(0,1).toUpperCase();
@@ -2046,16 +2921,21 @@ function renderServerStats(){
   const tpsConfig = getServerTpsConfig(server);
   const latestTps = (serverStatsState[server.id]?.tps || []).slice(-1)[0]?.value ?? null;
   const latestRam = (serverStatsState[server.id]?.ram || []).slice(-1)[0]?.value ?? null;
+  const metrics = serverMetricsState[server.id] || {};
   const stats = [
     ...(tpsConfig.kind === 'proxy' ? [] : [['TPS', running && latestTps != null ? Number(latestTps).toFixed(2) : '--', tpsConfig.kind === 'missing-mod' ? 'Needs a TPS mod' : 'Target 20.0']]),
     [tpsConfig.kind === 'proxy' ? 'Connections' : 'Players', running ? String(server.playerCount || 0) : '--', tpsConfig.kind === 'proxy' ? 'Active connections' : 'Connected users'],
     ['RAM', running && latestRam != null ? `${latestRam.toFixed(1)} MB` : '--', `${server.memoryMax || 4}GB allocated`],
-    ['Uptime', running ? 'Live' : '--', 'Current runtime'],
+    ['CPU', running && metrics.cpuPercent != null ? `${metrics.cpuPercent}%` : '--', 'Server process'],
+    ['Uptime', running && metrics.uptimeSeconds != null ? formatServerUptime(metrics.uptimeSeconds) : '--', 'Current runtime'],
+    ['MSPT', running && metrics.mspt != null ? `${metrics.mspt}` : '--', metrics.mspt == null ? 'Unavailable from server' : 'Measured'],
+    ['Network', running && metrics.networkAddress ? metrics.networkAddress : '--', 'Advertised address'],
+    ['Disk', running && metrics.diskFreeGb != null ? `${metrics.diskFreeGb} GB free` : '--', metrics.diskTotalGb != null ? `${metrics.diskTotalGb} GB total` : 'Unavailable'],
   ];
-  statsGrid.innerHTML = stats.map(([label, value, sub], index) => `
+  statsGrid.innerHTML = stats.map(([label, value, sub]) => `
     <div class="server-stat">
       <div class="server-stat-label">${label}</div>
-      <div id="serverStatistic${label === 'TPS' ? 'Tps' : label === 'RAM' ? 'Ram' : label === 'Uptime' ? 'Uptime' : 'Players'}" class="server-stat-value">${value}</div>
+      <div id="serverStatistic${label.replace(/[^a-z]/gi, '')}" class="server-stat-value">${value}</div>
       <div class="server-stat-sub">${sub}</div>
     </div>`).join('');
   const tpsMarkup = tpsConfig.kind === 'proxy' ? '' : `
@@ -2075,6 +2955,11 @@ function renderServerStats(){
   `;
   statsGrid.insertAdjacentHTML('beforeend', chartMarkup);
   updateServerStatsCharts(server.id);
+}
+
+function formatServerUptime(seconds){
+  const value = Math.max(0, Number(seconds) || 0);
+  return `${Math.floor(value / 3600)}h ${String(Math.floor((value % 3600) / 60)).padStart(2, '0')}m ${String(value % 60).padStart(2, '0')}s`;
 }
 
 function openServerContentForStats() {
@@ -2597,6 +3482,9 @@ setInterval(() => {
       launcherBridge.getServerMemory(server.id).then(result => {
         if (result?.ok && Number.isFinite(Number(result.memoryMb))) {
           recordServerStatSample(server.id, 'ram', Number(result.memoryMb));
+        }
+        if (result?.ok) {
+          serverMetricsState[server.id] = { ...result };
           if (currentServerId === server.id) refreshServerStats();
         }
       });
@@ -2762,9 +3650,20 @@ async function boot(){
   document.getElementById('customJvmArgs').value = settings.customJvmArgs || '';
   document.getElementById('processPriority').value = settings.processPriority || 'normal';
   toggleJvmArgs();
-  showPanel('home');
+  const savedPage = (() => { try { return localStorage.getItem('bald:last-page'); } catch (_error) { return null; } })();
+  const savedProfile = (() => { try { return localStorage.getItem('bald:last-profile'); } catch (_error) { return null; } })();
+  const savedServer = (() => { try { return localStorage.getItem('bald:last-server'); } catch (_error) { return null; } })();
+  const recoveredProfile = getProfile(savedProfile) ? savedProfile : state.activeProfileId;
+  if (recoveredProfile) currentProfileId = recoveredProfile;
+  renderProfileGrid();
+  renderServers();
+  renderAccounts();
+  if (savedPage === 'profile' && recoveredProfile) openProfile(recoveredProfile);
+  else if (savedPage === 'server-detail' && getServer(savedServer)) openServerDetail(savedServer);
+  else showPanel(['home','servers','accounts','settings','performance','logs','appearance','capes'].includes(savedPage) ? savedPage : 'home');
+  renderNotifications();
   if (launcherBridge?.onStatus){
-    launcherBridge.onStatus(message => { document.getElementById('sbStatus').textContent = message; });
+    launcherBridge.onStatus(message => { document.getElementById('sbStatus').textContent = message; if (/failed|error|warning|backup|download|update/i.test(String(message))) addNotification('Launcher event', String(message), /failed|error/i.test(String(message)) ? 'error' : 'warning'); });
   }
   if (launcherBridge?.onUpdateAvailable){
     launcherBridge.onUpdateAvailable(update => {
@@ -2773,6 +3672,7 @@ async function boot(){
       const button = document.getElementById('updateButton');
       if (!banner || !text || !button) return;
       text.textContent = `Update available - v${update?.version || ''}`;
+      addNotification('Launcher update available', `Version ${update?.version || 'new'} is ready to install.`, 'info');
       button.textContent = 'Update now';
       banner.classList.add('visible');
     });
@@ -2818,10 +3718,507 @@ window.addEventListener('error', event => {
     renderProfileLogs();
   }
 });
-boot().catch(error => {
+boot().then(() => {
+  enhanceKeyboardAccess();
+}).catch(error => {
   const message = error?.message || String(error);
   const status = document.getElementById('sbStatus');
   if (status) status.textContent = `Launcher startup failed · ${message}`;
   console.error('Launcher startup failed:', error);
 });
+
+// ===== THEME SYSTEM =====
+let currentEditingTheme = null;
+let themeBackup = null;
+
+async function loadThemePreset(themeId) {
+  const selectedThemeId = String(themeId || '1');
+  await launcherBridge?.setActiveTheme?.(selectedThemeId);
+  const result = await launcherBridge?.getThemes?.();
+  if (!result || !result.themes) return;
+  renderThemePresetOptions(result.themes, selectedThemeId);
+  currentEditingTheme = result.themes[selectedThemeId];
+  if (currentEditingTheme) {
+    populateThemeUI(currentEditingTheme);
+    await applyThemePreview(currentEditingTheme);
+  }
+}
+
+function renderThemePresetOptions(themes, activeId) {
+  const select = document.getElementById('themePresetSelect');
+  if (!select || !themes) return;
+  select.innerHTML = Object.entries(themes).map(([id, theme]) => `<option value="${escapeHtml(id)}">${escapeHtml(theme.name || `Theme ${id}`)}</option>`).join('');
+  select.value = String(activeId || Object.keys(themes)[0] || '1');
+}
+
+function populateThemeUI(theme) {
+  if (!theme) return;
+  // Colors
+  document.getElementById('bgVoidColor').value = theme.colors?.bgVoid || '#0a0a0a';
+  document.getElementById('bgSurfaceColor').value = theme.colors?.bgSurface || '#111111';
+  document.getElementById('bgSurface2Color').value = theme.colors?.bgSurface2 || '#161616';
+  document.getElementById('borderColor').value = theme.colors?.border || '#1e1e1e';
+  document.getElementById('borderStrongColor').value = theme.colors?.borderStrong || '#2a2a2a';
+  document.getElementById('accentGreenColor').value = theme.colors?.accentGreen || '#7ef15e';
+  document.getElementById('accentGreenBgColor').value = theme.colors?.accentGreenBg || '#2d6e1a';
+  document.getElementById('accentGreenBgHoverColor').value = theme.colors?.accentGreenBgHover || '#357a1e';
+  document.getElementById('accentGreenTextColor').value = theme.colors?.accentGreenText || '#d4f0c4';
+  document.getElementById('accentPurpleColor').value = theme.colors?.accentPurple || '#7f77dd';
+  document.getElementById('accentPurpleBgColor').value = theme.colors?.accentPurpleBg || '#221c47';
+  document.getElementById('textPrimaryColor').value = theme.colors?.textPrimary || '#cccccc';
+  document.getElementById('textSecondaryColor').value = theme.colors?.textSecondary || '#555555';
+  document.getElementById('textMutedColor').value = theme.colors?.textMuted || '#3a3a3a';
+
+  // Typography
+  document.getElementById('fontFamilyInput').value = theme.typography?.fontFamily || 'system-ui, -apple-system, sans-serif';
+  document.getElementById('fontSizeXs').value = theme.typography?.fontSizeXs || '10px';
+  document.getElementById('fontSizeSm').value = theme.typography?.fontSizeSm || '11px';
+  document.getElementById('fontSizeBase').value = theme.typography?.fontSizeBase || '12px';
+  document.getElementById('fontSizeMd').value = theme.typography?.fontSizeMd || '13px';
+  document.getElementById('fontSizeLg').value = theme.typography?.fontSizeLg || '14px';
+  document.getElementById('fontSizeXl').value = theme.typography?.fontSizeXl || '16px';
+
+  // Spacing
+  document.getElementById('paddingSmall').value = theme.spacing?.paddingSmall || '8px';
+  document.getElementById('paddingBase').value = theme.spacing?.paddingBase || '12px';
+  document.getElementById('paddingLarge').value = theme.spacing?.paddingLarge || '16px';
+  document.getElementById('gapSmall').value = theme.spacing?.gapSmall || '4px';
+  document.getElementById('gapBase').value = theme.spacing?.gapBase || '8px';
+  document.getElementById('gapLarge').value = theme.spacing?.gapLarge || '14px';
+
+  // Borders
+  document.getElementById('radiusSmall').value = theme.borders?.radiusSmall || '6px';
+  document.getElementById('radiusBase').value = theme.borders?.radiusBase || '8px';
+  document.getElementById('radiusMd').value = theme.borders?.radiusMd || '12px';
+  document.getElementById('borderWidth').value = theme.borders?.borderWidth || '0.5px';
+
+  // Background
+  document.getElementById('bgType').value = theme.background?.type || 'solid';
+  document.getElementById('bgImage').value = theme.background?.image || '';
+  document.getElementById('bgBlur').value = theme.background?.blur || 0;
+  document.getElementById('bgOpacity').value = theme.background?.opacity || 100;
+  document.getElementById('bgOverlayColor').value = theme.background?.overlayColor || '#000000';
+  document.getElementById('bgOverlayOpacity').value = theme.background?.overlayOpacity || 0;
+
+  // Advanced
+  document.getElementById('customCssInput').value = theme.advanced?.customCss || '';
+  document.querySelectorAll('[data-theme-path]').forEach(control => {
+    const value = getThemePath(theme, control.dataset.themePath);
+    if (control.type === 'checkbox') control.checked = value === true;
+    else if (value !== undefined && value !== null) control.value = value;
+  });
+  refreshThemeColorControls();
+}
+
+const legacyThemeColorPaths = {
+  bgVoidColor: 'colors.bgVoid', bgSurfaceColor: 'colors.bgSurface', bgSurface2Color: 'colors.bgSurface2',
+  borderColor: 'colors.border', borderStrongColor: 'colors.borderStrong', accentGreenColor: 'colors.accentGreen',
+  accentGreenBgColor: 'colors.accentGreenBg', accentGreenBgHoverColor: 'colors.accentGreenBgHover', accentGreenTextColor: 'colors.accentGreenText',
+  accentPurpleColor: 'colors.accentPurple', accentPurpleBgColor: 'colors.accentPurpleBg', textPrimaryColor: 'colors.textPrimary',
+  textSecondaryColor: 'colors.textSecondary', textMutedColor: 'colors.textMuted', bgOverlayColor: 'background.overlayColor',
+};
+
+function enhanceThemeColorControls() {
+  document.querySelectorAll('#panel-appearance input[type="color"]').forEach(colorInput => {
+    if (colorInput.closest('.theme-color-control')) return;
+    const path = colorInput.dataset.themePath || legacyThemeColorPaths[colorInput.id];
+    if (path) colorInput.dataset.themePath = path;
+    const wrapper = document.createElement('div');
+    wrapper.className = 'theme-color-control';
+    colorInput.parentNode.insertBefore(wrapper, colorInput);
+    wrapper.appendChild(colorInput);
+    const valueInput = document.createElement('input');
+    valueInput.className = 'theme-color-value';
+    valueInput.type = 'text';
+    valueInput.autocomplete = 'off';
+    valueInput.setAttribute('aria-label', 'Color value');
+    const resetButton = document.createElement('button');
+    resetButton.className = 'theme-color-reset';
+    resetButton.type = 'button';
+    resetButton.textContent = 'Reset';
+    resetButton.title = 'Reset this color';
+    wrapper.append(valueInput, resetButton);
+    colorInput.addEventListener('input', () => { valueInput.value = colorInput.value.toUpperCase(); });
+    valueInput.addEventListener('change', () => {
+      const value = valueInput.value.trim();
+      if (!value) return;
+      if (/^#[0-9a-f]{6}$/i.test(value)) colorInput.value = value;
+      if (colorInput.dataset.themePath) setThemePath(currentEditingTheme, colorInput.dataset.themePath, value);
+      else colorInput.dispatchEvent(new Event('change', { bubbles: true }));
+      updatePreview();
+      refreshThemeColorControls();
+    });
+    resetButton.addEventListener('click', () => {
+      const defaultValue = resetButton.dataset.defaultValue || colorInput.value;
+      if (colorInput.dataset.themePath) setThemePath(currentEditingTheme, colorInput.dataset.themePath, defaultValue);
+      colorInput.value = /^#[0-9a-f]{6}$/i.test(defaultValue) ? defaultValue : '#000000';
+      valueInput.value = defaultValue;
+      colorInput.dispatchEvent(new Event('change', { bubbles: true }));
+      updatePreview();
+    });
+  });
+  refreshThemeColorControls();
+}
+
+function refreshThemeColorControls() {
+  document.querySelectorAll('#panel-appearance .theme-color-control').forEach(wrapper => {
+    const colorInput = wrapper.querySelector('input[type="color"]');
+    const valueInput = wrapper.querySelector('.theme-color-value');
+    const resetButton = wrapper.querySelector('.theme-color-reset');
+    if (!colorInput || !valueInput || !resetButton) return;
+    const value = colorInput.dataset.themePath ? getThemePath(currentEditingTheme, colorInput.dataset.themePath) || colorInput.value : colorInput.value;
+    valueInput.value = String(value).toUpperCase();
+    if (!resetButton.dataset.defaultValue) resetButton.dataset.defaultValue = colorInput.value;
+  });
+}
+
+function getThemePath(theme, path) {
+  return String(path || '').split('.').reduce((value, key) => value == null ? undefined : value[key], theme);
+}
+
+function setThemePath(theme, path, value) {
+  const keys = String(path || '').split('.').filter(Boolean);
+  if (!keys.length) return;
+  let target = theme;
+  keys.slice(0, -1).forEach(key => {
+    if (!target[key] || typeof target[key] !== 'object') target[key] = {};
+    target = target[key];
+  });
+  target[keys[keys.length - 1]] = value;
+}
+
+function updateThemePath(control) {
+  if (!currentEditingTheme || !control?.dataset?.themePath) return;
+  const value = control.type === 'checkbox' ? control.checked : (control.type === 'number' ? Number(control.value) : control.value);
+  setThemePath(currentEditingTheme, control.dataset.themePath, value);
+  markThemeDirty();
+  updatePreview();
+}
+
+function markThemeDirty(message = 'Unsaved changes') {
+  const status = document.getElementById('themeSaveStatus');
+  if (status) status.textContent = message;
+}
+
+function selectThemeElement(elementId) {
+  const labels = {
+    'profile-card': 'Profile card uses cards.background, corners.profileCard, cards.opacity, and shadows.',
+    'play-button': 'Play button uses colors.playButton, buttons.radius, buttons.height, buttons.weight, and effects.buttonGlow.',
+    sidebar: 'Sidebar uses the complete sidebar section: width, colors, icon size, selected state, hover state, radius, and spacing.',
+    'search-bar': 'Search bar uses inputs.background, inputs.focus, inputs.border, corners.input, and typography.',
+    'mod-card': 'Mod card uses cards.background, cards.hover, corners.modCard, cards.opacity, and shadows.',
+    'server-card': 'Server card uses cards.background, cards.hover, corners.serverCard, cards.opacity, and shadows.',
+    modal: 'Modal uses modals.background, modals.opacity, modals.radius, modals.blur, and shadows.',
+    notification: 'Notification uses colors.notification, corners.notification, and effects.',
+    console: 'Console uses bgVoid, borders, typography, and effects.',
+    'file-editor': 'File editor uses inputs, borders, typography, and background settings.',
+  };
+  const target = document.getElementById('selectedThemeElement');
+  if (target) target.textContent = labels[elementId] || 'Select an element to see its shared customization controls.';
+}
+
+function updateThemeColor(key, value) {
+  if (!currentEditingTheme) currentEditingTheme = {};
+  if (!currentEditingTheme.colors) currentEditingTheme.colors = {};
+  currentEditingTheme.colors[key] = value;
+  markThemeDirty();
+  refreshThemeColorControls();
+}
+
+function updateThemeTypography(key, value) {
+  if (!currentEditingTheme) currentEditingTheme = {};
+  if (!currentEditingTheme.typography) currentEditingTheme.typography = {};
+  currentEditingTheme.typography[key] = value;
+}
+
+function updateThemeSpacing(key, value) {
+  if (!currentEditingTheme) currentEditingTheme = {};
+  if (!currentEditingTheme.spacing) currentEditingTheme.spacing = {};
+  currentEditingTheme.spacing[key] = value;
+}
+
+function updateThemeBorders(key, value) {
+  if (!currentEditingTheme) currentEditingTheme = {};
+  if (!currentEditingTheme.borders) currentEditingTheme.borders = {};
+  currentEditingTheme.borders[key] = value;
+}
+
+function updateThemeBackground(key, value) {
+  if (!currentEditingTheme) currentEditingTheme = {};
+  if (!currentEditingTheme.background) currentEditingTheme.background = {};
+  if (key === 'type' && value === 'image') {
+    document.getElementById('bgImageSection').style.display = 'block';
+  } else if (key === 'type') {
+    document.getElementById('bgImageSection').style.display = 'none';
+  }
+  currentEditingTheme.background[key] = key === 'blur' || key === 'opacity' || key === 'overlayOpacity' ? Number(value) : value;
+}
+
+function updateThemeAdvanced(key, value) {
+  if (!currentEditingTheme) currentEditingTheme = {};
+  if (!currentEditingTheme.advanced) currentEditingTheme.advanced = {};
+  currentEditingTheme.advanced[key] = value;
+}
+
+async function updatePreview() {
+  return;
+}
+
+async function applyThemePreview(theme) {
+  return;
+}
+
+function generateThemeCssFromObject(theme) {
+  return '';
+}
+
+function switchCategory(btn, category) {
+  document.querySelectorAll('.cat-btn').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
+  btn.classList.add('active');
+  btn.setAttribute('aria-selected', 'true');
+  document.querySelectorAll('.app-category').forEach(c => c.style.display = 'none');
+  const cat = document.getElementById(`category-${category}`);
+  if (cat) cat.style.display = 'block';
+}
+
+function setAppearanceMode(mode) {
+  document.getElementById('modeSimpleBtn').classList.toggle('active', mode === 'simple');
+  document.getElementById('modeAdvancedBtn').classList.toggle('active', mode === 'advanced');
+  document.getElementById('simpleMode').style.display = mode === 'simple' ? 'block' : 'none';
+  document.getElementById('advancedMode').style.display = mode === 'advanced' ? 'block' : 'none';
+}
+
+async function backupThemesBeforeChange() {
+  const result = await launcherBridge?.backupThemes?.();
+  if (result?.ok) {
+    themeBackup = result.backup;
+    alert('Themes backed up successfully');
+  }
+}
+
+async function resetThemeToDefault() {
+  const themeId = String(document.getElementById('themePresetSelect')?.value || '1');
+  if (confirm('Reset this theme to default?')) {
+    const result = await launcherBridge?.resetTheme?.(themeId);
+    if (result?.ok) {
+      await loadThemePreset(themeId);
+      alert('Theme reset to default');
+    }
+  }
+}
+
+async function resetCurrentCategory() {
+  const categoryButton = document.querySelector('.cat-btn.active');
+  const category = categoryButton?.dataset?.category;
+  const valid = ['colors', 'typography', 'spacing', 'borders', 'background', 'corners', 'shadows', 'effects', 'sidebar', 'buttons', 'cards', 'inputs', 'modals', 'advanced'];
+  if (!valid.includes(category)) { alert('Choose a settings category first.'); return; }
+  const themeId = String(document.getElementById('themePresetSelect')?.value || '1');
+  if (!confirm(`Reset the ${category} settings to their defaults?`)) return;
+  const result = await launcherBridge?.resetThemeCategory?.(themeId, category);
+  if (result?.ok) { currentEditingTheme = result.theme; populateThemeUI(currentEditingTheme); await applyThemePreview(currentEditingTheme); markThemeDirty('Category reset - save to keep it'); }
+}
+
+async function renameCurrentTheme() {
+  const themeId = String(document.getElementById('themePresetSelect')?.value || '1');
+  const name = prompt('Theme name:', currentEditingTheme?.name || `Theme ${themeId}`);
+  if (!name) return;
+  const result = await launcherBridge?.renameTheme?.(themeId, name);
+  if (result?.ok) { currentEditingTheme = result.theme; await loadThemePreset(themeId); }
+}
+
+async function duplicateCurrentTheme() {
+  const result = await launcherBridge?.getThemes?.();
+  if (!result?.themes) return;
+  const target = prompt(`Duplicate to preset id (${Object.keys(result.themes).join(', ')}):`, String(Number(document.getElementById('themePresetSelect')?.value || '1') + 1));
+  if (!target || !/^[1-9][0-9]*$/.test(target)) return;
+  const name = prompt('New theme name:', `${currentEditingTheme?.name || 'Theme'} copy`);
+  const duplicate = await launcherBridge?.duplicateTheme?.(document.getElementById('themePresetSelect').value, target, name);
+  if (duplicate?.ok) { renderThemePresetOptions({ ...result.themes, [target]: duplicate.theme }, target); await loadThemePreset(target); }
+  else if (duplicate?.error) alert(duplicate.error);
+}
+
+async function deleteCurrentTheme() {
+  const themeId = String(document.getElementById('themePresetSelect')?.value || '1');
+  if (!confirm(`Delete "${currentEditingTheme?.name || `Theme ${themeId}`}"?`)) return;
+  const result = await launcherBridge?.deleteTheme?.(themeId);
+  if (result?.ok) { renderThemePresetOptions(result.themes, result.activeThemeId); await loadThemePreset(result.activeThemeId); }
+  else if (result?.error) alert(result.error);
+}
+
+async function saveCurrentTheme() {
+  const themeId = String(document.getElementById('themePresetSelect')?.value || '1');
+  if (!currentEditingTheme) {
+    alert('No theme to save');
+    return;
+  }
+  const result = await launcherBridge?.updateTheme?.(themeId, currentEditingTheme);
+  if (result?.ok) {
+    markThemeDirty('Saved theme');
+    alert(`Theme "${themeId}" saved successfully`);
+  }
+}
+
+async function exportCurrentTheme() {
+  const themeId = String(document.getElementById('themePresetSelect')?.value || '1');
+  const result = await launcherBridge?.exportTheme?.(themeId);
+  if (result?.ok && result.json) {
+    const element = document.createElement('a');
+    element.setAttribute('href', 'data:text/json;charset=utf-8,' + encodeURIComponent(result.json));
+    element.setAttribute('download', result.name || `theme-${themeId}.json`);
+    element.style.display = 'none';
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  }
+}
+
+async function importThemeFile() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.baldtheme,.json,application/json';
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const text = await file.text();
+    const themeId = String(document.getElementById('themePresetSelect')?.value || '1');
+    const result = await launcherBridge?.importTheme?.(themeId, text);
+    if (result?.ok) {
+      await loadThemePreset(themeId);
+      alert('Theme imported successfully');
+    } else {
+      alert(`Import failed: ${result?.error || 'Unknown error'}`);
+    }
+  };
+  input.click();
+}
+
+const CAPE_STORAGE_KEY = 'bald-launcher-capes-v1';
+let capeLibrary = [];
+let selectedCapeId = null;
+
+function loadCapeLibrary() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(CAPE_STORAGE_KEY) || '[]');
+    capeLibrary = Array.isArray(stored) ? stored.filter(cape => cape && cape.id && cape.image) : [];
+  } catch (_) {
+    capeLibrary = [];
+  }
+  renderCapeLibrary();
+}
+
+function saveCapeLibrary() {
+  try {
+    localStorage.setItem(CAPE_STORAGE_KEY, JSON.stringify(capeLibrary));
+  } catch (_) {
+    alert('This cape could not be saved. The image may be too large for local storage.');
+  }
+}
+
+function openCapeFilePicker() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/png,image/webp';
+  input.onchange = () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => addCape(String(reader.result || ''), file.name.replace(/\.[^.]+$/, ''));
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+function addCapeFromUrl() {
+  const urlInput = document.getElementById('capeUrlInput');
+  const url = String(urlInput?.value || '').trim();
+  if (!url || !/^https?:\/\//i.test(url)) {
+    alert('Enter a valid image URL.');
+    return;
+  }
+  addCape(url, document.getElementById('capeNameInput')?.value || 'Remote cape');
+  if (urlInput) urlInput.value = '';
+}
+
+function addCape(image, fallbackName) {
+  const nameInput = document.getElementById('capeNameInput');
+  const name = String(nameInput?.value || fallbackName || 'My cape').trim().slice(0, 40) || 'My cape';
+  const cape = { id: `cape-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, name, image, createdAt: new Date().toISOString() };
+  capeLibrary.unshift(cape);
+  selectedCapeId = cape.id;
+  saveCapeLibrary();
+  renderCapeLibrary();
+  if (nameInput) nameInput.value = '';
+}
+
+function selectCape(capeId) {
+  selectedCapeId = capeId;
+  renderCapeLibrary();
+}
+
+function deleteCape(capeId) {
+  const cape = capeLibrary.find(item => item.id === capeId);
+  if (!cape || !confirm(`Delete "${cape.name}"?`)) return;
+  capeLibrary = capeLibrary.filter(item => item.id !== capeId);
+  if (selectedCapeId === capeId) selectedCapeId = capeLibrary[0]?.id || null;
+  saveCapeLibrary();
+  renderCapeLibrary();
+}
+
+function renderCapeLibrary() {
+  const library = document.getElementById('capeLibrary');
+  const empty = document.getElementById('capeLibraryEmpty');
+  if (!library || !empty) return;
+  empty.style.display = capeLibrary.length ? 'none' : 'block';
+  library.innerHTML = capeLibrary.map(cape => `
+    <div style="border:0.5px solid ${cape.id === selectedCapeId ? 'var(--accent-purple)' : 'var(--border)'};border-radius:6px;background:var(--bg-surface-2);padding:8px;cursor:pointer;" onclick="selectCape('${escapeJsString(cape.id)}')">
+      <div style="height:76px;border-radius:4px;background:var(--bg-void);display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:7px;"><img src="${escapeHtml(cape.image)}" alt="${escapeHtml(cape.name)}" style="max-width:100%;max-height:100%;image-rendering:pixelated;" /></div>
+      <div style="font-size:10px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(cape.name)}">${escapeHtml(cape.name)}</div>
+      <button type="button" class="server-mini-btn danger" style="margin-top:6px;width:100%;" onclick="event.stopPropagation();deleteCape('${escapeJsString(cape.id)}')">Delete</button>
+    </div>`).join('');
+  const selected = capeLibrary.find(cape => cape.id === selectedCapeId);
+  drawCapePreview(selected);
+}
+
+function drawCapePreview(cape) {
+  const canvas = document.getElementById('capePreviewCanvas');
+  const meta = document.getElementById('capePreviewMeta');
+  if (!canvas || !meta) return;
+  const context = canvas.getContext('2d');
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  if (!cape) {
+    meta.textContent = 'Select a cape to preview it.';
+    return;
+  }
+  const image = new Image();
+  image.onload = () => {
+    const scale = Math.min(112 / image.width, 112 / image.height);
+    const width = Math.max(1, Math.round(image.width * scale));
+    const height = Math.max(1, Math.round(image.height * scale));
+    context.imageSmoothingEnabled = false;
+    context.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+    meta.textContent = `${cape.name} · ${image.naturalWidth}x${image.naturalHeight}`;
+  };
+  image.onerror = () => { meta.textContent = 'This image could not be previewed.'; };
+  image.src = cape.image;
+}
+
+async function initThemeSystem() {
+  enhanceThemeColorControls();
+  const result = await launcherBridge?.getThemes?.();
+  if (result?.currentTheme) {
+    currentEditingTheme = result.currentTheme;
+    renderThemePresetOptions(result.themes, result.activeThemeId || '1');
+    populateThemeUI(currentEditingTheme);
+    await applyThemePreview(currentEditingTheme);
+  }
+  loadCapeLibrary();
+}
+
+// Initialize theme system on app load
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initThemeSystem);
+} else {
+  initThemeSystem();
+}
+
 </script>

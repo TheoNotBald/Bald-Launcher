@@ -17,7 +17,15 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   getVersions: () => ipcRenderer.invoke('launcher:get-versions'),
   createProfile: profile => ipcRenderer.invoke('launcher:create-profile', profile),
   updateProfile: profile => ipcRenderer.invoke('launcher:update-profile', profile),
-  deleteProfile: profileId => ipcRenderer.invoke('launcher:delete-profile', profileId),
+  duplicateProfile: (profileId, name) => ipcRenderer.invoke('launcher:duplicate-profile', { profileId, name }),
+  exportProfile: profileId => ipcRenderer.invoke('launcher:export-profile', profileId),
+  exportModpack: payload => ipcRenderer.invoke('launcher:export-modpack', payload),
+  importProfile: () => ipcRenderer.invoke('launcher:import-profile'),
+  backupProfile: profileId => ipcRenderer.invoke('launcher:backup-profile', profileId),
+  restoreProfile: profileId => ipcRenderer.invoke('launcher:restore-profile', profileId),
+  revealProfile: profileId => ipcRenderer.invoke('launcher:reveal-profile', profileId),
+  importLocalContent: profileId => ipcRenderer.invoke('launcher:import-local-content', profileId),
+  deleteProfile: (profileId, deleteFiles) => ipcRenderer.invoke('launcher:delete-profile', { profileId, deleteFiles: deleteFiles === true }),
   setActiveProfile: profileId => ipcRenderer.invoke('launcher:set-active-profile', profileId),
   previewBundle: params => ipcRenderer.invoke('launcher:preview-bundle', params),
   applyBundle: payload => ipcRenderer.invoke('launcher:apply-bundle', payload),
@@ -33,6 +41,9 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   launch: payload => ipcRenderer.invoke('launcher:launch', payload),
   stop: profileId => ipcRenderer.invoke('launcher:stop', { profileId }),
   getDiagnostics: () => ipcRenderer.invoke('launcher:get-diagnostics'),
+  analyzeCrash: profileId => ipcRenderer.invoke('launcher:analyze-crash', profileId),
+  getPerformance: profileId => ipcRenderer.invoke('launcher:get-performance', profileId),
+  runBenchmark: payload => ipcRenderer.invoke('launcher:run-benchmark', payload),
 
   createServer: server => ipcRenderer.invoke('launcher:create-server', server),
   startServer: serverId => ipcRenderer.invoke('launcher:start-server', { serverId }),
@@ -124,4 +135,18 @@ contextBridge.exposeInMainWorld('launcherAPI', {
     ipcRenderer.on('launcher:server-console', handler);
     return () => ipcRenderer.removeListener('launcher:server-console', handler);
   },
+
+  // themes
+  getThemes: () => ipcRenderer.invoke('launcher:get-themes'),
+  setActiveTheme: themeId => ipcRenderer.invoke('launcher:set-active-theme', themeId),
+  updateTheme: (themeId, updates) => ipcRenderer.invoke('launcher:update-theme', { themeId, updates }),
+  duplicateTheme: (fromThemeId, toThemeId, name) => ipcRenderer.invoke('launcher:duplicate-theme', { fromThemeId, toThemeId, name }),
+  renameTheme: (themeId, name) => ipcRenderer.invoke('launcher:rename-theme', { themeId, name }),
+  deleteTheme: themeId => ipcRenderer.invoke('launcher:delete-theme', themeId),
+  resetTheme: themeId => ipcRenderer.invoke('launcher:reset-theme', themeId),
+  resetThemeCategory: (themeId, category) => ipcRenderer.invoke('launcher:reset-theme-category', { themeId, category }),
+  exportTheme: themeId => ipcRenderer.invoke('launcher:export-theme', themeId),
+  importTheme: (themeId, jsonString) => ipcRenderer.invoke('launcher:import-theme', { themeId, jsonString }),
+  backupThemes: () => ipcRenderer.invoke('launcher:backup-themes'),
+  restoreThemes: backup => ipcRenderer.invoke('launcher:restore-themes', backup),
 });

@@ -21,6 +21,7 @@ files:
   - build/icon.ico
   - node_modules/**/*
   - patches/**/*
+  - src/**/*
   - package.json
 publish:
   provider: github

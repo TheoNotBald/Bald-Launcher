@@ -5,10 +5,12 @@ const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 const axios = require('axios');
+const AdmZip = require('adm-zip');
 const pidusage = require('pidusage');
 const MCLC = require('minecraft-launcher-core');
 const { autoUpdater } = require('electron-updater');
 const { createPlayitManager } = require('./playit-manager');
+const { createStateStore } = require('./src/shared/state-store');
 
 app.commandLine.appendSwitch('disable-features', 'DIPS');
 
@@ -17,7 +19,6 @@ const launcher = new MCLC.Client();
 let mainWindow;
 let reloadTimer;
 let stateFilePath;
-let writeStateTimer = null;
 let writeStatePending = false;
 const contentSearchCache = new Map();
 const CONTENT_SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -248,6 +249,147 @@ const OPTIMIZATION_PROJECT_SLUGS = {
 const OPTIONAL_RENDERER_RECOMMENDATIONS = new Set(['EntityCulling', 'MoreCulling']);
 
 
+const DEFAULT_THEME = {
+  name: 'Default',
+  colors: {
+    bgVoid: '#0a0a0a',
+    bgSurface: '#111111',
+    bgSurface2: '#161616',
+    border: '#1e1e1e',
+    borderStrong: '#2a2a2a',
+    accentGreen: '#7ef15e',
+    accentGreenBg: '#2d6e1a',
+    accentGreenBgHover: '#357a1e',
+    accentGreenText: '#d4f0c4',
+    accentPurple: '#7f77dd',
+    accentPurpleBg: '#221c47',
+    textPrimary: '#cccccc',
+    textSecondary: '#555555',
+    textMuted: '#3a3a3a',
+    bgSidebar: '#0f1317',
+    bgHeader: '#0a0a0a',
+    bgCard: '#111111',
+    bgCardHover: '#1a2128',
+    bgSelected: '#18251a',
+    bgInput: '#161616',
+    inputFocus: '#7ef15e',
+    accentPrimaryHover: '#91f270',
+    accentSecondaryHover: '#aaa3ff',
+    success: '#78e35a',
+    warning: '#e5b84e',
+    error: '#f06a6a',
+    info: '#69b9ee',
+    playButton: '#2d6e1a',
+    browseButton: '#221c47',
+    downloadButton: '#2d6e1a',
+    dangerButton: '#7f1d1d',
+    scrollbar: '#35424e',
+    notification: '#f06a6a',
+  },
+  typography: {
+    fontFamily: 'system-ui, -apple-system, sans-serif',
+    fontSizeXs: '10px',
+    fontSizeSm: '11px',
+    fontSizeBase: '12px',
+    fontSizeMd: '13px',
+    fontSizeLg: '14px',
+    fontSizeXl: '16px',
+    fontWeight: '400',
+    headingWeight: '650',
+    letterSpacing: '0px',
+    lineHeight: '1.45',
+  },
+  spacing: {
+    paddingSmall: '8px',
+    paddingBase: '12px',
+    paddingLarge: '16px',
+    gapSmall: '4px',
+    gapBase: '8px',
+    gapLarge: '14px',
+    compact: '8px',
+    comfortable: '12px',
+    spacious: '18px',
+  },
+  borders: {
+    radiusSmall: '6px',
+    radiusBase: '8px',
+    radiusMd: '12px',
+    borderWidth: '0.5px',
+    enabled: true,
+    opacity: 100,
+    style: 'solid',
+  },
+  background: {
+    type: 'solid',
+    image: '',
+    blur: 0,
+    opacity: 100,
+    overlayColor: '#000000',
+    overlayOpacity: 0,
+    brightness: 100,
+    saturation: 100,
+    fit: 'cover',
+    gradient: 'linear-gradient(135deg, #0a0a0a, #161616)',
+  },
+  corners: {
+    card: '9px',
+    button: '8px',
+    input: '6px',
+    tab: '6px',
+    modCard: '9px',
+    serverCard: '9px',
+    profileCard: '12px',
+    modal: '12px',
+    notification: '8px',
+  },
+  shadows: {
+    small: '0 2px 8px rgba(0,0,0,.22)',
+    medium: '0 8px 24px rgba(0,0,0,.3)',
+    large: '0 18px 48px rgba(0,0,0,.4)',
+  },
+  effects: {
+    shadowEnabled: true,
+    glowEnabled: false,
+    blur: 0,
+    transparency: 100,
+    cardOpacity: 100,
+    backgroundBlur: 0,
+    buttonGlow: 0,
+    hoverLift: 1,
+    transitionSpeed: 180,
+    reducedMotion: false,
+  },
+  sidebar: {
+    width: '76px',
+    background: '#0f1317',
+    border: '#26303a',
+    iconSize: '20px',
+    textSize: '11px',
+    selectedBackground: '#18251a',
+    selectedText: '#78e35a',
+    hoverBackground: '#1a2128',
+    hoverText: '#e5e9ed',
+    radius: '10px',
+    spacing: '6px',
+  },
+  buttons: { radius: '8px', height: '36px', weight: '600', glow: 0 },
+  cards: { background: '#111111', hover: '#1a2128', selected: '#18251a', opacity: 100, radius: '9px', shadow: true },
+  inputs: { background: '#161616', focus: '#7ef15e', radius: '6px', border: '#35424e' },
+  modals: { background: '#111111', opacity: 100, radius: '12px', shadow: true, blur: 4 },
+  advanced: {
+    customCss: '',
+  },
+};
+
+function createBuiltInTheme(name, overrides = {}) {
+  const theme = JSON.parse(JSON.stringify(DEFAULT_THEME));
+  Object.entries(overrides).forEach(([section, values]) => {
+    theme[section] = { ...(theme[section] || {}), ...values };
+  });
+  theme.name = name;
+  return theme;
+}
+
 const DEFAULT_STATE = {
   accounts: [
     { id: 'ms-main', name: 'YourName', type: 'Microsoft', initials: 'YO', accent: '#3c3489', fg: '#ceecf6' },
@@ -277,12 +419,43 @@ const DEFAULT_STATE = {
     customJvmArgs: '',
     processPriority: 'normal',
   },
+  themes: {
+    '1': createBuiltInTheme('Bald Dark'),
+    '2': createBuiltInTheme('AMOLED', { colors: { bgVoid: '#000000', bgSurface: '#050505', bgSurface2: '#0b0b0b', bgSidebar: '#020202', bgCard: '#070707' } }),
+    '3': createBuiltInTheme('Emerald', { colors: { accentGreen: '#65f28b', accentGreenBg: '#155c34', accentGreenBgHover: '#1d7844', selected: '#163a27', accentPurple: '#63d5c8' }, sidebar: { selectedBackground: '#163a27', selectedText: '#65f28b' } }),
+    '4': createBuiltInTheme('Purple', { colors: { accentGreen: '#c2a3ff', accentGreenBg: '#493477', accentGreenBgHover: '#5f4798', accentPurple: '#d3bfff', accentPurpleBg: '#2f2050', inputFocus: '#c2a3ff' }, sidebar: { selectedBackground: '#2f2050', selectedText: '#d3bfff' } }),
+    '5': createBuiltInTheme('Minecraft', { colors: { accentGreen: '#7bc043', accentGreenBg: '#35651b', accentGreenBgHover: '#477e23', accentPurple: '#d4a85c', accentPurpleBg: '#4a351d', bgCard: '#151713' }, sidebar: { selectedBackground: '#203b16', selectedText: '#9be45f' } }),
+  },
+  activeThemeId: '1',
   servers: [],
 };
 
 let launcherState = cloneDefaultState();
+const launcherStateStore = createStateStore({
+  getStateFilePath: () => getStateFilePath(),
+  initialState: launcherState,
+  normalizeState: rawState => {
+    if (!rawState || typeof rawState !== 'object') return cloneDefaultState();
+    if (rawState && Array.isArray(rawState.profiles) && rawState.profiles.length) {
+      return {
+        accounts: Array.isArray(rawState.accounts) && rawState.accounts.length ? rawState.accounts.map(normalizeAccount) : DEFAULT_STATE.accounts.map(normalizeAccount),
+        activeAccountId: rawState.activeAccountId || DEFAULT_STATE.activeAccountId,
+        profiles: rawState.profiles,
+        activeProfileId: rawState.activeProfileId || rawState.profiles[0].id,
+        settings: normalizeSettings(rawState.settings),
+        sessions: Array.isArray(rawState.sessions) ? rawState.sessions : [],
+        servers: Array.isArray(rawState.servers) ? rawState.servers.map(normalizeServer) : [],
+        themes: rawState.themes || DEFAULT_STATE.themes,
+        activeThemeId: rawState.activeThemeId || DEFAULT_STATE.activeThemeId,
+      };
+    }
+    return cloneDefaultState();
+  },
+  onPersistError: error => console.error('State persistence error:', error),
+});
 const runningProcesses = new Map();
 const serverProcesses = new Map();
+const serverStartedAt = new Map();
 const serverTpsSamples = new Map();
 const tpsPollState = new Map();
 let playitProcess = null;
@@ -794,6 +967,102 @@ function getMinecraftRootFor(profileId) {
   return path.join(app.getPath('userData'), 'profiles', profileId);
 }
 
+const BALD_PROFILE_SCHEMA_VERSION = 1;
+
+function createProfileId() {
+  return `profile-${crypto.randomUUID()}`;
+}
+
+function getProfileBackupRoot(profileId) {
+  return path.join(app.getPath('userData'), 'profile-backups', profileId);
+}
+
+function readTextIfPresent(filePath, maxBytes = 2 * 1024 * 1024) {
+  try {
+    if (!fs.existsSync(filePath)) return '';
+    const stat = fs.statSync(filePath);
+    const start = Math.max(0, stat.size - maxBytes);
+    const handle = fs.openSync(filePath, 'r');
+    const buffer = Buffer.alloc(Math.min(stat.size, maxBytes));
+    fs.readSync(handle, buffer, 0, buffer.length, start);
+    fs.closeSync(handle);
+    return buffer.toString('utf8');
+  } catch (_error) {
+    return '';
+  }
+}
+
+function analyzeMinecraftFailure(profile, session = null, exitCode = null) {
+  const root = getMinecraftRootFor(profile.id);
+  const latestLogPath = path.join(root, 'logs', 'latest.log');
+  const crashRoot = path.join(root, 'crash-reports');
+  const crashFiles = fs.existsSync(crashRoot)
+    ? fs.readdirSync(crashRoot).filter(file => file.endsWith('.txt')).sort().reverse()
+    : [];
+  const crashPath = crashFiles[0] ? path.join(crashRoot, crashFiles[0]) : null;
+  const latestLog = readTextIfPresent(latestLogPath);
+  const crashReport = crashPath ? readTextIfPresent(crashPath) : '';
+  const launcherLog = (session?.logs || []).map(entry => entry.line || '').join('\n');
+  const combined = `${crashReport}\n${latestLog}\n${launcherLog}`;
+  const evidence = [];
+  const findings = [];
+  const addFinding = (cause, confidence, text, fix, kind = 'problem') => findings.push({ cause, confidence, evidence: text, suggestedFix: fix, kind });
+
+  if (/requires .* but .* is missing|missing (?:dependency|required mod)|could not find required mod|no such dependency/i.test(combined)) {
+    const match = combined.match(/(?:requires|missing|required mod)[: ]+([^\n.]+)/i);
+    const text = match ? match[0].trim() : 'The log reports a missing required dependency.';
+    evidence.push(text); addFinding('Missing mod dependency', 96, text, 'Install the required dependency for this Minecraft version and loader.');
+  }
+  if (/MixinApplyError|mixin .* failed|failed to apply mixin|org\.spongepowered\.asm\.mixin/i.test(combined)) {
+    const lines = combined.split(/\r?\n/).filter(line => /mixin/i.test(line)).slice(0, 3).join(' ');
+    evidence.push(lines); addFinding('Incompatible mod or mixin failure', 91, lines || 'A mixin failed during startup.', 'Disable the named mod or update it and its dependencies for this Minecraft version.');
+  }
+  if (/unsupported class file major version|class file version|java version|requires java [0-9]+|not a valid java runtime/i.test(combined)) {
+    const text = combined.split(/\r?\n/).find(line => /java|class file/i.test(line)) || 'The Java runtime rejected the game or loader.';
+    evidence.push(text); addFinding('Java version problem', 94, text, 'Select a compatible Java installation for this Minecraft version.');
+  }
+  if (/OutOfMemoryError|could not reserve enough space|unable to create native thread|Java heap space/i.test(combined)) {
+    const text = combined.split(/\r?\n/).find(line => /memory|heap|reserve|thread/i.test(line)) || 'The Java process ran out of memory.';
+    evidence.push(text); addFinding('Insufficient memory allocation', 95, text, 'Increase the profile RAM allocation or reduce memory-heavy mods and settings.');
+  }
+  if (/OpenGL|GLFW|LWJGL|Vulkan|graphics driver|NoSuchMethodError.*render/i.test(combined)) {
+    const text = combined.split(/\r?\n/).find(line => /OpenGL|GLFW|LWJGL|Vulkan|driver/i.test(line)) || 'The log contains graphics initialization errors.';
+    evidence.push(text); addFinding('Graphics driver or renderer problem', 82, text, 'Update the graphics driver or switch this profile to a compatible renderer.');
+  }
+  if (/NoSuchFileException|FileNotFoundException|Could not find .*\.jar|corrupt|zip END header not found|Invalid or corrupt jarfile/i.test(combined)) {
+    const text = combined.split(/\r?\n/).find(line => /FileNotFound|corrupt|jar|NoSuchFile/i.test(line)) || 'A required game file could not be read.';
+    evidence.push(text); addFinding('Corrupted or missing game file', 88, text, 'Use the profile folder and reinstall the affected mod or repair the Minecraft files.');
+  }
+  const modFiles = fs.existsSync(path.join(root, 'mods')) ? fs.readdirSync(path.join(root, 'mods')).filter(file => /\.jar(?:\.disabled)?$/i.test(file)) : [];
+  const duplicateNames = modFiles.map(file => file.replace(/\.disabled$/i, '').replace(/[-_ ]?(?:fabric|forge|neoforge|quilt)?[-_ ]?\d.*$/i, '').toLowerCase()).filter((name, index, list) => name && list.indexOf(name) !== index);
+  if (duplicateNames.length) addFinding('Duplicate mod files', 86, `Duplicate-looking mod names: ${[...new Set(duplicateNames)].join(', ')}`, 'Remove duplicate copies from the profile mods folder.');
+  if (!findings.length && exitCode !== 0) addFinding('Minecraft process failure', 45, `Minecraft exited with code ${exitCode ?? 'unknown'} and no specific rule matched the available logs.`, 'Open the latest log and crash report, then review recently changed mods.', 'warning');
+  return {
+    crashed: exitCode !== null && exitCode !== 0,
+    exitCode,
+    profileId: profile.id,
+    profileName: profile.name,
+    crashReportPath: crashPath,
+    latestLogPath: fs.existsSync(latestLogPath) ? latestLogPath : null,
+    findings,
+    evidence,
+    analyzedAt: new Date().toISOString(),
+  };
+}
+
+function validateProfileExport(value) {
+  if (!value || typeof value !== 'object' || value.format !== 'baldprofile') {
+    throw new Error('This file is not a Bald Launcher profile export.');
+  }
+  if (value.schemaVersion !== BALD_PROFILE_SCHEMA_VERSION) {
+    throw new Error(`Unsupported Bald profile version: ${value.schemaVersion || 'unknown'}`);
+  }
+  if (!value.profile || typeof value.profile !== 'object') throw new Error('The profile export is missing its profile data.');
+  const profile = normalizeProfile(value.profile);
+  if (!profile.name || !profile.mcVersion || !profile.loader) throw new Error('The profile export is incomplete.');
+  return profile;
+}
+
 function getServerRoot(serverId) {
   return path.join(app.getPath('userData'), 'servers', String(serverId || 'unknown'));
 }
@@ -1177,52 +1446,20 @@ function getStateFilePath() {
 }
 
 function readStateFromDisk() {
-  try {
-    if (fs.existsSync(stateFilePath)) {
-      const parsed = JSON.parse(fs.readFileSync(stateFilePath, 'utf8'));
-      if (parsed && Array.isArray(parsed.profiles) && parsed.profiles.length) {
-        return {
-          accounts: Array.isArray(parsed.accounts) && parsed.accounts.length
-            ? parsed.accounts.map(normalizeAccount)
-            : DEFAULT_STATE.accounts.map(normalizeAccount),
-          activeAccountId: parsed.activeAccountId || DEFAULT_STATE.activeAccountId,
-          profiles: parsed.profiles,
-          activeProfileId: parsed.activeProfileId || parsed.profiles[0].id,
-          settings: normalizeSettings(parsed.settings),
-          sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
-          servers: Array.isArray(parsed.servers) ? parsed.servers.map(normalizeServer) : [],
-        };
-      }
-    }
-  } catch (error) {
-    console.error('Failed to read launcher state:', error);
-  }
-  return cloneDefaultState();
+  launcherState = launcherStateStore.readFromDisk();
+  return launcherState;
 }
 
 function flushStateWrite() {
-  try {
-    fs.writeFileSync(stateFilePath, JSON.stringify(launcherState, null, 2), 'utf8');
-    writeStatePending = false;
-  } catch (error) {
-    console.error('Failed to save launcher state:', error);
-  }
+  launcherStateStore.setState(launcherState);
+  launcherStateStore.flush();
+  writeStatePending = false;
 }
 
 function scheduleStateWriteInternal() {
+  launcherStateStore.setState(launcherState);
   writeStatePending = true;
-  if (writeStateTimer) return;
-  writeStateTimer = setTimeout(async () => {
-    writeStateTimer = null;
-    if (!writeStatePending) return;
-    writeStatePending = false;
-    try {
-      await fs.promises.writeFile(stateFilePath, JSON.stringify(launcherState, null, 2), 'utf8');
-    } catch (error) {
-      writeStatePending = true;
-      console.error('Failed to save launcher state:', error);
-    }
-  }, 400);
+  launcherStateStore.scheduleWrite(400);
 }
 
 function scheduleStateWrite() {
@@ -1301,6 +1538,11 @@ function normalizeProfile(profile) {
     loader,
     rendererMode,
     icon: String(profile?.icon || name.slice(0, 1).toUpperCase()).slice(0, 2),
+    javaPath: String(profile?.javaPath || '').trim(),
+    memoryMax: Math.min(32, Math.max(1, Number(profile?.memoryMax) || DEFAULT_STATE.settings.memoryMax)),
+    jvmProfile: ['default', 'zgc', 'custom'].includes(profile?.jvmProfile) ? profile.jvmProfile : 'default',
+    customJvmArgs: String(profile?.customJvmArgs || ''),
+    benchmarkHistory: Array.isArray(profile?.benchmarkHistory) ? profile.benchmarkHistory.slice(-30) : [],
     // Each entry is the installed content's own record, not just an id, so the
     // Content tab can render a real installed-library list (name/type/enabled)
     // without needing a live Modrinth lookup every time the profile opens.
@@ -1361,6 +1603,169 @@ function normalizeSettings(settings) {
     customJvmArgs: String(settings?.customJvmArgs || ''),
     processPriority: settings?.processPriority === 'above-normal' ? 'above-normal' : 'normal',
   };
+}
+
+function normalizeTheme(theme) {
+  const base = theme || JSON.parse(JSON.stringify(DEFAULT_THEME));
+  const number = (value, fallback, min, max) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
+  };
+  const safeCss = (value, fallback) => String(value || fallback).replace(/[{};]/g, '').trim().slice(0, 300) || fallback;
+  const color = (value, fallback) => {
+    const candidate = safeCss(value, fallback);
+    return /^(#[0-9a-f]{3,8}|rgba?\([^)]*\)|hsla?\([^)]*\)|var\(--[a-z0-9-]+\))$/i.test(candidate) ? candidate : fallback;
+  };
+  const string = (value, fallback) => safeCss(value, fallback);
+  return {
+    name: String(base?.name || 'Custom Theme').slice(0, 100),
+    colors: {
+      bgVoid: color(base?.colors?.bgVoid, '#0a0a0a'),
+      bgSurface: color(base?.colors?.bgSurface, '#111111'),
+      bgSurface2: color(base?.colors?.bgSurface2, '#161616'),
+      border: color(base?.colors?.border, '#1e1e1e'),
+      borderStrong: color(base?.colors?.borderStrong, '#2a2a2a'),
+      accentGreen: color(base?.colors?.accentGreen, '#7ef15e'),
+      accentGreenBg: color(base?.colors?.accentGreenBg, '#2d6e1a'),
+      accentGreenBgHover: color(base?.colors?.accentGreenBgHover, '#357a1e'),
+      accentGreenText: color(base?.colors?.accentGreenText, '#d4f0c4'),
+      accentPurple: color(base?.colors?.accentPurple, '#7f77dd'),
+      accentPurpleBg: color(base?.colors?.accentPurpleBg, '#221c47'),
+      textPrimary: color(base?.colors?.textPrimary, '#cccccc'),
+      textSecondary: color(base?.colors?.textSecondary, '#555555'),
+      textMuted: color(base?.colors?.textMuted, '#3a3a3a'),
+      bgSidebar: color(base?.colors?.bgSidebar, '#0f1317'),
+      bgHeader: color(base?.colors?.bgHeader, '#0a0a0a'),
+      bgCard: color(base?.colors?.bgCard, '#111111'),
+      bgCardHover: color(base?.colors?.bgCardHover, '#1a2128'),
+      bgSelected: color(base?.colors?.bgSelected, '#18251a'),
+      bgInput: color(base?.colors?.bgInput, '#161616'),
+      inputFocus: color(base?.colors?.inputFocus, '#7ef15e'),
+      accentPrimaryHover: color(base?.colors?.accentPrimaryHover, '#91f270'),
+      accentSecondaryHover: color(base?.colors?.accentSecondaryHover, '#aaa3ff'),
+      success: color(base?.colors?.success, '#78e35a'),
+      warning: color(base?.colors?.warning, '#e5b84e'),
+      error: color(base?.colors?.error, '#f06a6a'),
+      info: color(base?.colors?.info, '#69b9ee'),
+      playButton: color(base?.colors?.playButton, '#2d6e1a'),
+      browseButton: color(base?.colors?.browseButton, '#221c47'),
+      downloadButton: color(base?.colors?.downloadButton, '#2d6e1a'),
+      dangerButton: color(base?.colors?.dangerButton, '#7f1d1d'),
+      scrollbar: color(base?.colors?.scrollbar, '#35424e'),
+      notification: color(base?.colors?.notification, '#f06a6a'),
+    },
+    typography: {
+      fontFamily: String(base?.typography?.fontFamily || 'system-ui, -apple-system, sans-serif'),
+      fontSizeXs: String(base?.typography?.fontSizeXs || '10px'),
+      fontSizeSm: String(base?.typography?.fontSizeSm || '11px'),
+      fontSizeBase: String(base?.typography?.fontSizeBase || '12px'),
+      fontSizeMd: String(base?.typography?.fontSizeMd || '13px'),
+      fontSizeLg: String(base?.typography?.fontSizeLg || '14px'),
+      fontSizeXl: String(base?.typography?.fontSizeXl || '16px'),
+      fontWeight: string(base?.typography?.fontWeight, '400'),
+      headingWeight: string(base?.typography?.headingWeight, '650'),
+      letterSpacing: string(base?.typography?.letterSpacing, '0px'),
+      lineHeight: string(base?.typography?.lineHeight, '1.45'),
+    },
+    spacing: {
+      paddingSmall: String(base?.spacing?.paddingSmall || '8px'),
+      paddingBase: String(base?.spacing?.paddingBase || '12px'),
+      paddingLarge: String(base?.spacing?.paddingLarge || '16px'),
+      gapSmall: String(base?.spacing?.gapSmall || '4px'),
+      gapBase: String(base?.spacing?.gapBase || '8px'),
+      gapLarge: String(base?.spacing?.gapLarge || '14px'),
+      compact: string(base?.spacing?.compact, '8px'),
+      comfortable: string(base?.spacing?.comfortable, '12px'),
+      spacious: string(base?.spacing?.spacious, '18px'),
+    },
+    borders: {
+      radiusSmall: String(base?.borders?.radiusSmall || '6px'),
+      radiusBase: String(base?.borders?.radiusBase || '8px'),
+      radiusMd: String(base?.borders?.radiusMd || '12px'),
+      borderWidth: String(base?.borders?.borderWidth || '0.5px'),
+      enabled: base?.borders?.enabled !== false,
+      opacity: number(base?.borders?.opacity, 100, 0, 100),
+      style: ['solid', 'dashed', 'dotted', 'double'].includes(base?.borders?.style) ? base.borders.style : 'solid',
+    },
+    background: {
+      type: ['solid', 'gradient', 'image'].includes(base?.background?.type) ? base.background.type : 'solid',
+      image: String(base?.background?.image || ''),
+      blur: Number(base?.background?.blur || 0),
+      opacity: Math.min(100, Math.max(0, Number(base?.background?.opacity) || 100)),
+      overlayColor: String(base?.background?.overlayColor || '#000000'),
+      overlayOpacity: Math.min(100, Math.max(0, Number(base?.background?.overlayOpacity) || 0)),
+      brightness: number(base?.background?.brightness, 100, 25, 200),
+      saturation: number(base?.background?.saturation, 100, 0, 200),
+      fit: ['cover', 'contain', 'fill'].includes(base?.background?.fit) ? base.background.fit : 'cover',
+      gradient: string(base?.background?.gradient, 'linear-gradient(135deg, #0a0a0a, #161616)'),
+    },
+    corners: Object.fromEntries(Object.entries(DEFAULT_THEME.corners).map(([key, fallback]) => [key, string(base?.corners?.[key], fallback)])),
+    shadows: Object.fromEntries(Object.entries(DEFAULT_THEME.shadows).map(([key, fallback]) => [key, string(base?.shadows?.[key], fallback)])),
+    effects: {
+      shadowEnabled: base?.effects?.shadowEnabled !== false,
+      glowEnabled: base?.effects?.glowEnabled === true,
+      blur: number(base?.effects?.blur, 0, 0, 24),
+      transparency: number(base?.effects?.transparency, 100, 20, 100),
+      cardOpacity: number(base?.effects?.cardOpacity, 100, 30, 100),
+      backgroundBlur: number(base?.effects?.backgroundBlur, 0, 0, 32),
+      buttonGlow: number(base?.effects?.buttonGlow, 0, 0, 24),
+      hoverLift: number(base?.effects?.hoverLift, 1, 0, 6),
+      transitionSpeed: number(base?.effects?.transitionSpeed, 180, 0, 1000),
+      reducedMotion: base?.effects?.reducedMotion === true,
+    },
+    sidebar: Object.fromEntries(Object.entries(DEFAULT_THEME.sidebar).map(([key, fallback]) => [key, key === 'width' ? string(base?.sidebar?.[key], fallback) : color(base?.sidebar?.[key], fallback)])),
+    buttons: { radius: string(base?.buttons?.radius, '8px'), height: string(base?.buttons?.height, '36px'), weight: string(base?.buttons?.weight, '600'), glow: number(base?.buttons?.glow, 0, 0, 24) },
+    cards: { background: color(base?.cards?.background, '#111111'), hover: color(base?.cards?.hover, '#1a2128'), selected: color(base?.cards?.selected, '#18251a'), opacity: number(base?.cards?.opacity, 100, 30, 100), radius: string(base?.cards?.radius, '9px'), shadow: base?.cards?.shadow !== false },
+    inputs: { background: color(base?.inputs?.background, '#161616'), focus: color(base?.inputs?.focus, '#7ef15e'), radius: string(base?.inputs?.radius, '6px'), border: color(base?.inputs?.border, '#35424e') },
+    modals: { background: color(base?.modals?.background, '#111111'), opacity: number(base?.modals?.opacity, 100, 40, 100), radius: string(base?.modals?.radius, '12px'), shadow: base?.modals?.shadow !== false, blur: number(base?.modals?.blur, 4, 0, 24) },
+    advanced: {
+      customCss: String(base?.advanced?.customCss || ''),
+    },
+  };
+}
+
+function getActiveTheme() {
+  const themeId = String(launcherState.activeThemeId || '1');
+  return normalizeTheme(launcherState.themes?.[themeId] || DEFAULT_THEME);
+}
+
+function generateThemeCss(theme) {
+  const t = normalizeTheme(theme);
+  let css = `:root {
+    --bg-void: ${t.colors.bgVoid};
+    --bg-surface: ${t.colors.bgSurface};
+    --bg-surface-2: ${t.colors.bgSurface2};
+    --border: ${t.colors.border};
+    --border-strong: ${t.colors.borderStrong};
+    --accent-green: ${t.colors.accentGreen};
+    --accent-green-bg: ${t.colors.accentGreenBg};
+    --accent-green-bg-hover: ${t.colors.accentGreenBgHover};
+    --accent-green-text-on-dark: ${t.colors.accentGreenText};
+    --accent-purple: ${t.colors.accentPurple};
+    --accent-purple-bg: ${t.colors.accentPurpleBg};
+    --text-primary: ${t.colors.textPrimary};
+    --text-secondary: ${t.colors.textSecondary};
+    --text-muted: ${t.colors.textMuted};
+    --text-xs: ${t.typography.fontSizeXs};
+    --text-sm: ${t.typography.fontSizeSm};
+    --text-base: ${t.typography.fontSizeBase};
+    --text-md: ${t.typography.fontSizeMd};
+    --text-lg: ${t.typography.fontSizeLg};
+    --text-xl: ${t.typography.fontSizeXl};
+    --font-sans: ${t.typography.fontFamily};
+    --p-small: ${t.spacing.paddingSmall};
+    --p-base: ${t.spacing.paddingBase};
+    --p-large: ${t.spacing.paddingLarge};
+    --gap-small: ${t.spacing.gapSmall};
+    --gap-base: ${t.spacing.gapBase};
+    --gap-large: ${t.spacing.gapLarge};
+    --radius-small: ${t.borders.radiusSmall};
+    --radius-base: ${t.borders.radiusBase};
+    --radius-md: ${t.borders.radiusMd};
+    --border-width: ${t.borders.borderWidth};
+  }`;
+  if (t.advanced.customCss) css += `\n${t.advanced.customCss}`;
+  return css;
 }
 
 function getCurseForgeApiKey() {
@@ -1797,6 +2202,128 @@ ipcMain.handle('launcher:sync-state', async (_event, nextState) => {
 });
 
 // ---------------------------------------------------------------------------
+// IPC: themes
+// ---------------------------------------------------------------------------
+ipcMain.handle('launcher:get-themes', async () => {
+  return {
+    themes: launcherState.themes || DEFAULT_STATE.themes,
+    activeThemeId: launcherState.activeThemeId || '1',
+    currentTheme: getActiveTheme(),
+  };
+});
+
+ipcMain.handle('launcher:set-active-theme', async (_event, themeId) => {
+  if (launcherState.themes?.[String(themeId)]) {
+    launcherState.activeThemeId = String(themeId);
+    scheduleStateWrite();
+    return { ok: true, theme: getActiveTheme() };
+  }
+  return { ok: false, error: 'Theme not found' };
+});
+
+ipcMain.handle('launcher:update-theme', async (_event, { themeId, updates }) => {
+  const id = String(themeId || launcherState.activeThemeId || '1');
+  if (!launcherState.themes?.[id]) return { ok: false, error: 'Theme not found' };
+  const existing = normalizeTheme(launcherState.themes[id]);
+  launcherState.themes[id] = normalizeTheme({ ...existing, ...updates });
+  scheduleStateWrite();
+  return { ok: true, theme: launcherState.themes[id] };
+});
+
+ipcMain.handle('launcher:duplicate-theme', async (_event, { fromThemeId, toThemeId, name }) => {
+  const from = String(fromThemeId || launcherState.activeThemeId || '1');
+  const to = String(toThemeId);
+  if (!launcherState.themes?.[from]) return { ok: false, error: 'Source theme not found' };
+  if (!['1', '2', '3', '4', '5'].includes(to)) return { ok: false, error: 'Invalid target preset' };
+  const newTheme = JSON.parse(JSON.stringify(launcherState.themes[from]));
+  newTheme.name = String(name || `Preset ${to}`).slice(0, 100);
+  launcherState.themes[to] = normalizeTheme(newTheme);
+  scheduleStateWrite();
+  return { ok: true, theme: launcherState.themes[to] };
+});
+
+ipcMain.handle('launcher:rename-theme', async (_event, { themeId, name }) => {
+  const id = String(themeId || launcherState.activeThemeId || '1');
+  if (!launcherState.themes?.[id]) return { ok: false, error: 'Theme not found' };
+  launcherState.themes[id] = normalizeTheme({ ...launcherState.themes[id], name: String(name || '').trim().slice(0, 100) || `Theme ${id}` });
+  scheduleStateWrite();
+  return { ok: true, theme: launcherState.themes[id] };
+});
+
+ipcMain.handle('launcher:delete-theme', async (_event, themeId) => {
+  const id = String(themeId || '');
+  const ids = Object.keys(launcherState.themes || {});
+  if (!launcherState.themes?.[id]) return { ok: false, error: 'Theme not found' };
+  if (ids.length <= 1) return { ok: false, error: 'At least one theme must remain' };
+  delete launcherState.themes[id];
+  if (launcherState.activeThemeId === id) launcherState.activeThemeId = Object.keys(launcherState.themes)[0];
+  scheduleStateWrite();
+  return { ok: true, activeThemeId: launcherState.activeThemeId, themes: launcherState.themes };
+});
+
+ipcMain.handle('launcher:reset-theme', async (_event, themeId) => {
+  const id = String(themeId || '1');
+  if (!['1', '2', '3', '4', '5'].includes(id)) return { ok: false, error: 'Invalid preset' };
+  launcherState.themes[id] = normalizeTheme({ ...DEFAULT_THEME, name: `Preset ${id}` });
+  scheduleStateWrite();
+  return { ok: true, theme: launcherState.themes[id] };
+});
+
+ipcMain.handle('launcher:reset-theme-category', async (_event, { themeId, category }) => {
+  const id = String(themeId || '1');
+  const allowed = ['colors', 'typography', 'spacing', 'borders', 'background', 'corners', 'shadows', 'effects', 'sidebar', 'buttons', 'cards', 'inputs', 'modals', 'advanced'];
+  if (!launcherState.themes?.[id] || !allowed.includes(category)) return { ok: false, error: 'Invalid theme category' };
+  launcherState.themes[id] = normalizeTheme({ ...launcherState.themes[id], [category]: JSON.parse(JSON.stringify(DEFAULT_THEME[category])) });
+  scheduleStateWrite();
+  return { ok: true, theme: launcherState.themes[id] };
+});
+
+ipcMain.handle('launcher:export-theme', async (_event, themeId) => {
+  const id = String(themeId || launcherState.activeThemeId || '1');
+  const theme = launcherState.themes?.[id];
+  if (!theme) return { ok: false, error: 'Theme not found' };
+  const json = JSON.stringify(normalizeTheme(theme), null, 2);
+  return { ok: true, json, name: `${theme.name || `Preset ${id}`}.baldtheme` };
+});
+
+ipcMain.handle('launcher:import-theme', async (_event, { themeId, jsonString }) => {
+  try {
+    const id = String(themeId || '1');
+    if (!['1', '2', '3', '4', '5'].includes(id)) return { ok: false, error: 'Invalid target preset' };
+    const imported = JSON.parse(String(jsonString || '{}'));
+    launcherState.themes[id] = normalizeTheme(imported);
+    scheduleStateWrite();
+    return { ok: true, theme: launcherState.themes[id] };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Invalid JSON' };
+  }
+});
+
+ipcMain.handle('launcher:backup-themes', async () => {
+  try {
+    const backup = JSON.stringify(launcherState.themes || DEFAULT_STATE.themes, null, 2);
+    return { ok: true, backup, timestamp: new Date().toISOString() };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Backup failed' };
+  }
+});
+
+ipcMain.handle('launcher:restore-themes', async (_event, backup) => {
+  try {
+    const restored = JSON.parse(String(backup || '{}'));
+    for (const key in restored) {
+      if (['1', '2', '3', '4', '5'].includes(key)) {
+        launcherState.themes[key] = normalizeTheme(restored[key]);
+      }
+    }
+    scheduleStateWrite();
+    return { ok: true, themes: launcherState.themes };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Restore failed' };
+  }
+});
+
+// ---------------------------------------------------------------------------
 // IPC: accounts
 // ---------------------------------------------------------------------------
 ipcMain.handle('launcher:set-active-account', async (_event, accountId) => {
@@ -1997,6 +2524,241 @@ ipcMain.handle('launcher:create-profile', async (_event, payload) => {
   return launcherState;
 });
 
+ipcMain.handle('launcher:duplicate-profile', async (_event, payload) => {
+  let duplicateRoot = null;
+  try {
+    const profileId = typeof payload === 'string' ? payload : payload?.profileId;
+    const source = launcherState.profiles.find(item => item.id === profileId);
+    if (!source) throw new Error('Profile not found');
+    const requestedName = typeof payload === 'object' ? String(payload?.name || '').trim() : '';
+    const duplicateName = requestedName.slice(0, 40) || `${source.name} Copy`;
+    if (launcherState.profiles.some(item => item.name.toLowerCase() === duplicateName.toLowerCase())) throw new Error('A profile with that name already exists.');
+    const duplicate = normalizeProfile({ ...JSON.parse(JSON.stringify(source)), id: createProfileId(), name: duplicateName });
+    const sourceRoot = getMinecraftRootFor(source.id);
+    duplicateRoot = getMinecraftRootFor(duplicate.id);
+    if (fs.existsSync(duplicateRoot)) throw new Error('A profile with this generated ID already exists.');
+    if (fs.existsSync(sourceRoot)) fs.cpSync(sourceRoot, duplicateRoot, { recursive: true, errorOnExist: true });
+    else ensureLauncherGameFolders(duplicateRoot);
+    launcherState.profiles.push(duplicate);
+    launcherState.activeProfileId = duplicate.id;
+    scheduleStateWrite();
+    return { ok: true, state: launcherState, profile: duplicate };
+  } catch (error) {
+    if (duplicateRoot) {
+      try { fs.rmSync(duplicateRoot, { recursive: true, force: true }); } catch (_cleanupError) {}
+    }
+    return { ok: false, error: error instanceof Error ? error.message : String(error), state: launcherState };
+  }
+});
+
+function getProfileContentPath(profile, entry) {
+  return resolveInstalledContentPath(profile, entry, entry.enabled === false) || resolveInstalledContentPath(profile, entry, false);
+}
+
+async function resolveModrinthPackFile(entry, profile) {
+  const versionParams = { game_versions: JSON.stringify([profile.mcVersion]), loaders: JSON.stringify([profile.loader]), limit: 50 };
+  const response = await axios.get(`${MODRINTH_API}/project/${encodeURIComponent(entry.id)}/version`, { params: versionParams, timeout: 15000 });
+  const versions = Array.isArray(response.data) ? response.data : [];
+  const selected = (entry.versionId && versions.find(version => version.id === entry.versionId)) || versions.find(version => version.files?.some(file => file.primary && file.url)) || versions.find(version => version.files?.some(file => file.url));
+  const file = selected?.files?.find(item => item.primary && item.url) || selected?.files?.find(item => item.url);
+  if (!file?.url) throw new Error(`${entry.name} has no downloadable Modrinth file for ${profile.mcVersion}/${profile.loader}.`);
+  return { url: file.url, fileName: file.filename, fileSize: Number(file.size) || null };
+}
+
+async function getMrpackDependencies(profile) {
+  const dependencies = { minecraft: profile.mcVersion };
+  if (profile.loader === 'fabric' || profile.loader === 'quilt') {
+    try {
+      const loaderResponse = await axios.get(`https://meta.${profile.loader}mc.net/v2/versions/loader/${encodeURIComponent(profile.mcVersion)}`, { timeout: 10000 });
+      const loaderVersion = loaderResponse.data?.[0]?.loader?.version;
+      if (loaderVersion) dependencies[`${profile.loader}-loader`] = loaderVersion;
+    } catch (_error) {
+      emitStatus(`Could not resolve ${profile.loader} loader metadata; exporting Minecraft dependency only.`);
+    }
+  }
+  return dependencies;
+}
+
+ipcMain.handle('launcher:export-modpack', async (_event, payload) => {
+  try {
+    const profile = launcherState.profiles.find(item => item.id === payload?.profileId);
+    if (!profile) throw new Error('Profile not found');
+    const options = { mods: true, configs: true, resourcepacks: true, shaders: true, worlds: false, screenshots: false, ...(payload?.options || {}) };
+    const root = getMinecraftRootFor(profile.id);
+    const exportName = sanitizeFileName(payload?.name || profile.name) || 'Minecraft Pack';
+    const version = String(payload?.version || '1.0.0').trim() || '1.0.0';
+    const saveResult = await dialog.showSaveDialog({ title: 'Export Modpack', defaultPath: `${exportName}-${sanitizeFileName(version)}.mrpack`, filters: [{ name: 'Modrinth modpack', extensions: ['mrpack'] }] });
+    if (saveResult.canceled || !saveResult.filePath) return { ok: false, canceled: true };
+    emitStatus(`Preparing modpack ${exportName}...`);
+    const zip = new AdmZip();
+    const files = [];
+    const warnings = [];
+    if (options.mods) {
+      for (const entry of profile.mods.filter(item => item.type === 'mod' && item.enabled !== false)) {
+        const installedPath = getProfileContentPath(profile, entry);
+        if (!installedPath || !fs.existsSync(installedPath)) {
+          warnings.push(`${entry.name}: installed file is missing`);
+          continue;
+        }
+        const archiveName = path.basename(installedPath).replace(/\.disabled$/i, '');
+        if (entry.source === 'modrinth' && entry.id && !entry.id.startsWith('local-')) {
+          try {
+            const remote = await resolveModrinthPackFile(entry, profile);
+            const buffer = fs.readFileSync(installedPath);
+            files.push({ path: `mods/${archiveName}`, hashes: { sha1: crypto.createHash('sha1').update(buffer).digest('hex'), sha512: crypto.createHash('sha512').update(buffer).digest('hex') }, downloads: [remote.url], fileSize: buffer.length });
+          } catch (error) {
+            warnings.push(`${entry.name}: ${error instanceof Error ? error.message : String(error)}`);
+            zip.addLocalFile(installedPath, 'overrides', 'mods');
+          }
+        } else {
+          warnings.push(`${entry.name}: local or non-Modrinth content is included as an override`);
+          zip.addLocalFile(installedPath, 'overrides', 'mods');
+        }
+      }
+    }
+    const copyFolder = (folderName, enabled, archiveFolder) => {
+      if (!enabled) return;
+      const folder = path.join(root, folderName);
+      if (!fs.existsSync(folder)) return;
+      for (const file of fs.readdirSync(folder, { withFileTypes: true })) {
+        if (file.isFile()) zip.addLocalFile(path.join(folder, file.name), 'overrides', archiveFolder);
+      }
+    };
+    copyFolder('config', options.configs, 'config');
+    copyFolder('resourcepacks', options.resourcepacks, 'resourcepacks');
+    copyFolder('shaderpacks', options.shaders, 'shaderpacks');
+    copyFolder('screenshots', options.screenshots, 'screenshots');
+    copyFolder('saves', options.worlds, 'saves');
+    const manifest = { formatVersion: 1, game: 'minecraft', versionId: profile.mcVersion, name: exportName, summary: String(payload?.description || '').slice(0, 2000), files, dependencies: await getMrpackDependencies(profile) };
+    zip.addFile('modrinth.index.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf8'));
+    zip.writeZip(saveResult.filePath);
+    const validation = new AdmZip(saveResult.filePath).getEntry('modrinth.index.json');
+    if (!validation) throw new Error('The exported archive did not contain modrinth.index.json.');
+    emitStatus(`Modpack exported: ${path.basename(saveResult.filePath)}`);
+    return { ok: true, path: saveResult.filePath, warnings, manifest };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Could not export the modpack.' };
+  }
+});
+
+ipcMain.handle('launcher:reveal-profile', async (_event, profileId) => {
+  const profile = launcherState.profiles.find(item => item.id === profileId);
+  if (!profile) return { ok: false, error: 'Profile not found' };
+  const root = getMinecraftRootFor(profile.id);
+  ensureLauncherGameFolders(root);
+  shell.showItemInFolder(root);
+  return { ok: true, path: root };
+});
+
+ipcMain.handle('launcher:export-profile', async (_event, profileId) => {
+  try {
+    const profile = launcherState.profiles.find(item => item.id === profileId);
+    if (!profile) throw new Error('Profile not found');
+    const result = await dialog.showSaveDialog({
+      title: 'Export Bald profile',
+      defaultPath: `${sanitizeFileName(profile.name)}.baldprofile`,
+      filters: [{ name: 'Bald profile', extensions: ['baldprofile'] }],
+    });
+    if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+    const payload = {
+      format: 'baldprofile',
+      schemaVersion: BALD_PROFILE_SCHEMA_VERSION,
+      exportedAt: new Date().toISOString(),
+      profile: JSON.parse(JSON.stringify(profile)),
+      references: { profileRoot: 'profiles/<profile-id>', content: profile.mods.map(item => ({ id: item.id, name: item.name, source: item.source || null, fileName: item.fileName || null })) },
+    };
+    fs.writeFileSync(result.filePath, JSON.stringify(payload, null, 2), 'utf8');
+    return { ok: true, path: result.filePath };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:import-profile', async () => {
+  try {
+    const result = await dialog.showOpenDialog({ title: 'Import Bald profile', properties: ['openFile'], filters: [{ name: 'Bald profile', extensions: ['baldprofile'] }] });
+    if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+    const imported = validateProfileExport(JSON.parse(fs.readFileSync(result.filePaths[0], 'utf8')));
+    const originalName = imported.name;
+    imported.id = createProfileId();
+    imported.name = `${originalName} Import`;
+    const root = getMinecraftRootFor(imported.id);
+    if (fs.existsSync(root)) throw new Error('The imported profile destination already exists.');
+    ensureLauncherGameFolders(root);
+    launcherState.profiles.push(imported);
+    launcherState.activeProfileId = imported.id;
+    scheduleStateWrite();
+    return { ok: true, state: launcherState, profile: imported };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error), state: launcherState };
+  }
+});
+
+ipcMain.handle('launcher:backup-profile', async (_event, profileId) => {
+  try {
+    const profile = launcherState.profiles.find(item => item.id === profileId);
+    if (!profile) throw new Error('Profile not found');
+    const sourceRoot = getMinecraftRootFor(profile.id);
+    if (!fs.existsSync(sourceRoot)) ensureLauncherGameFolders(sourceRoot);
+    const backupRoot = path.join(getProfileBackupRoot(profile.id), new Date().toISOString().replace(/[:.]/g, '-'));
+    fs.mkdirSync(path.dirname(backupRoot), { recursive: true });
+    fs.cpSync(sourceRoot, backupRoot, { recursive: true, errorOnExist: true });
+    fs.writeFileSync(path.join(backupRoot, 'profile.json'), JSON.stringify(profile, null, 2), 'utf8');
+    return { ok: true, path: backupRoot };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:restore-profile', async (_event, profileId) => {
+  try {
+    const profile = launcherState.profiles.find(item => item.id === profileId);
+    if (!profile) throw new Error('Profile not found');
+    const backupParent = getProfileBackupRoot(profile.id);
+    const backups = fs.existsSync(backupParent) ? fs.readdirSync(backupParent, { withFileTypes: true }).filter(item => item.isDirectory()).sort((a, b) => b.name.localeCompare(a.name)) : [];
+    const latest = backups[0] ? path.join(backupParent, backups[0].name) : null;
+    if (!latest) throw new Error('No backup exists for this profile.');
+    const root = getMinecraftRootFor(profile.id);
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.cpSync(latest, root, { recursive: true, errorOnExist: true });
+    const restoredProfilePath = path.join(root, 'profile.json');
+    if (fs.existsSync(restoredProfilePath)) fs.rmSync(restoredProfilePath, { force: true });
+    scheduleStateWrite();
+    return { ok: true, path: latest, state: launcherState };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:import-local-content', async (_event, profileId) => {
+  try {
+    const profile = launcherState.profiles.find(item => item.id === profileId);
+    if (!profile) throw new Error('Profile not found');
+    const result = await dialog.showOpenDialog({ title: 'Import local Minecraft content', properties: ['openFile'], filters: [{ name: 'Minecraft content', extensions: ['jar'] }] });
+    if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+    const sourcePath = result.filePaths[0];
+    const fileName = path.basename(sourcePath);
+    const header = Buffer.alloc(4);
+    const handle = fs.openSync(sourcePath, 'r');
+    fs.readSync(handle, header, 0, 4, 0);
+    fs.closeSync(handle);
+    if (header.toString('hex') !== '504b0304') throw new Error('The selected file is not a valid JAR or ZIP archive.');
+    if (profile.loader === 'vanilla') throw new Error('A mod loader is required to import a local mod JAR.');
+    const root = getMinecraftRootFor(profile.id);
+    ensureLauncherGameFolders(root);
+    const destination = path.join(root, 'mods', sanitizeFileName(fileName));
+    if (fs.existsSync(destination)) throw new Error('A file with this name is already installed in this profile.');
+    fs.copyFileSync(sourcePath, destination);
+    const entry = normalizeInstalledContent({ id: `local-${crypto.randomUUID()}`, name: fileName.replace(/\.jar$/i, ''), type: 'mod', fileName, source: '', enabled: true });
+    const index = launcherState.profiles.findIndex(item => item.id === profile.id);
+    launcherState.profiles[index].mods.push(entry);
+    scheduleStateWrite();
+    return { ok: true, entry, state: launcherState };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
 ipcMain.handle('launcher:update-profile', async (_event, payload) => {
   const idx = launcherState.profiles.findIndex(p => p.id === payload?.id);
   if (idx === -1) return { state: launcherState, rendererChanged: false, newRendererMode: null };
@@ -2026,16 +2788,18 @@ ipcMain.handle('launcher:update-profile', async (_event, payload) => {
   return { state: launcherState, rendererChanged, newRendererMode: rendererChanged ? updated.rendererMode : null };
 });
 
-ipcMain.handle('launcher:delete-profile', async (_event, profileId) => {
+ipcMain.handle('launcher:delete-profile', async (_event, payload) => {
   if (launcherState.profiles.length <= 1) {
     return { ok: false, error: 'At least one profile must exist', state: launcherState };
   }
+  const profileId = typeof payload === 'string' ? payload : payload?.profileId;
+  const deleteFiles = typeof payload === 'string' ? true : payload?.deleteFiles === true;
   const profileRoot = getMinecraftRootFor(profileId);
   launcherState.profiles = launcherState.profiles.filter(p => p.id !== profileId);
   if (launcherState.activeProfileId === profileId) {
     launcherState.activeProfileId = launcherState.profiles[0].id;
   }
-  fs.rmSync(profileRoot, { recursive: true, force: true });
+  if (deleteFiles) fs.rmSync(profileRoot, { recursive: true, force: true });
   scheduleStateWrite();
   return { ok: true, state: launcherState };
 });
@@ -2208,6 +2972,7 @@ async function startServerProcess(server) {
     windowsHide: true,
   });
   serverProcesses.set(server.id, processInfo);
+  serverStartedAt.set(server.id, Date.now());
 
   const markServerReady = line => {
     const text = String(line || '');
@@ -2247,6 +3012,7 @@ async function startServerProcess(server) {
   });
   processInfo.on('exit', (code, signal) => {
     serverProcesses.delete(server.id);
+    serverStartedAt.delete(server.id);
     const serverEntry = getServerById(server.id);
     if (serverEntry) {
       const nextStatus = serverEntry.status === 'stopping' ? 'idle' : 'idle';
@@ -2744,9 +3510,15 @@ ipcMain.handle('server:get-memory', async (_event, payload) => {
   try {
     const serverId = payload?.serverId;
     const processInfo = serverProcesses.get(serverId);
-    if (!processInfo || !processInfo.pid) return { ok: true, memoryMb: 0, rssMb: 0 };
+    const server = getServerById(serverId);
+    if (!processInfo || !processInfo.pid) return { ok: true, memoryMb: null, rssMb: null, cpuPercent: null, uptimeSeconds: null, diskFreeGb: null, diskTotalGb: null, networkAddress: server?.address || null, mspt: null };
     const stats = await pidusage(processInfo.pid);
-    return { ok: true, memoryMb: Number((stats.memory || 0) / (1024 * 1024)).toFixed(1), rssMb: Number((stats.memory || 0) / (1024 * 1024)).toFixed(1) };
+    const root = ensureServerRoot(serverId);
+    let disk = { freeGb: null, totalGb: null };
+    if (fs.statfsSync) {
+      try { const info = fs.statfsSync(root); disk = { freeGb: Number((info.bsize * info.bavail / 1073741824).toFixed(1)), totalGb: Number((info.bsize * info.blocks / 1073741824).toFixed(1)) }; } catch (_error) {}
+    }
+    return { ok: true, memoryMb: Number((stats.memory || 0) / (1024 * 1024)).toFixed(1), rssMb: Number((stats.memory || 0) / (1024 * 1024)).toFixed(1), cpuPercent: Number(stats.cpu || 0).toFixed(1), uptimeSeconds: Math.max(0, Math.floor((Date.now() - (serverStartedAt.get(serverId) || Date.now())) / 1000)), diskFreeGb: disk.freeGb, diskTotalGb: disk.totalGb, networkAddress: server?.address || null, mspt: null };
   } catch (error) {
     return { ok: true, memoryMb: 0, rssMb: 0 };
   }
@@ -3184,6 +3956,10 @@ ipcMain.handle('launcher:get-diagnostics', async () => {
     if (process.platform !== 'win32') return resolve('Unavailable');
     execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name'], (error, stdout) => resolve(error ? 'Unavailable' : stdout.trim()));
   });
+  const profile = getActiveProfile();
+  const profileRoot = profile ? getMinecraftRootFor(profile.id) : null;
+  const disk = profileRoot && fs.statfsSync ? (() => { try { const info = fs.statfsSync(profileRoot); return { freeGB: Math.round((info.bsize * info.bavail) / 1073741824), totalGB: Math.round((info.bsize * info.blocks) / 1073741824) }; } catch (_error) { return null; } })() : null;
+  const internet = await new Promise(resolve => { const request = require('https').get('https://api.modrinth.com/v2', { timeout: 4000 }, response => { response.resume(); resolve(response.statusCode >= 200 && response.statusCode < 500); }); request.on('error', () => resolve(false)); request.on('timeout', () => { request.destroy(); resolve(false); }); });
   return {
     cpu: os.cpus()[0]?.model || 'Unknown',
     logicalCores: os.cpus().length,
@@ -3192,13 +3968,111 @@ ipcMain.handle('launcher:get-diagnostics', async () => {
     javaPath,
     javaVersion,
     gpu,
-    profile: getActiveProfile()?.name || null,
-    minecraft: getActiveProfile()?.mcVersion || null,
-    loader: getActiveProfile()?.loader || null,
-    renderer: getActiveProfile()?.rendererMode || null,
-    jvmArguments: getJvmArguments(normalizeSettings(launcherState.settings)),
+    profile: profile?.name || null,
+    minecraft: profile?.mcVersion || null,
+    loader: profile?.loader || null,
+    renderer: profile?.rendererMode || null,
+    jvmArguments: getJvmArguments(normalizeSettings({ ...launcherState.settings, ...(profile || {}) })),
     launchArguments: lastLaunchArguments,
+    checks: {
+      java: javaPath !== 'java' && javaVersion !== 'Unavailable' ? 'good' : 'warning',
+      profileDirectory: profileRoot && fs.existsSync(profileRoot) ? 'good' : 'problem',
+      modDirectory: profileRoot && fs.existsSync(path.join(profileRoot, 'mods')) ? 'good' : 'warning',
+      serverDirectory: fs.existsSync(path.join(app.getPath('userData'), 'servers')) ? 'good' : 'warning',
+      internet: internet ? 'good' : 'warning',
+      disk: disk && disk.freeGB >= 5 ? 'good' : 'warning',
+      gpu: gpu && gpu !== 'Unavailable' ? 'good' : 'warning',
+      permissions: (() => { try { const testFile = path.join(app.getPath('userData'), '.diagnostic-write-test'); fs.writeFileSync(testFile, 'ok'); fs.rmSync(testFile, { force: true }); return 'good'; } catch (_error) { return 'problem'; } })(),
+    },
+    disk,
+    latestCrash: profile ? getSession(profile.id)?.crashAnalysis || null : null,
   };
+});
+
+ipcMain.handle('launcher:analyze-crash', async (_event, profileId) => {
+  const profile = launcherState.profiles.find(item => item.id === profileId) || getActiveProfile();
+  if (!profile) return { ok: false, error: 'No profile selected.' };
+  const session = getSession(profile.id);
+  const report = analyzeMinecraftFailure(profile, session, session?.exitCode ?? null);
+  if (session) { session.crashAnalysis = report; scheduleStateWrite(); }
+  return { ok: true, report };
+});
+
+async function collectPerformanceSnapshot(profile) {
+  const processRecord = runningProcesses.get(profile.id);
+  let cpuPercent = null;
+  let memoryMb = null;
+  if (processRecord?.pid) {
+    try {
+      const stats = await pidusage(processRecord.pid);
+      cpuPercent = Number(Number(stats.cpu || 0).toFixed(1));
+      memoryMb = Number((Number(stats.memory || 0) / 1048576).toFixed(1));
+    } catch (_error) {}
+  }
+  const diagnostics = await new Promise(resolve => {
+    if (!mainWindow || mainWindow.isDestroyed()) return resolve({ gpu: 'Unavailable' });
+    resolve({ gpu: 'Unavailable' });
+  });
+  return {
+    recordedAt: new Date().toISOString(),
+    profileId: profile.id,
+    profileName: profile.name,
+    minecraft: profile.mcVersion,
+    loader: profile.loader,
+    renderer: profile.rendererMode,
+    shaderState: 'Unavailable: Minecraft does not expose shader state to the launcher',
+    fps: null,
+    frameTimeMs: null,
+    onePercentLow: null,
+    zeroPointOnePercentLow: null,
+    cpuPercent,
+    memoryMb,
+    gpu: diagnostics.gpu,
+    vramMb: null,
+    java: profile.javaPath || 'Automatic Java detection',
+    estimatedMetrics: ['fps', 'frameTimeMs', 'onePercentLow', 'zeroPointOnePercentLow', 'vramMb'],
+  };
+}
+
+ipcMain.handle('launcher:get-performance', async (_event, profileId) => {
+  const profile = launcherState.profiles.find(item => item.id === profileId) || getActiveProfile();
+  if (!profile) return { ok: false, error: 'No profile selected.' };
+  return { ok: true, running: runningProcesses.has(profile.id), snapshot: await collectPerformanceSnapshot(profile), history: profile.benchmarkHistory || [] };
+});
+
+ipcMain.handle('launcher:run-benchmark', async (_event, payload) => {
+  const profile = launcherState.profiles.find(item => item.id === payload?.profileId) || getActiveProfile();
+  if (!profile) return { ok: false, error: 'No profile selected.' };
+  if (!runningProcesses.has(profile.id)) return { ok: false, error: 'Launch Minecraft with this profile before running a benchmark.' };
+  const durationMs = Math.min(60000, Math.max(5000, Number(payload?.durationMs) || 15000));
+  emitStatus(`Benchmarking ${profile.name}...`);
+  const samples = [];
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < durationMs && runningProcesses.has(profile.id)) {
+    samples.push(await collectPerformanceSnapshot(profile));
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  const measuredCpu = samples.filter(sample => sample.cpuPercent != null).map(sample => sample.cpuPercent);
+  const measuredMemory = samples.filter(sample => sample.memoryMb != null).map(sample => sample.memoryMb);
+  const result = {
+    id: `benchmark-${crypto.randomUUID()}`,
+    startedAt: new Date(startedAt).toISOString(),
+    durationMs: Date.now() - startedAt,
+    averageFps: null,
+    onePercentLow: null,
+    zeroPointOnePercentLow: null,
+    frameTimeMs: null,
+    averageCpuPercent: measuredCpu.length ? Number((measuredCpu.reduce((sum, value) => sum + value, 0) / measuredCpu.length).toFixed(1)) : null,
+    peakMemoryMb: measuredMemory.length ? Math.max(...measuredMemory) : null,
+    metricsUnavailable: ['averageFps', 'onePercentLow', 'zeroPointOnePercentLow', 'frameTimeMs', 'vramMb'],
+    profileId: profile.id,
+    profileName: profile.name,
+    settings: { memoryMax: profile.memoryMax, rendererMode: profile.rendererMode, mcVersion: profile.mcVersion, loader: profile.loader },
+  };
+  profile.benchmarkHistory = [...(profile.benchmarkHistory || []), result].slice(-30);
+  scheduleStateWrite();
+  emitStatus(`Benchmark complete · ${profile.name}`);
+  return { ok: true, result, history: profile.benchmarkHistory };
 });
 
 // ---------------------------------------------------------------------------
@@ -3213,7 +4087,7 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
     if (!profile) throw new Error('No active profile');
     if (runningProcesses.has(profile.id)) throw new Error(`${profile.name} is already running`);
 
-    const settings = normalizeSettings({ ...launcherState.settings, ...(payload?.settings || {}) });
+    const settings = normalizeSettings({ ...launcherState.settings, ...profile, ...(payload?.settings || {}) });
     const memoryMax = Math.min(32, Math.max(1, Number(settings.memoryMax) || 6));
     const minecraftRoot = getMinecraftRootFor(profile.id);
     ensureLauncherGameFolders(minecraftRoot);
@@ -3272,7 +4146,7 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
         ? { number: profile.mcVersion, type: 'release' }
         : { number: profile.mcVersion, type: 'custom', custom: versionNumber },
       memory: { min: '1G', max: `${Math.min(32, Math.max(1, memoryMax))}G` },
-      javaPath: await getJavaPath(),
+      javaPath: profile.javaPath || await getJavaPath(),
       customArgs: getJvmArguments(settings),
       authorization,
       overrides: {
@@ -3304,6 +4178,8 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
         runningProcesses.delete(profile.id);
         session.running = false;
         session.pid = null;
+        session.exitCode = code ?? null;
+        session.crashAnalysis = code === 0 ? null : analyzeMinecraftFailure(profile, session, code ?? null);
         scheduleStateWrite();
         emitProcessState(false, profile, child.pid);
         emitLog(profile.name, code === 0 ? 'info' : 'err', `Minecraft exited with code ${code ?? 0}`, profile.id);
@@ -3427,8 +4303,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('before-quit', () => {
-  if (writeStateTimer) clearTimeout(writeStateTimer);
-  writeStateTimer = null;
+  launcherStateStore.clearWriteTimer();
   if (writeStatePending) flushStateWrite();
   playitManager.stop();
 });
