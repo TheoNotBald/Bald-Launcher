@@ -1327,7 +1327,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
     </div>
   </div>
   <div class="notification-center" id="notificationCenter" style="display:none;">
-    <div class="notification-center-header"><span>Notifications</span><button class="modal-close" type="button" onclick="clearNotifications()" title="Clear notifications">&times;</button></div>
+    <div class="notification-center-header"><span>Notifications</span><button class="modal-close" type="button" onclick="closeNotificationCenter()" title="Close notifications">&times;</button></div>
     <div class="notification-list" id="notificationList"></div>
   </div>
 
@@ -2180,6 +2180,10 @@ function toggleNotificationCenter(){
   if (!center) return;
   center.style.display = center.style.display === 'none' ? 'block' : 'none';
   renderNotifications();
+}
+function closeNotificationCenter(){
+  const center = document.getElementById('notificationCenter');
+  if (center) center.style.display = 'none';
 }
 function clearNotifications(){ notificationHistory.splice(0); persistNotifications(); renderNotifications(); }
 
