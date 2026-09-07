@@ -79,8 +79,15 @@
     if (!window.skinview3d?.SkinViewer) return;
     const canvas = overlay.querySelector('#studioPreviewCanvas');
     state.viewer = new window.skinview3d.SkinViewer({ canvas, width: 280, height: 320 });
-    state.viewer.background = 0x07090b; state.viewer.fov = 50; state.viewer.zoom = 1.05;
-    if (window.skinview3d.WalkingAnimation) { state.viewer.animation = new window.skinview3d.WalkingAnimation(); state.viewer.animation.speed = 0.7; }
+    state.viewer.background = 0x07090b;
+    state.viewer.fov = 42;
+    state.viewer.zoom = 0.95;
+    state.viewer.controls.enableRotate = true;
+    state.viewer.controls.enableZoom = true;
+    state.viewer.controls.enablePan = false;
+    state.viewer.playerWrapper.rotation.set(0, -0.48, 0);
+    state.viewer.controls.target.set(0, -8, 0);
+    state.viewer.controls.update();
     if (state.kind === 'cape') {
       const current = await window.launcherAPI.getState();
       const account = current?.accounts?.find(item => item.id === current.activeAccountId);
@@ -140,7 +147,13 @@
     const viewer = state.viewer; if (!viewer) return;
     const skin = viewer.playerObject.skin;
     skin.resetJoints();
-    if (pose === 'reset') { viewer.playerWrapper.rotation.set(0, 0, 0); viewer.resetCameraPose?.(); return; }
+    if (pose === 'reset') {
+      viewer.playerWrapper.rotation.set(0, -0.48, 0);
+      viewer.controls.target.set(0, -8, 0);
+      viewer.resetCameraPose?.();
+      viewer.controls.update();
+      return;
+    }
     viewer.playerWrapper.rotation.y = pose === 'back' ? Math.PI : pose === 'left' ? Math.PI / 2 : pose === 'right' ? -Math.PI / 2 : 0;
     if (pose === 'arms-out') { skin.leftArm.rotation.z = -Math.PI / 2; skin.rightArm.rotation.z = Math.PI / 2; }
     if (pose === 'arms-up') { skin.leftArm.rotation.z = -Math.PI / 2; skin.rightArm.rotation.z = Math.PI / 2; skin.leftArm.rotation.x = -0.35; skin.rightArm.rotation.x = -0.35; }
