@@ -256,9 +256,16 @@
     if (!skin) return;
     [skin.layer1Material, skin.layer1MaterialBiased].forEach(material => {
       if (!material) return;
+      material.transparent = false;
+      material.alphaTest = 0;
+      material.depthWrite = true;
+      material.needsUpdate = true;
+    });
+    [skin.layer2Material, skin.layer2MaterialBiased].forEach(material => {
+      if (!material) return;
       material.transparent = true;
       material.alphaTest = 0.01;
-      material.depthWrite = true;
+      material.depthWrite = false;
       material.needsUpdate = true;
     });
     skin.visible = true;
