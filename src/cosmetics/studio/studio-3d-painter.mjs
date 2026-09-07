@@ -26,13 +26,14 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
         && node.material !== viewer.playerObject.skin.layer2MaterialBiased) meshes.push(node);
     });
     meshes.forEach(node => {
-      const overlay = new THREE.Mesh(node.geometry, new THREE.ShaderMaterial({
+      const overlay = new THREE.Mesh(node.geometry.clone(), new THREE.ShaderMaterial({
         uniforms: {
           gridColor: { value: new THREE.Color(0x72e64b) },
-          textureSize: { value: kind === 'cape' ? new THREE.Vector2(64, 32) : new THREE.Vector2(64, 64) },
+          gridTextureSize: { value: kind === 'cape' ? new THREE.Vector2(64, 32) : new THREE.Vector2(64, 64) },
           lineWidth: { value: 0.14 }
         },
         vertexShader: `
+          attribute vec2 uv;
           varying vec2 vGridUv;
           void main() {
             vGridUv = uv;
@@ -41,11 +42,11 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
         `,
         fragmentShader: `
           uniform vec3 gridColor;
-          uniform vec2 textureSize;
+          uniform vec2 gridTextureSize;
           uniform float lineWidth;
           varying vec2 vGridUv;
           void main() {
-            vec2 cell = fract(vGridUv * textureSize);
+            vec2 cell = fract(vGridUv * gridTextureSize);
             vec2 distanceToEdge = min(cell, 1.0 - cell);
             float line = 1.0 - smoothstep(lineWidth * 0.35, lineWidth, min(distanceToEdge.x, distanceToEdge.y));
             if (line < 0.02) discard;
