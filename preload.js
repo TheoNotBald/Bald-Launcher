@@ -10,6 +10,15 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   addAccount: account => ipcRenderer.invoke('launcher:add-account', account),
   linkMicrosoftAccount: () => ipcRenderer.invoke('launcher:link-microsoft-account'),
   chooseSkin: () => ipcRenderer.invoke('launcher:choose-skin'),
+  getCosmetics: payload => ipcRenderer.invoke('launcher:cosmetics:get', payload),
+  getCurrentMinecraftAppearance: payload => ipcRenderer.invoke('launcher:cosmetics:get', payload),
+  saveCosmeticSelection: payload => ipcRenderer.invoke('launcher:cosmetics:save-selection', payload),
+  importCosmeticAsset: payload => ipcRenderer.invoke('launcher:cosmetics:import', payload),
+  readCosmeticTexture: filePath => ipcRenderer.invoke('launcher:cosmetics:read-texture', filePath),
+  saveCreatedCosmetic: payload => ipcRenderer.invoke('launcher:cosmetics:save-created', payload),
+  exportCreatedCosmetic: payload => ipcRenderer.invoke('launcher:cosmetics:export-created', payload),
+  renameCreatedCosmetic: payload => ipcRenderer.invoke('launcher:cosmetics:rename-created', payload),
+  deleteCreatedCosmetic: payload => ipcRenderer.invoke('launcher:cosmetics:delete-created', payload),
   deleteAccount: accountId => ipcRenderer.invoke('launcher:delete-account', accountId),
 
   // profiles

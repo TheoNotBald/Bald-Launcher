@@ -11,6 +11,8 @@ const MCLC = require('minecraft-launcher-core');
 const { autoUpdater } = require('electron-updater');
 const { createPlayitManager } = require('./playit-manager');
 const { createStateStore } = require('./src/shared/state-store');
+const { normalizeAccountCosmetics, getAccountCosmetics, setAccountSelection, pushRecentItem } = require('./src/cosmetics/account/cosmetic-state');
+const { createCosmeticLibrary } = require('./src/cosmetics/library/cosmetic-library');
 
 app.commandLine.appendSwitch('disable-features', 'DIPS');
 
@@ -1515,12 +1517,14 @@ function normalizeAccount(account) {
   const initials = String(account?.initials || name.slice(0, 2).toUpperCase()).slice(0, 2);
   const accent = type === 'Offline' ? '#173404' : '#3c3489';
   const fg = type === 'Offline' ? '#97c459' : '#ceecf6';
+  const cosmetics = normalizeAccountCosmetics(account?.cosmetics || {});
   return {
     id: account?.id || `${type.toLowerCase()}-${Date.now()}`,
     name, type, initials, accent, fg,
     uuid: account?.uuid || (type === 'Offline' ? crypto.randomUUID() : null),
     auth: type === 'Microsoft' ? (account?.auth || null) : null,
-    skinPath: account?.skinPath || null,
+    skinPath: account?.skinPath || cosmetics.skin?.localPath || null,
+    cosmetics,
   };
 }
 
@@ -1890,6 +1894,8 @@ function getLoaderVersionId(profile, mcVersion, loader) {
 
 async function downloadToFile(url, filePath, label) {
   const temporaryPath = `${filePath}.download`;
+  emitStatus(`Download started: ${label}`);
+
   const response = await axios.get(url, {
     responseType: 'stream',
     timeout: 30000,
@@ -1917,6 +1923,7 @@ async function downloadToFile(url, filePath, label) {
       response.data.pipe(output);
     });
     fs.renameSync(temporaryPath, filePath);
+    emitStatus(`Download complete: ${label}`);
     return hash.digest('hex');
   } catch (error) {
     if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath);
@@ -2197,8 +2204,269 @@ ipcMain.handle('launcher:apply-update', () => {
 ipcMain.handle('launcher:sync-state', async (_event, nextState) => {
   launcherState.settings = normalizeSettings(nextState?.settings || launcherState.settings);
   if (Array.isArray(nextState?.servers)) launcherState.servers = nextState.servers.map(normalizeServer);
+  if (Array.isArray(nextState?.accounts)) {
+    launcherState.accounts = nextState.accounts.map(normalizeAccount);
+    const active = launcherState.accounts.find(item => item.id === nextState.activeAccountId);
+    if (active) launcherState.activeAccountId = active.id;
+  }
   scheduleStateWrite();
   return launcherState;
+});
+
+function getMinecraftTextureUrl(value) {
+  const rawUrl = String(value || '').trim();
+  const url = rawUrl.replace(/^http:\/\//i, 'https://');
+  if (!/^https:\/\/textures\.minecraft\.net\/texture\/[A-Za-z0-9]+$/i.test(url)) return null;
+  return url;
+}
+
+function getOfficialCosmeticCacheRoot(account) {
+  const key = String(account?.uuid || account?.id || '').replace(/[^a-zA-Z0-9._-]/g, '_');
+  return path.join(app.getPath('userData'), 'cosmetics', 'official', key);
+}
+
+async function cacheOfficialTexture(account, kind, metadata, force = false) {
+  const url = getMinecraftTextureUrl(metadata?.url);
+  if (!url) return null;
+  const root = getOfficialCosmeticCacheRoot(account);
+  fs.mkdirSync(root, { recursive: true });
+  const extension = kind === 'cape' ? 'cape' : 'skin';
+  const filePath = path.join(root, `${extension}-${String(metadata.id || 'current').replace(/[^a-zA-Z0-9._-]/g, '_')}.png`);
+  const library = createCosmeticLibrary({ appDataDir: app.getPath('userData') });
+  if (!force && fs.existsSync(filePath)) return filePath;
+  const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 15000, maxContentLength: 5 * 1024 * 1024 });
+  const buffer = Buffer.from(response.data);
+  const pngCheck = library.validatePngBuffer(buffer);
+  if (!pngCheck.ok) throw new Error(`Minecraft ${kind} texture is not a valid PNG.`);
+  const width = buffer.readUInt32BE(16);
+  const height = buffer.readUInt32BE(20);
+  const validDimensions = kind === 'skin'
+    ? [64, 128].includes(width) && [64, 128].includes(height)
+    : (width === 64 && height === 32) || (width === 128 && height === 64) || (width === 1024 && height === 512);
+  if (!validDimensions) throw new Error(`Minecraft ${kind} texture has unsupported dimensions.`);
+  fs.writeFileSync(filePath, buffer);
+  return filePath;
+}
+
+async function getOfficialMinecraftAppearance(account, force = false) {
+  const cosmetics = normalizeAccountCosmetics(account?.cosmetics || {});
+  if (!account || account.type === 'Offline') {
+    cosmetics.official = { ...cosmetics.official, status: 'offline', error: null };
+    account.cosmetics = cosmetics;
+    return { ok: true, accountId: account?.id || null, username: account?.name || null, uuid: account?.uuid || null, cosmetics };
+  }
+  let authorization = account.auth;
+  let accessToken = String(authorization?.access_token || '');
+  if (!accessToken) {
+    cosmetics.official = { ...cosmetics.official, status: 'error', error: 'Minecraft authentication is unavailable.' };
+    account.cosmetics = cosmetics;
+    scheduleStateWrite();
+    return { ok: false, requiresRelink: true, accountId: account.id, error: cosmetics.official.error, cosmetics };
+  }
+  const cachedAt = Number(cosmetics.official?.fetchedAt || 0);
+  if (!force && cosmetics.official?.status === 'ready' && cachedAt && Date.now() - cachedAt < 10 * 60 * 1000 && cosmetics.official.skin?.filePath) {
+    return { ok: true, accountId: account.id, username: account.name, uuid: account.uuid, cosmetics };
+  }
+  try {
+    let response;
+    try {
+      response = await axios.get('https://api.minecraftservices.com/minecraft/profile', {
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+        timeout: 15000,
+      });
+    } catch (error) {
+      const refreshToken = String(authorization?.meta?.refresh || '');
+      if (error?.response?.status !== 401 || !refreshToken) throw error;
+      const { Auth } = require('msmc');
+      const xboxManager = await new Auth('select_account').refresh(refreshToken);
+      const refreshedToken = await xboxManager.getMinecraft();
+      authorization = refreshedToken.mclc(true);
+      accessToken = authorization.access_token;
+      account.auth = authorization;
+      response = await axios.get('https://api.minecraftservices.com/minecraft/profile', {
+        headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+        timeout: 15000,
+      });
+    }
+    const profile = response.data || {};
+    const skin = Array.isArray(profile.skins) ? profile.skins.find(item => item?.state === 'ACTIVE') || profile.skins[0] : null;
+    const cape = Array.isArray(profile.capes) ? profile.capes.find(item => item?.state === 'ACTIVE') || profile.capes[0] : null;
+    const skinPath = skin ? await cacheOfficialTexture(account, 'skin', skin, force) : null;
+    const capePath = cape ? await cacheOfficialTexture(account, 'cape', cape, force) : null;
+    if (skin && !skinPath) throw new Error('Minecraft returned a skin but its texture could not be cached.');
+    const official = {
+      skin: skin && skinPath ? { id: String(skin.id), name: 'Minecraft Account Skin', source: 'official', filePath: skinPath, url: getMinecraftTextureUrl(skin.url), model: skin.variant === 'SLIM' ? 'slim' : 'classic' } : null,
+      cape: cape && capePath ? { id: String(cape.id), name: cape.alias || 'Official Minecraft Cape', source: 'official', filePath: capePath, url: getMinecraftTextureUrl(cape.url) } : null,
+      fetchedAt: Date.now(),
+      status: 'ready',
+      error: null,
+    };
+    cosmetics.official = official;
+    cosmetics.model = official.skin?.model || cosmetics.selected?.skin?.model || cosmetics.model || 'classic';
+    cosmetics.skin = cosmetics.selected?.skin || official.skin;
+    cosmetics.cape = cosmetics.selected?.cape || official.cape;
+    account.uuid = profile.id || account.uuid;
+    account.name = profile.name || account.name;
+    account.cosmetics = cosmetics;
+    scheduleStateWrite();
+    return { ok: true, accountId: account.id, username: account.name, uuid: account.uuid, cosmetics };
+  } catch (error) {
+    const message = error?.response?.status === 401
+      ? 'Minecraft authentication expired. Relink this Microsoft account.'
+      : error instanceof Error ? error.message : String(error);
+    cosmetics.official = { ...cosmetics.official, status: 'error', error: message };
+    account.cosmetics = cosmetics;
+    scheduleStateWrite();
+    return { ok: false, requiresRelink: error?.response?.status === 401 || !authorization?.meta?.refresh, accountId: account.id, error: cosmetics.official.error, cosmetics };
+  }
+}
+
+ipcMain.handle('launcher:cosmetics:get', async (_event, payload = {}) => {
+  const accountId = String(payload?.accountId || launcherState.activeAccountId || '');
+  const account = launcherState.accounts.find(item => item.id === accountId) || launcherState.accounts[0] || null;
+  if (!account) return { ok: false, error: 'No account is available for cosmetics.' };
+  return getOfficialMinecraftAppearance(account, payload?.force === true);
+});
+
+ipcMain.handle('launcher:cosmetics:save-selection', async (_event, payload = {}) => {
+  const accountId = String(payload?.accountId || launcherState.activeAccountId || '');
+  const account = launcherState.accounts.find(item => item.id === accountId);
+  if (!account) return { ok: false, error: 'Target account not found.' };
+  const kind = payload?.kind === 'cape' ? 'cape' : 'skin';
+  const selection = payload?.selection && typeof payload.selection === 'object' ? payload.selection : null;
+  const updated = setAccountSelection(account, kind, selection);
+  account.cosmetics = updated.cosmetics;
+  if (selection) {
+    const recent = pushRecentItem(updated, kind, selection);
+    account.cosmetics = recent.cosmetics;
+  }
+  scheduleStateWrite();
+  return { ok: true, accountId: account.id, cosmetics: account.cosmetics };
+});
+
+ipcMain.handle('launcher:cosmetics:import', async (_event, payload = {}) => {
+  try {
+    const kind = payload?.kind === 'cape' ? 'cape' : 'skin';
+    const filePath = String(payload?.filePath || '').trim();
+    if (!filePath || !fs.existsSync(filePath)) {
+      return { ok: false, error: 'No valid file was provided for import.' };
+    }
+    const library = createCosmeticLibrary({ appDataDir: app.getPath('userData') });
+    const created = library.saveAsset(kind, {
+      filePath,
+      name: String(payload?.name || path.basename(filePath, path.extname(filePath)) || `${kind}-asset`),
+      source: 'local',
+      model: ['classic', 'slim'].includes(String(payload?.model || 'classic')) ? String(payload.model) : 'classic',
+    });
+    return { ok: true, asset: created };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:cosmetics:read-texture', async (_event, filePath) => {
+  try {
+    const requested = path.resolve(String(filePath || ''));
+    const cosmeticsRoot = path.resolve(path.join(app.getPath('userData'), 'cosmetics'));
+    if (requested !== cosmeticsRoot && !requested.startsWith(`${cosmeticsRoot}${path.sep}`)) {
+      return { ok: false, error: 'Texture path is outside the cosmetic library.' };
+    }
+    if (!fs.existsSync(requested) || path.extname(requested).toLowerCase() !== '.png') {
+      return { ok: false, error: 'Texture file is unavailable.' };
+    }
+    const buffer = fs.readFileSync(requested);
+    const check = createCosmeticLibrary({ appDataDir: app.getPath('userData') }).validatePngBuffer(buffer);
+    if (!check.ok) return { ok: false, error: check.error };
+    return { ok: true, dataUrl: `data:image/png;base64,${buffer.toString('base64')}` };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:cosmetics:save-created', async (_event, payload = {}) => {
+  try {
+    const kind = payload?.kind === 'cape' ? 'cape' : 'skin';
+    const dataUrl = String(payload?.dataUrl || '');
+    const match = dataUrl.match(/^data:image\/png;base64,([A-Za-z0-9+/=]+)$/);
+    if (!match) return { ok: false, error: 'Studio output must be a PNG data URL.' };
+    const library = createCosmeticLibrary({ appDataDir: app.getPath('userData') });
+    const asset = library.saveBuffer(kind, {
+      buffer: Buffer.from(match[1], 'base64'),
+      name: String(payload?.name || `${kind} creation`).slice(0, 120),
+      source: 'created',
+      model: payload?.model,
+      parentId: payload?.parentId || null,
+      version: payload?.version || 1,
+      accountId: String(payload?.accountId || launcherState.activeAccountId || ''),
+    });
+    const account = launcherState.accounts.find(item => item.id === String(payload?.accountId || launcherState.activeAccountId || ''));
+    if (account) {
+      account.cosmetics = normalizeAccountCosmetics(account.cosmetics || {});
+      const key = kind === 'skin' ? 'createdSkins' : 'createdCapes';
+      account.cosmetics[key] = [asset, ...(account.cosmetics[key] || []).filter(item => item?.id !== asset.id)].slice(0, 200);
+      scheduleStateWrite();
+    }
+    return { ok: true, asset };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:cosmetics:export-created', async (_event, payload = {}) => {
+  try {
+    const requested = path.resolve(String(payload?.filePath || ''));
+    const cosmeticsRoot = path.resolve(path.join(app.getPath('userData'), 'cosmetics'));
+    if (requested !== cosmeticsRoot && !requested.startsWith(`${cosmeticsRoot}${path.sep}`)) return { ok: false, error: 'Invalid cosmetic source path.' };
+    if (!fs.existsSync(requested)) return { ok: false, error: 'Cosmetic file no longer exists.' };
+    const result = await dialog.showSaveDialog(mainWindow, { defaultPath: `${String(payload?.name || 'cosmetic').replace(/[<>:"/\\|?*]+/g, '_')}.png`, filters: [{ name: 'PNG image', extensions: ['png'] }] });
+    if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+    fs.copyFileSync(requested, result.filePath);
+    return { ok: true, filePath: result.filePath };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:cosmetics:rename-created', async (_event, payload = {}) => {
+  try {
+    const requested = path.resolve(String(payload?.filePath || ''));
+    const cosmeticsRoot = path.resolve(path.join(app.getPath('userData'), 'cosmetics'));
+    if (requested !== cosmeticsRoot && !requested.startsWith(`${cosmeticsRoot}${path.sep}`)) return { ok: false, error: 'Invalid cosmetic path.' };
+    const metadataPath = path.join(path.dirname(requested), `${path.basename(requested, path.extname(requested))}.json`);
+    if (!fs.existsSync(metadataPath)) return { ok: false, error: 'Cosmetic metadata was not found.' };
+    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+    metadata.name = String(payload?.name || metadata.name || 'Cosmetic').trim().slice(0, 120) || 'Cosmetic';
+    metadata.modifiedAt = new Date().toISOString();
+    fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), 'utf8');
+    for (const account of launcherState.accounts) {
+      account.cosmetics = normalizeAccountCosmetics(account.cosmetics || {});
+      for (const key of ['createdSkins', 'createdCapes']) account.cosmetics[key] = account.cosmetics[key].map(item => item?.id === metadata.id ? { ...item, name: metadata.name, modifiedAt: metadata.modifiedAt } : item);
+    }
+    scheduleStateWrite();
+    return { ok: true, asset: metadata };
+  } catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
+});
+
+ipcMain.handle('launcher:cosmetics:delete-created', async (_event, payload = {}) => {
+  try {
+    const requested = path.resolve(String(payload?.filePath || ''));
+    const cosmeticsRoot = path.resolve(path.join(app.getPath('userData'), 'cosmetics'));
+    if (requested !== cosmeticsRoot && !requested.startsWith(`${cosmeticsRoot}${path.sep}`)) return { ok: false, error: 'Invalid cosmetic path.' };
+    const metadataPath = path.join(path.dirname(requested), `${path.basename(requested, path.extname(requested))}.json`);
+    if (fs.existsSync(requested)) fs.rmSync(requested, { force: true });
+    if (fs.existsSync(metadataPath)) fs.rmSync(metadataPath, { force: true });
+    for (const account of launcherState.accounts) {
+      account.cosmetics = normalizeAccountCosmetics(account.cosmetics || {});
+      account.cosmetics.createdSkins = account.cosmetics.createdSkins.filter(item => item?.filePath !== requested);
+      account.cosmetics.createdCapes = account.cosmetics.createdCapes.filter(item => item?.filePath !== requested);
+      if (account.cosmetics.selected?.skin?.filePath === requested) account.cosmetics.selected.skin = null;
+      if (account.cosmetics.selected?.cape?.filePath === requested) account.cosmetics.selected.cape = null;
+      account.cosmetics.skin = account.cosmetics.selected.skin || account.cosmetics.official.skin || null;
+      account.cosmetics.cape = account.cosmetics.selected.cape || account.cosmetics.official.cape || null;
+    }
+    scheduleStateWrite();
+    return { ok: true, state: launcherState };
+  } catch (error) { return { ok: false, error: error instanceof Error ? error.message : String(error) }; }
 });
 
 // ---------------------------------------------------------------------------
@@ -2353,13 +2621,10 @@ ipcMain.handle('launcher:link-microsoft-account', async () => {
     const authManager = new Auth('select_account');
     const xboxManager = await authManager.launch('electron');
     const token = await xboxManager.getMinecraft();
-    const authorization = token.mclc();
+    const authorization = token.mclc(true);
     const name = String(authorization.name || token.profile?.name || '').trim().slice(0, 16);
     if (!name) throw new Error('Microsoft login did not return a Minecraft username');
     const duplicateIndex = launcherState.accounts.findIndex(account => account.name.toLowerCase() === name.toLowerCase());
-    if (duplicateIndex !== -1 && launcherState.accounts[duplicateIndex].auth) {
-      throw new Error('An account with that name is already linked');
-    }
     const account = normalizeAccount({
       name,
       type: 'Microsoft',
@@ -2367,9 +2632,14 @@ ipcMain.handle('launcher:link-microsoft-account', async () => {
       auth: authorization,
       id: `microsoft-${authorization.uuid || Date.now()}`,
     });
-    if (duplicateIndex === -1) launcherState.accounts.push(account);
-    else launcherState.accounts[duplicateIndex] = { ...account, id: launcherState.accounts[duplicateIndex].id };
-    launcherState.activeAccountId = account.id;
+    if (duplicateIndex === -1) {
+      launcherState.accounts.push(account);
+      launcherState.activeAccountId = account.id;
+    } else {
+      const existing = launcherState.accounts[duplicateIndex];
+      launcherState.accounts[duplicateIndex] = { ...existing, ...account, id: existing.id, cosmetics: normalizeAccountCosmetics(existing.cosmetics || {}) };
+      launcherState.activeAccountId = existing.id;
+    }
     scheduleStateWrite();
     return { ok: true, state: launcherState };
   } catch (error) {

@@ -682,7 +682,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
         <button class="sidebar-nav-item" id="nav-appearance" title="Appearance" data-tooltip="Appearance" type="button" aria-label="Appearance" onclick="showPanel('appearance')">
           <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 1 0 0 16h1.2a1.8 1.8 0 0 0 0-3.6h-.7a1.8 1.8 0 0 1 0-3.6H16a4 4 0 0 0 4-4A8 8 0 0 0 12 4z"/><circle cx="7.5" cy="10" r=".8" fill="currentColor" stroke="none"/><circle cx="10" cy="7.5" r=".8" fill="currentColor" stroke="none"/><circle cx="14" cy="7.2" r=".8" fill="currentColor" stroke="none"/></svg>
         </button>
-        <button class="sidebar-nav-item" id="nav-capes" title="Capes" data-tooltip="Capes" type="button" aria-label="Capes" onclick="showPanel('capes')">
+        <button class="sidebar-nav-item" id="nav-capes" title="Skins & Capes" data-tooltip="Skins & Capes" type="button" aria-label="Skins & Capes" onclick="showPanel('capes')">
           <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5 12 4l4 1.5 2 3.5-2.2 1.2v7.3L12 20l-3.8-2.5v-7.3L6 9z"/><path d="M9 7.5 12 9l3-1.5M9 10.5l3 1.5 3-1.5"/></svg>
         </button>
         <button class="sidebar-nav-item has-badge" id="nav-logs" title="Logs" data-tooltip="Logs" type="button" aria-label="Logs" onclick="showPanel('logs')">
@@ -1185,36 +1185,80 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
       </div>
     </div>
 
-    <!-- CAPES -->
+    <!-- SKINS & CAPES -->
     <div class="panel" id="panel-capes" style="display:none;overflow-y:auto;">
-      <div style="padding:24px;max-width:980px;width:100%;box-sizing:border-box;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px;">
+      <div style="padding:24px;max-width:1100px;width:100%;box-sizing:border-box;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:22px;flex-wrap:wrap;">
           <div>
-            <div style="font-size:18px;font-weight:650;color:var(--text-primary);">Cape creator</div>
-            <div style="font-size:11px;color:var(--text-secondary);margin-top:5px;">Create and manage custom capes for your launcher library.</div>
+            <div style="font-size:18px;font-weight:650;color:var(--text-primary);">Skins & Capes</div>
+            <div id="skinsAccountSummary" style="font-size:11px;color:var(--text-secondary);margin-top:5px;">Account cosmetics are stored per selected account.</div>
           </div>
-          <button class="modal-btn primary" type="button" onclick="openCapeFilePicker()"><i class="ti ti-upload" aria-hidden="true"></i> Add PNG</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="modal-btn" type="button" onclick="refreshAccountCosmetics(true)"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh appearance</button>
+            <button class="modal-btn" type="button" onclick="openCosmeticStudio('skin')"><i class="ti ti-brush" aria-hidden="true"></i> Create skin</button>
+            <button class="modal-btn primary" type="button" onclick="importSkinFromFile()"><i class="ti ti-upload" aria-hidden="true"></i> Import skin</button>
+            <button class="modal-btn" type="button" onclick="openCosmeticStudio('cape')"><i class="ti ti-brush" aria-hidden="true"></i> Create cape</button>
+            <button class="modal-btn" type="button" onclick="importCapeFromFile()"><i class="ti ti-upload" aria-hidden="true"></i> Import cape</button>
+          </div>
         </div>
-        <div style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(260px,.85fr);gap:16px;align-items:start;">
-          <div style="border:0.5px solid var(--border);border-radius:8px;background:var(--bg-surface);padding:16px;">
-            <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:12px;">Your capes</div>
-            <div id="capeLibrary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;"></div>
-            <div id="capeLibraryEmpty" style="padding:32px 12px;text-align:center;color:var(--text-secondary);font-size:11px;">No capes added yet. Upload a PNG or paste an image URL.</div>
+
+        <div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr);gap:16px;align-items:start;">
+          <div style="border:0.5px solid var(--border);border-radius:12px;background:var(--bg-surface);padding:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;">
+              <div style="font-size:12px;font-weight:600;color:var(--text-primary);">Your Character</div>
+              <div id="characterModelLabel" style="font-size:10px;color:var(--text-secondary);">Classic</div>
+            </div>
+            <div style="height:310px;border:0.5px solid var(--border);border-radius:8px;background:linear-gradient(180deg,var(--bg-void),var(--bg-surface-2));display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;">
+              <div id="characterPreviewStatus" style="font-size:11px;color:var(--text-secondary);text-align:center;margin:10px 0;">Loading Minecraft skin...</div>
+              <canvas id="characterPreviewCanvas" width="280" height="300" style="max-width:100%;max-height:100%;image-rendering:pixelated;display:none;"></canvas>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+              <button class="modal-btn" type="button" onclick="resetCharacterPreview()"><i class="ti ti-refresh" aria-hidden="true"></i> Reset view</button>
+            </div>
           </div>
-          <div style="border:0.5px solid var(--border);border-radius:8px;background:var(--bg-surface);padding:16px;">
-            <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:12px;">Create cape</div>
-            <label style="display:block;font-size:10px;color:var(--text-secondary);margin-bottom:5px;">Name</label>
-            <input id="capeNameInput" class="modal-input" maxlength="40" placeholder="My cape" style="width:100%;box-sizing:border-box;margin-bottom:12px;" />
-            <label style="display:block;font-size:10px;color:var(--text-secondary);margin-bottom:5px;">Image URL</label>
-            <div style="display:flex;gap:8px;margin-bottom:12px;">
-              <input id="capeUrlInput" class="modal-input" placeholder="https://.../cape.png" style="flex:1;min-width:0;" />
-              <button class="modal-btn" type="button" onclick="addCapeFromUrl()">Add</button>
+
+          <div style="display:flex;flex-direction:column;gap:16px;">
+            <div style="border:0.5px solid var(--border);border-radius:12px;background:var(--bg-surface);padding:16px;">
+              <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:12px;">Selected skin</div>
+              <div style="display:flex;align-items:center;gap:10px;min-height:60px;">
+                <div id="selectedSkinPreview" style="width:44px;height:44px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg-void);display:flex;align-items:center;justify-content:center;overflow:hidden;"></div>
+                <div>
+                  <div id="selectedSkinName" style="font-size:11px;color:var(--text-primary);font-weight:600;">No skin selected</div>
+                  <div id="selectedSkinSource" style="font-size:10px;color:var(--text-secondary);">Saved per account</div>
+                </div>
+              </div>
             </div>
-            <div style="font-size:10px;line-height:1.5;color:var(--text-secondary);margin-bottom:14px;">Use a transparent PNG. Minecraft cape textures commonly use a 64x32 layout. The preview is local to this launcher until a compatible cape mod or service is connected.</div>
-            <div style="height:180px;border:0.5px solid var(--border);border-radius:6px;background:var(--bg-void);display:flex;align-items:center;justify-content:center;overflow:hidden;">
-              <canvas id="capePreviewCanvas" width="128" height="128" style="image-rendering:pixelated;max-width:90%;max-height:90%;"></canvas>
+
+            <div style="border:0.5px solid var(--border);border-radius:12px;background:var(--bg-surface);padding:16px;">
+              <div style="font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:12px;">Selected cape</div>
+              <div style="display:flex;align-items:center;gap:10px;min-height:60px;">
+                <div id="selectedCapePreview" style="width:44px;height:44px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg-void);display:flex;align-items:center;justify-content:center;overflow:hidden;"></div>
+                <div>
+                  <div id="selectedCapeName" style="font-size:11px;color:var(--text-primary);font-weight:600;">No cape selected</div>
+                  <div id="selectedCapeSource" style="font-size:10px;color:var(--text-secondary);">Saved per account</div>
+                </div>
+              </div>
             </div>
-            <div id="capePreviewMeta" style="font-size:10px;color:var(--text-secondary);text-align:center;margin-top:8px;">Select a cape to preview it.</div>
+          </div>
+        </div>
+
+        <div style="margin-top:20px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;">
+          <div style="border:0.5px solid var(--border);border-radius:12px;background:var(--bg-surface);padding:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;">
+              <div style="font-size:12px;font-weight:600;color:var(--text-primary);">Skins</div>
+              <button class="modal-btn" type="button" onclick="openCosmeticStudio('skin')">Create skin</button><button class="modal-btn" type="button" onclick="importSkinFromFile()">Add skin</button>
+            </div>
+            <div id="skinLibrary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;"></div>
+            <div id="skinLibraryEmpty" style="padding:22px 10px;text-align:center;color:var(--text-secondary);font-size:11px;">No saved skins for this account yet.</div>
+          </div>
+
+          <div style="border:0.5px solid var(--border);border-radius:12px;background:var(--bg-surface);padding:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;">
+              <div style="font-size:12px;font-weight:600;color:var(--text-primary);">Capes</div>
+              <button class="modal-btn" type="button" onclick="openCosmeticStudio('cape')">Create cape</button><button class="modal-btn" type="button" onclick="importCapeFromFile()">Add cape</button>
+            </div>
+            <div id="capeLibrary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;"></div>
+            <div id="capeLibraryEmpty" style="padding:22px 10px;text-align:center;color:var(--text-secondary);font-size:11px;">No saved capes for this account yet.</div>
           </div>
         </div>
       </div>
@@ -1382,6 +1426,10 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
 <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
 <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
 <script src="node_modules/@xterm/addon-web-links/lib/addon-web-links.js"></script>
+<script src="node_modules/skinview3d/bundles/skinview3d.bundle.js"></script>
+<script src="src/cosmetics/studio/cosmetic-studio.js"></script>
+<script type="module" src="src/cosmetics/studio/studio-3d-painter.mjs"></script>
+<script type="module" src="src/cosmetics/preview/minecraft-player-preview.mjs"></script>
 <script>
 const launcherBridge = window.launcherAPI || null;
 const LOADERS = ['fabric','forge','neoforge','quilt','vanilla'];
@@ -1409,6 +1457,11 @@ const FALLBACK_CONTENT = [
 ];
 
 let state = { accounts: [], activeAccountId: null, profiles: [], activeProfileId: null, settings: {} };
+window.refreshLauncherState = async function(){
+  if (!launcherBridge?.getState) return;
+  state = await launcherBridge.getState();
+  renderAccounts();
+};
 let currentProfileId = null;
 let libraryTypeFilter = 'all';
 let librarySearchTerm = '';
@@ -2065,11 +2118,257 @@ function renderAccounts(){
     document.getElementById('titlebarAv').textContent=active.initials;
     document.getElementById('titlebarName').textContent=active.name;
   }
+  renderCosmeticsPanel();
 }
+
+function getActiveAccount(){
+  return state.accounts.find(a => a.id === state.activeAccountId) || state.accounts[0] || null;
+}
+
+function getAccountCosmeticsSnapshot(){
+  const account = getActiveAccount();
+  return account?.cosmetics || { skin: null, cape: null, model: 'classic', importedSkins: [], importedCapes: [] };
+}
+
+async function refreshAccountCosmetics(force = false){
+  const account = getActiveAccount();
+  const status = document.getElementById('characterPreviewStatus');
+  if (status) status.textContent = account?.type === 'Offline' ? 'Offline account' : 'Loading Minecraft skin...';
+  if (!account || !launcherBridge?.getCurrentMinecraftAppearance) {
+    renderCharacterPreview(null);
+    return getAccountCosmeticsSnapshot();
+  }
+  const result = await launcherBridge.getCurrentMinecraftAppearance({ accountId: account.id, force });
+  if (result?.ok && result.cosmetics) {
+    const target = state.accounts.find(item => item.id === account.id);
+    if (target) target.cosmetics = result.cosmetics;
+    if (force) {
+      const active = document.getElementById('skinsAccountSummary');
+      if (active) active.textContent = `${account.name} · ${result.cosmetics.model || 'classic'} model`;
+    }
+  } else if (status && account.type !== 'Offline') {
+    const reason = result?.error ? `<div style="margin:6px 0;color:var(--text-secondary);">${escapeHtml(result.error)}</div>` : '';
+    const relink = result?.requiresRelink ? `<button class="modal-btn primary" type="button" onclick="relinkCurrentMicrosoftAccount()">Sign in again</button>` : '';
+    status.innerHTML = `Couldn't load your Minecraft skin${reason}${relink}<button class="modal-btn" type="button" onclick="refreshAccountCosmetics(true)">Retry</button>`;
+  }
+  renderCosmeticsPanel();
+  return getAccountCosmeticsSnapshot();
+}
+
+async function relinkCurrentMicrosoftAccount(){
+  if (!launcherBridge?.linkMicrosoftAccount) return;
+  const result = await launcherBridge.linkMicrosoftAccount();
+  if (result?.ok === false) { alert(result.error || 'Microsoft sign-in failed.'); return; }
+  state = result.state || state;
+  renderAccounts();
+  await refreshAccountCosmetics(true);
+}
+
+function safeCosmeticFileSource(entry){
+  if (!entry) return '';
+  const filePath = String(entry.filePath || entry.localPath || entry.path || '');
+  if (filePath) {
+    if (/^https?:\/\//i.test(filePath)) return filePath;
+    const normalized = filePath.replace(/\\/g, '/');
+    return /^[A-Za-z]:\//.test(normalized) ? `file:///${normalized}` : `file://${normalized}`;
+  }
+  return String(entry.image || entry.url || '');
+}
+
+function renderCosmeticsPanel(){
+  const skinPreview = document.getElementById('selectedSkinPreview');
+  const skinName = document.getElementById('selectedSkinName');
+  const skinSource = document.getElementById('selectedSkinSource');
+  const capePreview = document.getElementById('selectedCapePreview');
+  const capeName = document.getElementById('selectedCapeName');
+  const capeSource = document.getElementById('selectedCapeSource');
+  const accountSummary = document.getElementById('skinsAccountSummary');
+  const cosmetics = getAccountCosmeticsSnapshot();
+  const activeAccount = getActiveAccount();
+  const modelLabel = document.getElementById('characterModelLabel');
+  if (accountSummary && activeAccount) accountSummary.textContent = `${activeAccount.name} · ${cosmetics.model || 'classic'} model`;
+  if (modelLabel) modelLabel.textContent = cosmetics.model === 'slim' ? 'Slim' : 'Classic';
+
+  const renderAssetPreview = (target, entry, fallbackText) => {
+    if (!target) return;
+    const src = safeCosmeticFileSource(entry);
+    if (src) {
+      target.innerHTML = `<img src="${escapeHtml(src)}" alt="${escapeHtml(entry?.name || fallbackText)}" style="width:100%;height:100%;object-fit:contain;image-rendering:pixelated;" />`;
+      return;
+    }
+    target.innerHTML = `<span style="font-size:11px;color:var(--text-secondary);">${escapeHtml(fallbackText)}</span>`;
+  };
+
+  renderAssetPreview(skinPreview, cosmetics.skin, 'Skin');
+  if (skinName) skinName.textContent = cosmetics.skin?.name || (activeAccount?.type === 'Microsoft' ? 'No official skin' : 'No skin selected');
+  if (skinSource) skinSource.textContent = cosmetics.skin?.source === 'official' ? 'Official Minecraft' : cosmetics.skin ? `Saved on ${activeAccount?.name || 'this account'}` : activeAccount?.type === 'Microsoft' ? 'Minecraft profile unavailable' : 'Saved per account';
+
+  renderAssetPreview(capePreview, cosmetics.cape, 'Cape');
+  if (capeName) capeName.textContent = cosmetics.cape?.name || (activeAccount?.type === 'Microsoft' ? 'No official cape' : 'No cape selected');
+  if (capeSource) capeSource.textContent = cosmetics.cape?.source === 'official' ? 'Official Minecraft' : cosmetics.cape ? `Saved on ${activeAccount?.name || 'this account'}` : activeAccount?.type === 'Microsoft' ? 'No official cape' : 'Saved per account';
+  renderCharacterPreview(cosmetics.skin, cosmetics.model);
+
+  const skinLibrary = document.getElementById('skinLibrary');
+  const skinLibraryEmpty = document.getElementById('skinLibraryEmpty');
+  const capeLibrary = document.getElementById('capeLibrary');
+  const capeLibraryEmpty = document.getElementById('capeLibraryEmpty');
+  const assetsFor = (kind) => {
+    const imported = Array.isArray(kind === 'skin' ? cosmetics.importedSkins : cosmetics.importedCapes) ? (kind === 'skin' ? cosmetics.importedSkins : cosmetics.importedCapes) : [];
+    const created = Array.isArray(kind === 'skin' ? cosmetics.createdSkins : cosmetics.createdCapes) ? (kind === 'skin' ? cosmetics.createdSkins : cosmetics.createdCapes) : [];
+    const official = kind === 'skin' ? cosmetics.official?.skin : cosmetics.official?.cape;
+    const local = [...created, ...imported.filter(item => !created.some(createdItem => createdItem?.id === item?.id))];
+    return official ? [official, ...local.filter(item => item?.id !== official.id)] : local;
+  };
+  const renderLibraryCard = (kind, item) => {
+    const src = safeCosmeticFileSource(item);
+    const active = kind === 'skin' ? cosmetics.skin?.id === item.id : cosmetics.cape?.id === item.id;
+    const label = `${item?.name || `${capitalize(kind)} asset`}`;
+    const encoded = JSON.stringify(item).replace(/'/g, "&apos;");
+    const localActions = item?.source === 'created' ? `<div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;"><button class="modal-btn" type="button" style="padding:3px 5px;font-size:9px;" onclick="event.stopPropagation();editCosmeticAsset('${kind}', ${encoded})">Edit</button><button class="modal-btn" type="button" style="padding:3px 5px;font-size:9px;" onclick="event.stopPropagation();exportCosmeticAsset(${encoded})">Export</button><button class="modal-btn" type="button" style="padding:3px 5px;font-size:9px;" onclick="event.stopPropagation();renameCosmeticAsset(${encoded})">Rename</button><button class="modal-btn" type="button" style="padding:3px 5px;font-size:9px;" onclick="event.stopPropagation();showCosmeticVersions(${encoded})">Versions</button><button class="danger-btn" type="button" style="padding:3px 5px;font-size:9px;" onclick="event.stopPropagation();deleteCosmeticAsset(${encoded})">Delete</button></div>` : '';
+    return `<div style="border:0.5px solid ${active ? 'var(--accent-green)' : 'var(--border)'};border-radius:8px;padding:8px;background:var(--bg-surface-2);cursor:pointer;" onclick="applyAccountCosmetic('${kind}', ${encoded})">
+      <div style="height:72px;border-radius:6px;background:var(--bg-void);display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:7px;">${src ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(label)}" style="width:100%;height:100%;object-fit:contain;image-rendering:pixelated;" />` : `<span style="font-size:11px;color:var(--text-secondary);">${escapeHtml(label)}</span>`}</div>
+      <div style="font-size:10px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(label)}">${escapeHtml(label)}</div>${item?.source === 'created' ? `<div style="font-size:9px;color:var(--text-secondary);margin-top:3px;">Created · v${item.version || 1}</div>` : ''}${localActions}
+    </div>`;
+  };
+
+  const skinItems = assetsFor('skin');
+  if (skinLibrary) {
+    if (!skinItems.length) skinLibrary.innerHTML = '';
+    else skinLibrary.innerHTML = skinItems.map(item => renderLibraryCard('skin', item)).join('');
+  }
+  if (skinLibraryEmpty) skinLibraryEmpty.style.display = skinItems.length ? 'none' : 'block';
+
+  const capeItems = assetsFor('cape');
+  if (capeLibrary) {
+    if (!capeItems.length) capeLibrary.innerHTML = '';
+    else capeLibrary.innerHTML = capeItems.map(item => renderLibraryCard('cape', item)).join('');
+  }
+  if (capeLibraryEmpty) capeLibraryEmpty.style.display = capeItems.length ? 'none' : 'block';
+}
+
+function editCosmeticAsset(kind, item){ openCosmeticStudio(kind, item); }
+function showCosmeticVersions(item){
+  const account = getActiveAccount();
+  const list = [...(account?.cosmetics?.createdSkins || []), ...(account?.cosmetics?.createdCapes || [])].filter(entry => entry.id === item.id || entry.parentId === item.id || entry.parentId === item.parentId);
+  alert(list.sort((a, b) => (a.version || 1) - (b.version || 1)).map(entry => `v${entry.version || 1} · ${entry.name || 'Cosmetic'} · ${new Date(entry.createdAt).toLocaleString()}`).join('\n') || 'No versions found.');
+}
+async function exportCosmeticAsset(item){
+  if (!item?.filePath || !launcherBridge?.exportCreatedCosmetic) return;
+  const result = await launcherBridge.exportCreatedCosmetic({ filePath: item.filePath, name: item.name || 'cosmetic' });
+  if (result?.ok === false && !result.canceled) alert(result.error || 'Could not export cosmetic.');
+}
+async function renameCosmeticAsset(item){
+  if (!item?.filePath || !launcherBridge?.renameCreatedCosmetic) return;
+  const name = prompt('Cosmetic name', item.name || 'Cosmetic');
+  if (!name?.trim()) return;
+  const result = await launcherBridge.renameCreatedCosmetic({ filePath: item.filePath, name });
+  if (result?.ok === false) { alert(result.error || 'Could not rename cosmetic.'); return; }
+  await refreshLauncherState();
+}
+async function deleteCosmeticAsset(item){
+  if (!item?.filePath || !launcherBridge?.deleteCreatedCosmetic || !confirm(`Delete ${item.name || 'this cosmetic'}?`)) return;
+  const result = await launcherBridge.deleteCreatedCosmetic({ filePath: item.filePath });
+  if (result?.ok === false) { alert(result.error || 'Could not delete cosmetic.'); return; }
+  state = result.state || state;
+  renderAccounts();
+}
+
+function renderCharacterPreview(entry, model = 'classic'){
+  const canvas = document.getElementById('characterPreviewCanvas');
+  const status = document.getElementById('characterPreviewStatus');
+  if (!canvas) return;
+  if (!entry?.filePath) {
+    canvas.style.display = 'none';
+    if (status && status.textContent === 'Loading Minecraft skin...') status.textContent = 'No skin selected';
+    return;
+  }
+  canvas.style.display = 'block';
+  if (!window.MinecraftPlayerPreview) {
+    if (status) status.textContent = 'Loading Minecraft character...';
+    window.setTimeout(() => renderCharacterPreview(entry, model), 50);
+    return;
+  }
+  if (!window.minecraftPlayerPreview) window.minecraftPlayerPreview = new window.MinecraftPlayerPreview(canvas);
+  window.minecraftPlayerPreview.setVisible(true);
+  window.minecraftPlayerPreview.setAppearance(entry, getActiveAccount()?.cosmetics?.cape || null, model).then(() => {
+    if (status) status.textContent = `${entry.source === 'official' ? 'Official Minecraft skin' : 'Selected local skin'} · ${model === 'slim' ? 'Slim' : 'Classic'}`;
+  }).catch(error => {
+    canvas.style.display = 'none';
+    if (status) status.innerHTML = `Couldn't render your Minecraft character <button class="modal-btn" type="button" onclick="refreshAccountCosmetics(true)">Retry</button>`;
+    console.error('Minecraft preview render failed:', error);
+  });
+}
+
+function resetCharacterPreview(){
+  window.minecraftPlayerPreview?.resetCamera();
+}
+
+async function applyAccountCosmetic(kind, selection){
+  const account = getActiveAccount();
+  if (!account || !launcherBridge?.saveCosmeticSelection) return;
+  const payload = { accountId: account.id, kind, selection: selection && typeof selection === 'object' ? selection : null };
+  const result = await launcherBridge.saveCosmeticSelection(payload);
+  if (result?.ok && result.cosmetics) {
+    account.cosmetics = result.cosmetics;
+    renderAccounts();
+  }
+}
+
+async function importSkinFromFile(){
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/png';
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const account = getActiveAccount();
+    if (!account || !launcherBridge?.importCosmeticAsset) return;
+    const result = await launcherBridge.importCosmeticAsset({ kind: 'skin', filePath: file.path || file.name, name: file.name.replace(/\.[^.]+$/, '') || 'Imported skin', model: getAccountCosmeticsSnapshot().model || 'classic' });
+    if (!result?.ok) { alert(result?.error || 'Unable to import that skin.'); return; }
+    const cosmetics = getAccountCosmeticsSnapshot();
+    cosmetics.importedSkins = [...(Array.isArray(cosmetics.importedSkins) ? cosmetics.importedSkins : []), result.asset];
+    account.cosmetics = cosmetics;
+    await applyAccountCosmetic('skin', result.asset);
+  };
+  input.click();
+}
+
+async function importCapeFromFile(){
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/png';
+  input.onchange = async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const account = getActiveAccount();
+    if (!account || !launcherBridge?.importCosmeticAsset) return;
+    const result = await launcherBridge.importCosmeticAsset({ kind: 'cape', filePath: file.path || file.name, name: file.name.replace(/\.[^.]+$/, '') || 'Imported cape' });
+    if (!result?.ok) { alert(result?.error || 'Unable to import that cape.'); return; }
+    const cosmetics = getAccountCosmeticsSnapshot();
+    cosmetics.importedCapes = [...(Array.isArray(cosmetics.importedCapes) ? cosmetics.importedCapes : []), result.asset];
+    account.cosmetics = cosmetics;
+    await applyAccountCosmetic('cape', result.asset);
+  };
+  input.click();
+}
+
+async function setCharacterModel(model){
+  const account = getActiveAccount();
+  if (!account || !launcherBridge?.saveCosmeticSelection) return;
+  const cosmetics = getAccountCosmeticsSnapshot();
+  cosmetics.model = ['classic', 'slim'].includes(model) ? model : 'classic';
+  const result = await launcherBridge.saveCosmeticSelection({ accountId: account.id, kind: 'skin', selection: cosmetics.skin ? { ...cosmetics.skin, model: cosmetics.model } : null });
+  if (result?.ok && result.cosmetics) {
+    account.cosmetics = result.cosmetics;
+    renderAccounts();
+  }
+}
+
 async function setActiveAccount(id){
   if (launcherBridge?.setActiveAccount) state = await launcherBridge.setActiveAccount(id);
   else state.activeAccountId = id;
   renderAccounts();
+  await refreshAccountCosmetics(true);
 }
 async function addOfflineAccount(){
   document.getElementById('offlineAccountName').value = '';
@@ -2375,6 +2674,7 @@ function showPanel(name){
     const el = document.getElementById('panel-'+p);
     if (el) el.style.display = p===name ? 'flex' : 'none';
   });
+  if (window.minecraftPlayerPreview) window.minecraftPlayerPreview.setVisible(name === 'capes');
   const navMapping = {
     home: 'home',
     servers: 'servers',
@@ -2407,6 +2707,10 @@ function showPanel(name){
   try { localStorage.setItem('bald:last-page', name); } catch (_error) {}
   if (name==='performance') refreshPerformanceCenter();
   if (name==='accounts') renderAccounts();
+  if (name==='capes') {
+    renderCosmeticsPanel();
+    refreshAccountCosmetics(false);
+  }
   if (name==='servers') renderServers();
   if (name==='server-detail' && currentServerId) renderServerDetail();
 }
@@ -3665,9 +3969,30 @@ async function boot(){
   if (savedPage === 'profile' && recoveredProfile) openProfile(recoveredProfile);
   else if (savedPage === 'server-detail' && getServer(savedServer)) openServerDetail(savedServer);
   else showPanel(['home','servers','accounts','settings','performance','logs','appearance','capes'].includes(savedPage) ? savedPage : 'home');
+  if (savedPage !== 'capes') refreshAccountCosmetics(false);
   renderNotifications();
   if (launcherBridge?.onStatus){
-    launcherBridge.onStatus(message => { document.getElementById('sbStatus').textContent = message; if (/failed|error|warning|backup|download|update/i.test(String(message))) addNotification('Launcher event', String(message), /failed|error/i.test(String(message)) ? 'error' : 'warning'); });
+    launcherBridge.onStatus(message => {
+      const text = String(message || '').trim();
+      const statusNode = document.getElementById('sbStatus');
+      if (statusNode) statusNode.textContent = text;
+
+      if (!text) return;
+      if (/^Download started:/i.test(text)) {
+        addNotification('Download started', text.replace(/^Download started:\s*/i, ''), 'info');
+        return;
+      }
+      if (/^Download complete:/i.test(text)) {
+        addNotification('Download complete', text.replace(/^Download complete:\s*/i, ''), 'success');
+        return;
+      }
+      if (/^Downloading\s+/i.test(text)) {
+        return;
+      }
+      if (/failed|error|warning|backup|update/i.test(text)) {
+        addNotification('Launcher event', text, /failed|error/i.test(text) ? 'error' : 'warning');
+      }
+    });
   }
   if (launcherBridge?.onUpdateAvailable){
     launcherBridge.onUpdateAvailable(update => {
