@@ -290,4 +290,7 @@
   function closeStudio(state) { if (state.dirty && !confirm('Discard unsaved studio changes?')) return; state.detachPainter?.dispose?.(); state.viewer?.dispose(); document.getElementById('cosmeticStudioModal')?.remove(); active = null; }
   function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char])); }
   window.openCosmeticStudio = (kind, asset = null) => createStudio(kind, asset);
+  document.querySelectorAll('[data-open-cosmetic-studio]').forEach(button => {
+    button.addEventListener('click', () => createStudio(button.dataset.openCosmeticStudio));
+  });
 })();

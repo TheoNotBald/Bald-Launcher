@@ -1195,9 +1195,9 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="modal-btn" type="button" onclick="refreshAccountCosmetics(true)"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh appearance</button>
-            <button class="modal-btn" type="button" onclick="openCosmeticStudio('skin')"><i class="ti ti-brush" aria-hidden="true"></i> Create skin</button>
+            <button class="modal-btn" type="button" data-open-cosmetic-studio="skin"><i class="ti ti-brush" aria-hidden="true"></i> Create skin</button>
             <button class="modal-btn primary" type="button" onclick="importSkinFromFile()"><i class="ti ti-upload" aria-hidden="true"></i> Import skin</button>
-            <button class="modal-btn" type="button" onclick="openCosmeticStudio('cape')"><i class="ti ti-brush" aria-hidden="true"></i> Create cape</button>
+            <button class="modal-btn" type="button" data-open-cosmetic-studio="cape"><i class="ti ti-brush" aria-hidden="true"></i> Create cape</button>
             <button class="modal-btn" type="button" onclick="importCapeFromFile()"><i class="ti ti-upload" aria-hidden="true"></i> Import cape</button>
           </div>
         </div>
@@ -1246,7 +1246,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
           <div style="border:0.5px solid var(--border);border-radius:12px;background:var(--bg-surface);padding:16px;">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;">
               <div style="font-size:12px;font-weight:600;color:var(--text-primary);">Skins</div>
-              <button class="modal-btn" type="button" onclick="openCosmeticStudio('skin')">Create skin</button><button class="modal-btn" type="button" onclick="importSkinFromFile()">Add skin</button>
+              <button class="modal-btn" type="button" data-open-cosmetic-studio="skin">Create skin</button><button class="modal-btn" type="button" onclick="importSkinFromFile()">Add skin</button>
             </div>
             <div id="skinLibrary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;"></div>
             <div id="skinLibraryEmpty" style="padding:22px 10px;text-align:center;color:var(--text-secondary);font-size:11px;">No saved skins for this account yet.</div>
@@ -1255,7 +1255,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
           <div style="border:0.5px solid var(--border);border-radius:12px;background:var(--bg-surface);padding:16px;">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;">
               <div style="font-size:12px;font-weight:600;color:var(--text-primary);">Capes</div>
-              <button class="modal-btn" type="button" onclick="openCosmeticStudio('cape')">Create cape</button><button class="modal-btn" type="button" onclick="importCapeFromFile()">Add cape</button>
+              <button class="modal-btn" type="button" data-open-cosmetic-studio="cape">Create cape</button><button class="modal-btn" type="button" onclick="importCapeFromFile()">Add cape</button>
             </div>
             <div id="capeLibrary" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;"></div>
             <div id="capeLibraryEmpty" style="padding:22px 10px;text-align:center;color:var(--text-secondary);font-size:11px;">No saved capes for this account yet.</div>
