@@ -11,37 +11,42 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
   let orbitStart = null;
   let lastKey = '';
   let gridLines = [];
-  const pixelGridGeometry = geometry => {
+  const pixelGridGeometry = node => {
+    const geometry = node.geometry;
     geometry.computeBoundingBox();
     const box = geometry.boundingBox;
     if (!box) return null;
+    const scale = node.scale;
     const vertices = [];
     const line = (a, b) => vertices.push(a.x, a.y, a.z, b.x, b.y, b.z);
     const x0 = box.min.x, x1 = box.max.x;
     const y0 = box.min.y, y1 = box.max.y;
     const z0 = box.min.z, z1 = box.max.z;
-    const inset = 0.012;
-    for (let x = Math.ceil(x0); x <= x1; x += 1) {
+    const stepX = 1 / Math.max(0.0001, scale.x);
+    const stepY = 1 / Math.max(0.0001, scale.y);
+    const stepZ = 1 / Math.max(0.0001, scale.z);
+    const inset = 0.012 / Math.max(scale.x, scale.y, scale.z);
+    for (let x = Math.ceil(x0 / stepX) * stepX; x <= x1 + stepX * 0.01; x += stepX) {
       line(new THREE.Vector3(x, y0, z0 - inset), new THREE.Vector3(x, y1, z0 - inset));
       line(new THREE.Vector3(x, y0, z1 + inset), new THREE.Vector3(x, y1, z1 + inset));
     }
-    for (let y = Math.ceil(y0); y <= y1; y += 1) {
+    for (let y = Math.ceil(y0 / stepY) * stepY; y <= y1 + stepY * 0.01; y += stepY) {
       line(new THREE.Vector3(x0, y, z0 - inset), new THREE.Vector3(x1, y, z0 - inset));
       line(new THREE.Vector3(x0, y, z1 + inset), new THREE.Vector3(x1, y, z1 + inset));
     }
-    for (let y = Math.ceil(y0); y <= y1; y += 1) {
+    for (let y = Math.ceil(y0 / stepY) * stepY; y <= y1 + stepY * 0.01; y += stepY) {
       line(new THREE.Vector3(x0 - inset, y, z0), new THREE.Vector3(x0 - inset, y, z1));
       line(new THREE.Vector3(x1 + inset, y, z0), new THREE.Vector3(x1 + inset, y, z1));
     }
-    for (let z = Math.ceil(z0); z <= z1; z += 1) {
+    for (let z = Math.ceil(z0 / stepZ) * stepZ; z <= z1 + stepZ * 0.01; z += stepZ) {
       line(new THREE.Vector3(x0 - inset, y0, z), new THREE.Vector3(x0 - inset, y1, z));
       line(new THREE.Vector3(x1 + inset, y0, z), new THREE.Vector3(x1 + inset, y1, z));
     }
-    for (let x = Math.ceil(x0); x <= x1; x += 1) {
+    for (let x = Math.ceil(x0 / stepX) * stepX; x <= x1 + stepX * 0.01; x += stepX) {
       line(new THREE.Vector3(x, y0 - inset, z0), new THREE.Vector3(x, y0 - inset, z1));
       line(new THREE.Vector3(x, y1 + inset, z0), new THREE.Vector3(x, y1 + inset, z1));
     }
-    for (let z = Math.ceil(z0); z <= z1; z += 1) {
+    for (let z = Math.ceil(z0 / stepZ) * stepZ; z <= z1 + stepZ * 0.01; z += stepZ) {
       line(new THREE.Vector3(x0, y0 - inset, z), new THREE.Vector3(x1, y0 - inset, z));
       line(new THREE.Vector3(x0, y1 + inset, z), new THREE.Vector3(x1, y1 + inset, z));
     }
@@ -64,7 +69,7 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
         && node.material !== viewer.playerObject.skin.layer2MaterialBiased) meshes.push(node);
     });
     meshes.forEach(node => {
-      const grid = pixelGridGeometry(node.geometry);
+      const grid = pixelGridGeometry(node);
       if (!grid) return;
       const overlay = new THREE.LineSegments(
         grid,
