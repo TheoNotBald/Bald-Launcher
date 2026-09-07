@@ -53,9 +53,7 @@
           <div style="display:flex;gap:5px;flex-wrap:wrap;padding:8px;border-top:0.5px solid var(--border);"><button class="modal-btn" type="button" data-pose="arms-out" style="padding:4px 6px;font-size:9px;">Arms out</button><button class="modal-btn" type="button" data-pose="arms-up" style="padding:4px 6px;font-size:9px;">Arms up</button><button class="modal-btn" type="button" data-pose="legs-separated" style="padding:4px 6px;font-size:9px;">Legs separated</button><button class="modal-btn" type="button" data-pose="reset" style="padding:4px 6px;font-size:9px;">Reset pose</button></div>
         </section>
         <aside style="border:0.5px solid var(--border);border-radius:9px;padding:10px;display:flex;flex-direction:column;gap:8px;min-height:0;overflow:auto;">
-          <div style="display:flex;justify-content:center;align-items:center;padding:8px;border:0.5px solid var(--border);border-radius:7px;background:repeating-conic-gradient(#20252a 0 25%,#171b1f 0 50%) 0/16px 16px;">
-            <canvas id="studioCanvas" width="256" height="${skin ? 256 : 128}" aria-label="${skin ? '64 by 64 skin texture editor' : '64 by 32 cape texture editor'}" style="display:block;max-width:100%;height:auto;image-rendering:pixelated;image-rendering:crisp-edges;cursor:crosshair;"></canvas>
-          </div>
+          <canvas id="studioCanvas" width="64" height="${skin ? 64 : 32}" aria-hidden="true" tabindex="-1" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;"></canvas>
           <div style="font-size:10px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.08em;margin-top:5px;">Layers</div>
           <div style="display:flex;gap:5px;flex-wrap:wrap;"><button class="modal-btn selected-toggle" type="button" data-layer="inner">Base layer</button><button class="modal-btn selected-toggle" type="button" data-layer="outer">Outer layer</button></div>
           <div style="font-size:10px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.08em;margin-top:5px;">Parts</div>
