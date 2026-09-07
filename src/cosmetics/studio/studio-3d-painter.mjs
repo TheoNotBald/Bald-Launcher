@@ -11,6 +11,44 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
   let orbitStart = null;
   let lastKey = '';
   let gridLines = [];
+  const pixelGridGeometry = geometry => {
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox;
+    if (!box) return null;
+    const vertices = [];
+    const line = (a, b) => vertices.push(a.x, a.y, a.z, b.x, b.y, b.z);
+    const x0 = box.min.x, x1 = box.max.x;
+    const y0 = box.min.y, y1 = box.max.y;
+    const z0 = box.min.z, z1 = box.max.z;
+    const inset = 0.012;
+    for (let x = Math.ceil(x0); x <= x1; x += 1) {
+      line(new THREE.Vector3(x, y0, z0 - inset), new THREE.Vector3(x, y1, z0 - inset));
+      line(new THREE.Vector3(x, y0, z1 + inset), new THREE.Vector3(x, y1, z1 + inset));
+    }
+    for (let y = Math.ceil(y0); y <= y1; y += 1) {
+      line(new THREE.Vector3(x0, y, z0 - inset), new THREE.Vector3(x1, y, z0 - inset));
+      line(new THREE.Vector3(x0, y, z1 + inset), new THREE.Vector3(x1, y, z1 + inset));
+    }
+    for (let y = Math.ceil(y0); y <= y1; y += 1) {
+      line(new THREE.Vector3(x0 - inset, y, z0), new THREE.Vector3(x0 - inset, y, z1));
+      line(new THREE.Vector3(x1 + inset, y, z0), new THREE.Vector3(x1 + inset, y, z1));
+    }
+    for (let z = Math.ceil(z0); z <= z1; z += 1) {
+      line(new THREE.Vector3(x0 - inset, y0, z), new THREE.Vector3(x0 - inset, y1, z));
+      line(new THREE.Vector3(x1 + inset, y0, z), new THREE.Vector3(x1 + inset, y1, z));
+    }
+    for (let x = Math.ceil(x0); x <= x1; x += 1) {
+      line(new THREE.Vector3(x, y0 - inset, z0), new THREE.Vector3(x, y0 - inset, z1));
+      line(new THREE.Vector3(x, y1 + inset, z0), new THREE.Vector3(x, y1 + inset, z1));
+    }
+    for (let z = Math.ceil(z0); z <= z1; z += 1) {
+      line(new THREE.Vector3(x0, y0 - inset, z), new THREE.Vector3(x1, y0 - inset, z));
+      line(new THREE.Vector3(x0, y1 + inset, z), new THREE.Vector3(x1, y1 + inset, z));
+    }
+    const result = new THREE.BufferGeometry();
+    result.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    return result;
+  };
   const setGrid = enabled => {
     gridLines.forEach(line => {
       line.parent?.remove(line);
@@ -26,59 +64,17 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
         && node.material !== viewer.playerObject.skin.layer2MaterialBiased) meshes.push(node);
     });
     meshes.forEach(node => {
-      const overlay = new THREE.Mesh(node.geometry.clone(), new THREE.ShaderMaterial({
-        uniforms: {
-          gridColor: { value: new THREE.Color(0x72e64b) },
-          gridTextureSize: { value: kind === 'cape' ? new THREE.Vector2(64, 32) : new THREE.Vector2(64, 64) },
-          lineWidth: { value: 0.14 }
-        },
-        vertexShader: `
-          attribute vec2 uv;
-          varying vec2 vGridUv;
-          void main() {
-            vGridUv = uv;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-          }
-        `,
-        fragmentShader: `
-          uniform vec3 gridColor;
-          uniform vec2 gridTextureSize;
-          uniform float lineWidth;
-          varying vec2 vGridUv;
-          void main() {
-            vec2 cell = fract(vGridUv * gridTextureSize);
-            vec2 distanceToEdge = min(cell, 1.0 - cell);
-            float line = 1.0 - smoothstep(lineWidth * 0.35, lineWidth, min(distanceToEdge.x, distanceToEdge.y));
-            if (line < 0.02) discard;
-            gl_FragColor = vec4(gridColor, 1.0);
-          }
-        `,
-        transparent: true,
-        depthTest: false,
-        depthWrite: false,
-        side: THREE.DoubleSide,
-        polygonOffset: true,
-        polygonOffsetFactor: -1,
-        polygonOffsetUnits: -1
-      }));
+      const grid = pixelGridGeometry(node.geometry);
+      if (!grid) return;
+      const overlay = new THREE.LineSegments(
+        grid,
+        new THREE.LineBasicMaterial({ color: 0x72e64b, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false })
+      );
       overlay.userData.studioGrid = true;
-      overlay.visible = true;
-      overlay.renderOrder = 100;
+      overlay.renderOrder = 101;
       overlay.frustumCulled = false;
-      overlay.scale.setScalar(1.002);
       node.add(overlay);
       gridLines.push(overlay);
-
-      const edgeOverlay = new THREE.LineSegments(
-        new THREE.EdgesGeometry(node.geometry),
-        new THREE.LineBasicMaterial({ color: 0x72e64b, transparent: true, opacity: 1, depthTest: false, depthWrite: false })
-      );
-      edgeOverlay.userData.studioGrid = true;
-      edgeOverlay.renderOrder = 101;
-      edgeOverlay.frustumCulled = false;
-      edgeOverlay.scale.setScalar(1.004);
-      node.add(edgeOverlay);
-      gridLines.push(edgeOverlay);
     });
   };
   const hit = event => {

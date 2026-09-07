@@ -29,7 +29,7 @@ class MinecraftPlayerPreview {
     if (!skin?.filePath) return false;
     const skinSource = await window.launcherAPI.readCosmeticTexture(skin.filePath);
     if (!skinSource?.ok) throw new Error(skinSource?.error || 'Skin texture unavailable.');
-    await this.viewer.loadSkin(skinSource.dataUrl, { model: model === 'slim' ? 'slim' : 'default', makeVisible: true });
+    await this.viewer.loadSkin(skinSource.dataUrl, { model: skin.model === 'slim' ? 'slim' : 'default', makeVisible: true });
     this.viewer.playerObject.visible = true;
     this.viewer.playerObject.skin.visible = true;
     this.viewer.playerWrapper.visible = true;
