@@ -1,10 +1,11 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
-const { execFile, execFileSync, spawn } = require('child_process');
+const { execFile, execFileSync, spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 const axios = require('axios');
+const FormData = require('form-data');
 const AdmZip = require('adm-zip');
 const pidusage = require('pidusage');
 const MCLC = require('minecraft-launcher-core');
@@ -13,6 +14,10 @@ const { createPlayitManager } = require('./playit-manager');
 const { createStateStore } = require('./src/shared/state-store');
 const { normalizeAccountCosmetics, getAccountCosmetics, setAccountSelection, pushRecentItem } = require('./src/cosmetics/account/cosmetic-state');
 const { createCosmeticLibrary } = require('./src/cosmetics/library/cosmetic-library');
+const { resolveCustomSkinLoader } = require('./src/cosmetics/custom-skin-loader/resolver');
+const { installCustomSkinLoader, disableCustomSkinLoader, removeManagedInstallation } = require('./src/cosmetics/custom-skin-loader/installer');
+const { diagnoseInstallation } = require('./src/cosmetics/custom-skin-loader/diagnostics');
+const { readOwnership } = require('./src/cosmetics/custom-skin-loader/ownership');
 
 app.commandLine.appendSwitch('disable-features', 'DIPS');
 
@@ -407,6 +412,13 @@ const DEFAULT_STATE = {
       rendererMode: 'vulkan',
       icon: 'B',
       mods: [],
+      customSkinLoader: {
+        enabled: false,
+        state: 'disabled',
+        managed: false,
+        compatibility: null,
+        lastError: null,
+      },
     },
   ],
   activeProfileId: 'default',
@@ -442,7 +454,7 @@ const launcherStateStore = createStateStore({
       return {
         accounts: Array.isArray(rawState.accounts) && rawState.accounts.length ? rawState.accounts.map(normalizeAccount) : DEFAULT_STATE.accounts.map(normalizeAccount),
         activeAccountId: rawState.activeAccountId || DEFAULT_STATE.activeAccountId,
-        profiles: rawState.profiles,
+        profiles: rawState.profiles.map(normalizeProfile),
         activeProfileId: rawState.activeProfileId || rawState.profiles[0].id,
         settings: normalizeSettings(rawState.settings),
         sessions: Array.isArray(rawState.sessions) ? rawState.sessions : [],
@@ -957,7 +969,7 @@ function cloneDefaultState() {
   return {
     accounts: DEFAULT_STATE.accounts.map(normalizeAccount),
     activeAccountId: DEFAULT_STATE.activeAccountId,
-    profiles: DEFAULT_STATE.profiles.map(p => ({ ...p, mods: [...p.mods] })),
+    profiles: DEFAULT_STATE.profiles.map(profile => normalizeProfile({ ...profile, mods: [...profile.mods] })),
     activeProfileId: DEFAULT_STATE.activeProfileId,
     settings: { ...DEFAULT_STATE.settings },
     sessions: [],
@@ -1449,6 +1461,20 @@ function getStateFilePath() {
 
 function readStateFromDisk() {
   launcherState = launcherStateStore.readFromDisk();
+  let changed = false;
+  for (const account of launcherState.accounts || []) {
+    const cosmetics = normalizeAccountCosmetics(account.cosmetics || {});
+    for (const key of ['recentlyUsedSkins', 'recentlyUsedCapes', 'favoriteSkins', 'favoriteCapes']) {
+      const before = cosmetics[key];
+      cosmetics[key] = before.filter(item => {
+        if (!item || !['local', 'created'].includes(item.source) || !item.filePath) return true;
+        return fs.existsSync(item.filePath);
+      });
+      changed ||= cosmetics[key].length !== before.length;
+    }
+    account.cosmetics = cosmetics;
+  }
+  if (changed) launcherStateStore.setState(launcherState);
   return launcherState;
 }
 
@@ -1535,6 +1561,9 @@ function normalizeProfile(profile) {
   const validRenderers = getRendererOptions(mcVersion, loader).map(o => o.id);
   const rendererMode = validRenderers.includes(profile?.rendererMode) ? profile.rendererMode : validRenderers[0];
   const name = String(profile?.name || '').trim().slice(0, 40) || 'New profile';
+  const customSkinLoader = profile?.customSkinLoader && typeof profile.customSkinLoader === 'object'
+    ? profile.customSkinLoader
+    : {};
   return {
     id: profile?.id || `profile-${Date.now()}`,
     name,
@@ -1546,6 +1575,17 @@ function normalizeProfile(profile) {
     memoryMax: Math.min(32, Math.max(1, Number(profile?.memoryMax) || DEFAULT_STATE.settings.memoryMax)),
     jvmProfile: ['default', 'zgc', 'custom'].includes(profile?.jvmProfile) ? profile.jvmProfile : 'default',
     customJvmArgs: String(profile?.customJvmArgs || ''),
+    customSkinLoader: {
+      enabled: customSkinLoader.enabled === true,
+      state: ['disabled', 'checking', 'available', 'downloading', 'installing', 'configuring', 'ready', 'updating', 'error', 'unsupported'].includes(customSkinLoader.state)
+        ? customSkinLoader.state
+        : 'disabled',
+      managed: customSkinLoader.managed === true,
+      compatibility: customSkinLoader.compatibility && typeof customSkinLoader.compatibility === 'object'
+        ? customSkinLoader.compatibility
+        : null,
+      lastError: customSkinLoader.lastError ? String(customSkinLoader.lastError).slice(0, 500) : null,
+    },
     benchmarkHistory: Array.isArray(profile?.benchmarkHistory) ? profile.benchmarkHistory.slice(-30) : [],
     // Each entry is the installed content's own record, not just an id, so the
     // Content tab can render a real installed-library list (name/type/enabled)
@@ -1793,8 +1833,8 @@ function getJvmArguments(settings) {
 
 function parseJavaMajorVersion(javaExecutable) {
   try {
-    const output = execFileSync(javaExecutable, ['-version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-    const text = `${output || ''}`;
+    const result = spawnSync(javaExecutable, ['-version'], { encoding: 'utf8', windowsHide: true });
+    const text = `${result.stdout || ''}\n${result.stderr || ''}`;
     const match = text.match(/version\s+"?(\d+)(?:\.\d+)?(?:\.\d+)?/i);
     return match ? Number(match[1]) : 0;
   } catch (_error) {
@@ -1802,7 +1842,81 @@ function parseJavaMajorVersion(javaExecutable) {
   }
 }
 
-async function getJavaPath(minimumVersion = 21) {
+function getRequiredJavaVersion(mcVersion) {
+  const version = String(mcVersion || '').trim();
+  const modernMajor = Number(version.split('.')[0]);
+  if ((modernMajor === 26 && Number(version.split('.')[1] || 0) >= 1) || modernMajor >= 27) return 25;
+  if (version.startsWith('26.') || version.startsWith('25.')) return 25;
+  if (version.startsWith('24.') || version.startsWith('23.')) return 22;
+  return 21;
+}
+
+function getManagedJavaRoot(version) {
+  return path.join(app.getPath('userData'), 'runtimes', `jdk-${version}`);
+}
+
+function findJavaExecutable(rootPath) {
+  if (!rootPath) return null;
+  const direct = path.join(rootPath, 'bin', process.platform === 'win32' ? 'java.exe' : 'java');
+  if (fs.existsSync(direct)) return direct;
+  try {
+    const nested = fs.readdirSync(rootPath, { withFileTypes: true })
+      .find(entry => entry.isDirectory() && fs.existsSync(path.join(rootPath, entry.name, 'bin', process.platform === 'win32' ? 'java.exe' : 'java')));
+    return nested ? path.join(rootPath, nested.name, 'bin', process.platform === 'win32' ? 'java.exe' : 'java') : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+async function installManagedJava(version) {
+  const rootPath = getManagedJavaRoot(version);
+  const existing = findJavaExecutable(rootPath);
+  if (existing && parseJavaMajorVersion(existing) >= version) return existing;
+
+  const platform = process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'mac' : 'linux';
+  const architecture = process.arch === 'arm64' ? 'aarch64' : 'x64';
+  const apiUrl = `https://api.adoptium.net/v3/assets/latest/${version}/hotspot?architecture=${architecture}&image_type=jdk&os=${platform}&vendor=eclipse`;
+  emitStatus(`Java ${version} is required. Finding a compatible JDK download...`);
+  const response = await axios.get(apiUrl, { timeout: 30000, headers: { 'User-Agent': 'Bald-Launcher' } });
+  const asset = Array.isArray(response.data) ? response.data[0] : null;
+  const binary = asset?.binary?.package;
+  if (!binary?.link) throw new Error(`Java ${version} is required, but no compatible JDK download was found.`);
+  const archivePath = path.join(app.getPath('userData'), 'runtimes', `jdk-${version}.download`);
+  const stagingPath = `${rootPath}.staging`;
+  fs.mkdirSync(path.dirname(archivePath), { recursive: true });
+  emitStatus(`Downloading Java ${version}...`);
+  const archive = await axios.get(binary.link, { responseType: 'arraybuffer', timeout: 180000, headers: { 'User-Agent': 'Bald-Launcher' } });
+  const archiveBuffer = Buffer.from(archive.data);
+  if (binary.checksum) {
+    const checksum = crypto.createHash('sha256').update(archiveBuffer).digest('hex');
+    if (checksum.toLowerCase() !== String(binary.checksum).toLowerCase()) {
+      throw new Error(`Java ${version} download failed integrity verification.`);
+    }
+  }
+  fs.writeFileSync(archivePath, archiveBuffer);
+  try {
+    fs.rmSync(stagingPath, { recursive: true, force: true });
+    fs.mkdirSync(stagingPath, { recursive: true });
+    emitStatus(`Installing Java ${version}...`);
+    new AdmZip(archivePath).extractAllTo(stagingPath, true);
+    const installed = findJavaExecutable(stagingPath);
+    if (!installed || parseJavaMajorVersion(installed) < version) {
+      throw new Error(`Downloaded Java ${version} did not contain a usable runtime.`);
+    }
+    fs.rmSync(rootPath, { recursive: true, force: true });
+    fs.renameSync(stagingPath, rootPath);
+    const result = findJavaExecutable(rootPath);
+    if (!result) throw new Error(`Java ${version} installation could not be validated.`);
+    return result;
+  } finally {
+    fs.rmSync(archivePath, { force: true });
+    fs.rmSync(stagingPath, { recursive: true, force: true });
+  }
+}
+
+async function getJavaPath(minimumVersion = 21, installIfMissing = false) {
+  const managed = findJavaExecutable(getManagedJavaRoot(minimumVersion));
+  if (managed && parseJavaMajorVersion(managed) >= minimumVersion) return managed;
   const javaHome = process.env.JAVA_HOME;
   const candidate = javaHome && path.join(javaHome, 'bin', process.platform === 'win32' ? 'java.exe' : 'java');
   if (candidate && fs.existsSync(candidate)) {
@@ -1841,7 +1955,7 @@ async function getJavaPath(minimumVersion = 21) {
     }
   }
 
-  return new Promise(resolve => execFile(process.platform === 'win32' ? 'where.exe' : 'which', ['java'], (error, stdout) => {
+  const resolved = await new Promise(resolve => execFile(process.platform === 'win32' ? 'where.exe' : 'which', ['java'], (error, stdout) => {
     if (!error && stdout.trim()) {
       for (const line of stdout.split(/\r?\n/)) {
         const trimmed = line.trim();
@@ -1860,6 +1974,15 @@ async function getJavaPath(minimumVersion = 21) {
 
     resolve(ranked[0]?.path || javaCandidates.sort((a, b) => parseJavaMajorVersion(b) - parseJavaMajorVersion(a))[0] || 'java');
   }));
+  if (parseJavaMajorVersion(resolved) >= minimumVersion) return resolved;
+  if (installIfMissing) return installManagedJava(minimumVersion);
+  return resolved;
+}
+
+async function resolveJavaForMinecraft(mcVersion, preferredPath = '') {
+  const minimumVersion = getRequiredJavaVersion(mcVersion);
+  if (preferredPath && parseJavaMajorVersion(preferredPath) >= minimumVersion) return preferredPath;
+  return getJavaPath(minimumVersion, true);
 }
 
 function setProcessPriority(child, priority) {
@@ -2294,6 +2417,7 @@ async function getOfficialMinecraftAppearance(account, force = false) {
     const skinPath = skin ? await cacheOfficialTexture(account, 'skin', skin, force) : null;
     const capePath = cape ? await cacheOfficialTexture(account, 'cape', cape, force) : null;
     if (skin && !skinPath) throw new Error('Minecraft returned a skin but its texture could not be cached.');
+    const previousOfficialSkin = cosmetics.official?.skin;
     const official = {
       skin: skin && skinPath ? { id: String(skin.id), name: 'Minecraft Account Skin', source: 'official', filePath: skinPath, url: getMinecraftTextureUrl(skin.url), model: skin.variant === 'SLIM' ? 'slim' : 'classic' } : null,
       cape: cape && capePath ? { id: String(cape.id), name: cape.alias || 'Official Minecraft Cape', source: 'official', filePath: capePath, url: getMinecraftTextureUrl(cape.url) } : null,
@@ -2301,6 +2425,12 @@ async function getOfficialMinecraftAppearance(account, force = false) {
       status: 'ready',
       error: null,
     };
+    if (previousOfficialSkin?.filePath && previousOfficialSkin.id !== official.skin?.id) {
+      cosmetics.recentlyUsedSkins = [
+        previousOfficialSkin,
+        ...(cosmetics.recentlyUsedSkins || []).filter(item => item?.id !== previousOfficialSkin.id),
+      ].slice(0, 12);
+    }
     cosmetics.official = official;
     cosmetics.model = official.skin?.model || cosmetics.selected?.skin?.model || cosmetics.model || 'classic';
     cosmetics.skin = cosmetics.selected?.skin || official.skin;
@@ -2321,6 +2451,50 @@ async function getOfficialMinecraftAppearance(account, force = false) {
   }
 }
 
+async function syncMinecraftAccountSkin(account, selection) {
+  if (!account || account.type === 'Offline' || selection?.source === 'official') return;
+  const filePath = path.resolve(String(selection?.filePath || ''));
+  const cosmeticsRoot = path.resolve(path.join(app.getPath('userData'), 'cosmetics'));
+  if (!filePath || (filePath !== cosmeticsRoot && !filePath.startsWith(`${cosmeticsRoot}${path.sep}`))) {
+    throw new Error('Selected skin is outside the cosmetic library.');
+  }
+  if (!fs.existsSync(filePath)) throw new Error('Selected skin file is unavailable.');
+
+  const library = createCosmeticLibrary({ appDataDir: app.getPath('userData') });
+  const check = library.validatePngBuffer(fs.readFileSync(filePath));
+  if (!check.ok) throw new Error(check.error || 'Selected skin is not a valid PNG.');
+
+  let authorization = account.auth;
+  let accessToken = String(authorization?.access_token || '');
+  if (!accessToken) throw new Error('Minecraft authentication is unavailable. Relink this account.');
+
+  const upload = async token => {
+    const form = new FormData();
+    form.append('variant', selection?.model === 'slim' ? 'slim' : 'classic');
+    form.append('file', fs.createReadStream(filePath), { filename: 'skin.png', contentType: 'image/png' });
+    await axios.post('https://api.minecraftservices.com/minecraft/profile/skins', form, {
+      headers: { Authorization: `Bearer ${token}`, ...form.getHeaders() },
+      timeout: 30000,
+      maxBodyLength: 10 * 1024 * 1024,
+    });
+  };
+
+  try {
+    await upload(accessToken);
+  } catch (error) {
+    const refreshToken = String(authorization?.meta?.refresh || '');
+    if (error?.response?.status !== 401 || !refreshToken) throw error;
+    const { Auth } = require('msmc');
+    const xboxManager = await new Auth('select_account').refresh(refreshToken);
+    authorization = (await xboxManager.getMinecraft()).mclc(true);
+    account.auth = authorization;
+    await upload(authorization.access_token);
+  }
+  account.cosmetics = normalizeAccountCosmetics(account.cosmetics || {});
+  account.cosmetics.official = { ...account.cosmetics.official, status: 'unknown', fetchedAt: 0, error: null };
+  scheduleStateWrite();
+}
+
 ipcMain.handle('launcher:cosmetics:get', async (_event, payload = {}) => {
   const accountId = String(payload?.accountId || launcherState.activeAccountId || '');
   const account = launcherState.accounts.find(item => item.id === accountId) || launcherState.accounts[0] || null;
@@ -2334,9 +2508,27 @@ ipcMain.handle('launcher:cosmetics:save-selection', async (_event, payload = {})
   if (!account) return { ok: false, error: 'Target account not found.' };
   const kind = payload?.kind === 'cape' ? 'cape' : 'skin';
   const selection = payload?.selection && typeof payload.selection === 'object' ? payload.selection : null;
+  if (kind === 'skin' && selection?.source !== 'official') {
+    try {
+      await syncMinecraftAccountSkin(account, selection);
+    } catch (error) {
+      return { ok: false, accountId: account.id, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
   const updated = setAccountSelection(account, kind, selection);
   account.cosmetics = updated.cosmetics;
+  if (kind === 'skin') account.skinPath = selection?.source === 'official' ? null : String(selection?.filePath || '');
   if (selection) {
+    const libraryRoot = path.resolve(path.join(app.getPath('userData'), 'cosmetics'));
+    const selectedPath = selection.filePath ? path.resolve(String(selection.filePath)) : '';
+    const isLocalLibraryAsset = selectedPath === libraryRoot || selectedPath.startsWith(`${libraryRoot}${path.sep}`);
+    if (isLocalLibraryAsset && ['local', 'created'].includes(String(selection.source || 'local'))) {
+      const collectionKey = kind === 'skin' ? 'importedSkins' : 'importedCapes';
+      const collection = Array.isArray(account.cosmetics[collectionKey]) ? account.cosmetics[collectionKey] : [];
+      if (!collection.some(item => item?.id === selection.id || (item?.filePath && path.resolve(item.filePath) === selectedPath))) {
+        account.cosmetics[collectionKey] = [{ ...selection, filePath: selectedPath }, ...collection].slice(0, 200);
+      }
+    }
     const recent = pushRecentItem(updated, kind, selection);
     account.cosmetics = recent.cosmetics;
   }
@@ -2459,6 +2651,10 @@ ipcMain.handle('launcher:cosmetics:delete-created', async (_event, payload = {})
       account.cosmetics = normalizeAccountCosmetics(account.cosmetics || {});
       account.cosmetics.createdSkins = account.cosmetics.createdSkins.filter(item => item?.filePath !== requested);
       account.cosmetics.createdCapes = account.cosmetics.createdCapes.filter(item => item?.filePath !== requested);
+      account.cosmetics.recentlyUsedSkins = account.cosmetics.recentlyUsedSkins.filter(item => item?.filePath !== requested);
+      account.cosmetics.recentlyUsedCapes = account.cosmetics.recentlyUsedCapes.filter(item => item?.filePath !== requested);
+      account.cosmetics.favoriteSkins = account.cosmetics.favoriteSkins.filter(item => item?.filePath !== requested);
+      account.cosmetics.favoriteCapes = account.cosmetics.favoriteCapes.filter(item => item?.filePath !== requested);
       if (account.cosmetics.selected?.skin?.filePath === requested) account.cosmetics.selected.skin = null;
       if (account.cosmetics.selected?.cape?.filePath === requested) account.cosmetics.selected.cape = null;
       account.cosmetics.skin = account.cosmetics.selected.skin || account.cosmetics.official.skin || null;
@@ -2676,6 +2872,108 @@ ipcMain.handle('launcher:get-renderer-options', async (_event, { mcVersion, load
 });
 
 ipcMain.handle('launcher:get-versions', async () => getVersionManifest());
+
+ipcMain.handle('launcher:custom-skin-loader:resolve', async (_event, payload) => {
+  try {
+    const profile = payload?.profileId
+      ? launcherState.profiles.find(item => item.id === payload.profileId)
+      : getActiveProfile();
+    if (!profile) return { ok: false, error: 'Profile not found' };
+    const result = await resolveCustomSkinLoader({
+      mcVersion: profile.mcVersion,
+      loader: profile.loader,
+      client: axios,
+    });
+    return { ok: true, profileId: profile.id, ...result };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:custom-skin-loader:diagnose', async (_event, payload) => {
+  try {
+    const profile = payload?.profileId ? launcherState.profiles.find(item => item.id === payload.profileId) : getActiveProfile();
+    if (!profile) return { ok: false, error: 'Profile not found' };
+    const resolved = await resolveCustomSkinLoader({ mcVersion: profile.mcVersion, loader: profile.loader, client: axios });
+    const profileRoot = getMinecraftRootFor(profile.id);
+    return { ok: true, profileId: profile.id, ...diagnoseInstallation({ profileRoot, profile, compatibility: resolved.compatibility }) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:custom-skin-loader:install', async (_event, payload) => {
+  try {
+    const profile = payload?.profileId ? launcherState.profiles.find(item => item.id === payload.profileId) : getActiveProfile();
+    if (!profile) return { ok: false, error: 'Profile not found' };
+    const result = await installCustomSkinLoader({ profileRoot: getMinecraftRootFor(profile.id), profile, client: axios });
+    if (result.ok) {
+      profile.customSkinLoader = {
+        ...(profile.customSkinLoader || {}),
+        enabled: result.state === 'ready',
+        managed: true,
+        state: result.state,
+        compatibility: result.compatibility,
+        lastError: null,
+      };
+      scheduleStateWrite();
+    }
+    return { ...result, profileId: profile.id };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:custom-skin-loader:repair', async (_event, payload) => {
+  try {
+    const profile = payload?.profileId ? launcherState.profiles.find(item => item.id === payload.profileId) : getActiveProfile();
+    if (!profile) return { ok: false, error: 'Profile not found' };
+    const result = await installCustomSkinLoader({ profileRoot: getMinecraftRootFor(profile.id), profile, client: axios });
+    if (result.ok) {
+      profile.customSkinLoader = { ...(profile.customSkinLoader || {}), enabled: result.state === 'ready', managed: true, state: result.state, compatibility: result.compatibility, lastError: null };
+      scheduleStateWrite();
+    }
+    return { ...result, profileId: profile.id };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:custom-skin-loader:disable', async (_event, payload) => {
+  try {
+    const profile = payload?.profileId ? launcherState.profiles.find(item => item.id === payload.profileId) : getActiveProfile();
+    if (!profile) return { ok: false, error: 'Profile not found' };
+    const result = disableCustomSkinLoader({ profileRoot: getMinecraftRootFor(profile.id) });
+    if (result.ok) {
+      profile.customSkinLoader = { ...(profile.customSkinLoader || {}), enabled: false, state: 'disabled' };
+      scheduleStateWrite();
+    }
+    return { ...result, profileId: profile.id };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:custom-skin-loader:remove', async (_event, payload) => {
+  try {
+    const profile = payload?.profileId ? launcherState.profiles.find(item => item.id === payload.profileId) : getActiveProfile();
+    if (!profile) return { ok: false, error: 'Profile not found' };
+    const result = removeManagedInstallation({ profileRoot: getMinecraftRootFor(profile.id) });
+    if (result.ok) {
+      profile.customSkinLoader = { ...(profile.customSkinLoader || {}), enabled: false, managed: false, state: 'disabled', compatibility: null };
+      scheduleStateWrite();
+    }
+    return { ...result, profileId: profile.id };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:custom-skin-loader:ownership', async (_event, payload) => {
+  const profile = payload?.profileId ? launcherState.profiles.find(item => item.id === payload.profileId) : getActiveProfile();
+  if (!profile) return { ok: false, error: 'Profile not found' };
+  return { ok: true, profileId: profile.id, ownership: readOwnership(getMinecraftRootFor(profile.id)) };
+});
 
 // Resolves the curated bundle's search terms into real Modrinth projects for
 // the checklist modal — nothing is installed here, this is preview-only.
@@ -3224,16 +3522,10 @@ async function startServerProcess(server) {
   }
   fs.mkdirSync(path.join(rootPath, 'logs'), { recursive: true });
 
-  const minimumJavaVersion = (() => {
-    const major = Number(String(server?.mcVersion || '1.21.1').split('.')[0]);
-    if (String(server?.mcVersion || '1.21.1').startsWith('26.') || String(server?.mcVersion || '1.21.1').startsWith('25.')) return 25;
-    if (String(server?.mcVersion || '1.21.1').startsWith('24.') || String(server?.mcVersion || '1.21.1').startsWith('23.')) return 22;
-    return major >= 26 ? 25 : 21;
-  })();
-  const javaPath = await getJavaPath(minimumJavaVersion);
+  const javaPath = await resolveJavaForMinecraft(server?.mcVersion || '1.21.1', server.javaPath);
   const jarPath = path.join(rootPath, foundJar);
   updateServerProperties(server);
-  const javaExecutable = server.javaPath || javaPath;
+  const javaExecutable = javaPath;
   const customArgs = String(server.javaArgs || '').trim() ? String(server.javaArgs).trim().split(/\s+/) : [];
   const serverMemory = Math.max(2, Number(server.memoryMax) || 4);
   const processInfo = spawn(javaExecutable, [`-Xms${serverMemory}G`, `-Xmx${serverMemory}G`, ...customArgs, '-jar', jarPath, 'nogui'], {
@@ -4410,13 +4702,14 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       lastLaunchArguments = Array.isArray(args) ? args : [];
       emitLog(profile.name, 'info', `Final launch command: java ${lastLaunchArguments.join(' ')}`, profile.id);
     });
+    const javaExecutable = await resolveJavaForMinecraft(profile.mcVersion, profile.javaPath);
     const child = await profileLauncher.launch({
       root: minecraftRoot,
       version: versionNumber === profile.mcVersion
         ? { number: profile.mcVersion, type: 'release' }
         : { number: profile.mcVersion, type: 'custom', custom: versionNumber },
       memory: { min: '1G', max: `${Math.min(32, Math.max(1, memoryMax))}G` },
-      javaPath: profile.javaPath || await getJavaPath(),
+      javaPath: javaExecutable,
       customArgs: getJvmArguments(settings),
       authorization,
       overrides: {
@@ -4438,7 +4731,7 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       session.running = true;
       scheduleStateWrite();
       setProcessPriority(child, settings.processPriority);
-      emitLog(profile.name, 'info', `Java: ${await getJavaPath()}`, profile.id);
+      emitLog(profile.name, 'info', `Java ${getRequiredJavaVersion(profile.mcVersion)}: ${javaExecutable}`, profile.id);
       emitLog(profile.name, 'info', `JVM arguments: ${getJvmArguments(settings).join(' ') || 'MCLC defaults'}`, profile.id);
       emitProcessState(true, profile, child.pid);
       emitStatus(`Running · ${profile.name} · ${account.name}`);
@@ -4581,4 +4874,3 @@ app.on('before-quit', () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
-

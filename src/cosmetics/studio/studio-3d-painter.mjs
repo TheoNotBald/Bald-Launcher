@@ -2,10 +2,25 @@
 
 import * as THREE from '../../../node_modules/three/build/three.module.js';
 
-window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPixel, onPaintEnd) {
+window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPixel, onPaintEnd, getPaintLayer) {
   const canvas = viewer.canvas;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
+  const skin = viewer.playerObject?.skin;
+  const cape = viewer.playerObject?.cape;
+  const isCape = kind === 'cape';
+  const textureWidth = 64;
+  const textureHeight = isCape ? 32 : 64;
+  [skin?.layer1Material, skin?.layer1MaterialBiased, skin?.layer2Material, skin?.layer2MaterialBiased].forEach(material => {
+    if (material) {
+      material.side = THREE.DoubleSide;
+      material.needsUpdate = true;
+    }
+  });
+  if (isCape && cape?.material) {
+    cape.material.side = THREE.DoubleSide;
+    cape.material.needsUpdate = true;
+  }
   let painting = false;
   let orbiting = false;
   let orbitStart = null;
@@ -13,42 +28,63 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
   let gridLines = [];
   const pixelGridGeometry = node => {
     const geometry = node.geometry;
-    geometry.computeBoundingBox();
-    const box = geometry.boundingBox;
-    if (!box) return null;
-    const scale = node.scale;
+    const positions = geometry.attributes.position;
+    const uvs = geometry.attributes.uv;
+    if (!positions || !uvs) return null;
     const vertices = [];
     const line = (a, b) => vertices.push(a.x, a.y, a.z, b.x, b.y, b.z);
-    const x0 = box.min.x, x1 = box.max.x;
-    const y0 = box.min.y, y1 = box.max.y;
-    const z0 = box.min.z, z1 = box.max.z;
-    const stepX = 1 / Math.max(0.0001, scale.x);
-    const stepY = 1 / Math.max(0.0001, scale.y);
-    const stepZ = 1 / Math.max(0.0001, scale.z);
-    const inset = 0.012 / Math.max(scale.x, scale.y, scale.z);
-    for (let x = Math.ceil(x0 / stepX) * stepX; x <= x1 + stepX * 0.01; x += stepX) {
-      line(new THREE.Vector3(x, y0, z0 - inset), new THREE.Vector3(x, y1, z0 - inset));
-      line(new THREE.Vector3(x, y0, z1 + inset), new THREE.Vector3(x, y1, z1 + inset));
-    }
-    for (let y = Math.ceil(y0 / stepY) * stepY; y <= y1 + stepY * 0.01; y += stepY) {
-      line(new THREE.Vector3(x0, y, z0 - inset), new THREE.Vector3(x1, y, z0 - inset));
-      line(new THREE.Vector3(x0, y, z1 + inset), new THREE.Vector3(x1, y, z1 + inset));
-    }
-    for (let y = Math.ceil(y0 / stepY) * stepY; y <= y1 + stepY * 0.01; y += stepY) {
-      line(new THREE.Vector3(x0 - inset, y, z0), new THREE.Vector3(x0 - inset, y, z1));
-      line(new THREE.Vector3(x1 + inset, y, z0), new THREE.Vector3(x1 + inset, y, z1));
-    }
-    for (let z = Math.ceil(z0 / stepZ) * stepZ; z <= z1 + stepZ * 0.01; z += stepZ) {
-      line(new THREE.Vector3(x0 - inset, y0, z), new THREE.Vector3(x0 - inset, y1, z));
-      line(new THREE.Vector3(x1 + inset, y0, z), new THREE.Vector3(x1 + inset, y1, z));
-    }
-    for (let x = Math.ceil(x0 / stepX) * stepX; x <= x1 + stepX * 0.01; x += stepX) {
-      line(new THREE.Vector3(x, y0 - inset, z0), new THREE.Vector3(x, y0 - inset, z1));
-      line(new THREE.Vector3(x, y1 + inset, z0), new THREE.Vector3(x, y1 + inset, z1));
-    }
-    for (let z = Math.ceil(z0 / stepZ) * stepZ; z <= z1 + stepZ * 0.01; z += stepZ) {
-      line(new THREE.Vector3(x0, y0 - inset, z), new THREE.Vector3(x1, y0 - inset, z));
-      line(new THREE.Vector3(x0, y1 + inset, z), new THREE.Vector3(x1, y1 + inset, z));
+    const groups = geometry.groups?.length ? geometry.groups : [{ start: 0, count: positions.count }];
+    const pixelSize = 1 / textureWidth;
+    const offset = 0.01;
+    for (const group of groups) {
+        const faceIndices = [];
+        for (let index = group.start; index < group.start + group.count; index += 1) {
+          faceIndices.push(geometry.index ? geometry.index.getX(index) : index);
+        }
+        if (faceIndices.length < 6) continue;
+        const faceVertices = faceIndices.map(vertexIndex => ({
+          position: new THREE.Vector3().fromBufferAttribute(positions, vertexIndex),
+          uv: new THREE.Vector2().fromBufferAttribute(uvs, vertexIndex)
+        }));
+        const uvValues = [];
+        faceVertices.forEach(vertex => uvValues.push(vertex.uv.x, vertex.uv.y));
+        const u0 = Math.min(...uvValues.filter((_, index) => index % 2 === 0));
+        const u1 = Math.max(...uvValues.filter((_, index) => index % 2 === 0));
+        const v0 = Math.min(...uvValues.filter((_, index) => index % 2 === 1));
+        const v1 = Math.max(...uvValues.filter((_, index) => index % 2 === 1));
+        const corner = (u, v) => faceVertices.find(vertex =>
+          Math.abs(vertex.uv.x - u) < 1e-6 && Math.abs(vertex.uv.y - v) < 1e-6
+        )?.position.clone();
+        const cornerA = corner(u0, v0);
+        const cornerB = corner(u1, v0);
+        const cornerC = corner(u0, v1);
+        const cornerD = corner(u1, v1);
+        if (!cornerA || !cornerB || !cornerC || !cornerD) continue;
+        const sample = (u, v) => {
+          const uRatio = (u - u0) / (u1 - u0 || 1);
+          const vRatio = (v - v0) / (v1 - v0 || 1);
+          return cornerA.clone()
+            .lerp(cornerB, uRatio)
+            .lerp(cornerC.clone().lerp(cornerD, uRatio), vRatio);
+        };
+        const faceCenter = cornerA.clone().add(cornerB).add(cornerC).add(cornerD).multiplyScalar(0.25);
+        const normal = cornerB.clone().sub(cornerA).cross(cornerC.clone().sub(cornerA)).normalize();
+        if (normal.dot(faceCenter) < 0) normal.negate();
+        normal.multiplyScalar(offset);
+      const columns = Math.max(1, Math.round((u1 - u0) / pixelSize));
+      const rows = Math.max(1, Math.round((v1 - v0) / pixelSize));
+      for (let column = 0; column <= columns; column += 1) {
+        const u = u0 + ((u1 - u0) * column) / columns;
+        const start = sample(u, v0);
+        const end = sample(u, v1);
+        if (start && end) line(start.add(normal), end.add(normal));
+      }
+      for (let row = 0; row <= rows; row += 1) {
+        const v = v0 + ((v1 - v0) * row) / rows;
+        const start = sample(u0, v);
+        const end = sample(u1, v);
+        if (start && end) line(start.add(normal), end.add(normal));
+      }
     }
     const result = new THREE.BufferGeometry();
     result.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
@@ -64,17 +100,34 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
     if (!enabled || !viewer.playerObject) return;
     const meshes = [];
     viewer.playerObject.traverse(node => {
-      if (node.isMesh && node.geometry?.attributes?.position && !node.userData?.studioGrid
-        && node.material !== viewer.playerObject.skin.layer2Material
-        && node.material !== viewer.playerObject.skin.layer2MaterialBiased) meshes.push(node);
+      if (!node.isMesh || !node.geometry?.attributes?.position || node.userData?.studioGrid) return;
+      if (isCape) {
+        if (node === cape?.cape && node.visible) meshes.push(node);
+        return;
+      }
+      const paintLayer = getPaintLayer?.() === 'outer' ? 'outer' : 'inner';
+      const layerMaterials = paintLayer === 'outer'
+        ? [skin?.layer2Material, skin?.layer2MaterialBiased]
+        : [skin?.layer1Material, skin?.layer1MaterialBiased];
+      if (layerMaterials.includes(node.material)) meshes.push(node);
     });
     meshes.forEach(node => {
       const grid = pixelGridGeometry(node);
       if (!grid) return;
       const overlay = new THREE.LineSegments(
         grid,
-        new THREE.LineBasicMaterial({ color: 0x72e64b, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false })
+        new THREE.LineBasicMaterial({
+          color: 0x72e64b,
+          transparent: true,
+          opacity: 0.8,
+          depthTest: true,
+          depthWrite: false,
+          polygonOffset: true,
+          polygonOffsetFactor: -4,
+          polygonOffsetUnits: -4
+        })
       );
+      overlay.raycast = () => {};
       overlay.userData.studioGrid = true;
       overlay.renderOrder = 101;
       overlay.frustumCulled = false;
@@ -87,23 +140,64 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
     pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, viewer.camera);
+    const targetMaterial = isCape
+      ? [cape?.material].filter(Boolean)
+      : (getPaintLayer?.() === 'outer'
+        ? [skin?.layer2Material, skin?.layer2MaterialBiased]
+        : [skin?.layer1Material, skin?.layer1MaterialBiased]);
     const intersections = raycaster.intersectObject(viewer.playerObject, true);
-    return intersections.find(item => item.uv && item.object.visible);
+    const belongsToEnabledPart = item => {
+      if (isCape) {
+        let node = item.object;
+        while (node && node !== viewer.playerObject) {
+          if (node === cape) return cape.visible;
+          node = node.parent;
+        }
+        return false;
+      }
+      let node = item.object;
+      while (node && node !== viewer.playerObject) {
+        if (node.name && skin?.[node.name] === node) return node.visible;
+        node = node.parent;
+      }
+      return false;
+    };
+    const matchesTarget = item => {
+      const materials = Array.isArray(item.object.material) ? item.object.material : [item.object.material];
+      return !targetMaterial[0] || materials.some(material => targetMaterial.includes(material));
+    };
+    return intersections.find(item => item.uv && item.object.visible
+      && belongsToEnabledPart(item) && matchesTarget(item));
   };
   const paint = event => {
     const intersection = hit(event);
     if (!intersection?.uv) return;
-    const x = Math.max(0, Math.min(63, Math.floor(intersection.uv.x * 64)));
-    const textureHeight = kind === 'cape' ? 32 : 64;
+    const x = Math.max(0, Math.min(textureWidth - 1, Math.floor(intersection.uv.x * textureWidth)));
     const y = Math.max(0, Math.min(textureHeight - 1, Math.floor((1 - intersection.uv.y) * textureHeight)));
+    let textureBounds = null;
+    const geometry = intersection.object?.geometry;
+    const uvAttribute = geometry?.attributes?.uv;
+    if (geometry && uvAttribute && Number.isInteger(intersection.faceIndex)) {
+      const triangleStart = intersection.faceIndex * 3;
+      const index = geometry.index;
+      const triangleVertices = [0, 1, 2].map(offset => index ? index.getX(triangleStart + offset) : triangleStart + offset);
+      const us = triangleVertices.map(vertex => uvAttribute.getX(vertex));
+      const vs = triangleVertices.map(vertex => uvAttribute.getY(vertex));
+      const left = Math.max(0, Math.floor(Math.min(...us) * textureWidth));
+      const right = Math.min(textureWidth - 1, Math.ceil(Math.max(...us) * textureWidth) - 1);
+      const top = Math.max(0, Math.floor((1 - Math.max(...vs)) * textureHeight));
+      const bottom = Math.min(textureHeight - 1, Math.ceil((1 - Math.min(...vs)) * textureHeight) - 1);
+      textureBounds = [left, top, Math.max(1, right - left + 1), Math.max(1, bottom - top + 1)];
+    }
     const key = `${x}:${y}`;
     if (key === lastKey && event.type === 'pointermove') return;
     lastKey = key;
-    onPixel(x, y, event);
+    onPixel(x, y, event, textureBounds);
   };
   const down = event => {
-    if (event.button === 2) {
+    if (event.button === 2 || event.button === 1) {
       event.preventDefault();
+      event.stopPropagation();
       orbiting = true;
       orbitStart = { x: event.clientX, y: event.clientY, rotation: viewer.playerWrapper.rotation.clone() };
       viewer.controls.enabled = false;
@@ -111,6 +205,8 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
       return;
     }
     if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
     painting = true;
     viewer.controls.enabled = false;
     lastKey = '';
@@ -118,22 +214,33 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
     paint(event);
   };
   const move = event => {
-    if (painting) paint(event);
+    if (painting) {
+      event.preventDefault();
+      event.stopPropagation();
+      paint(event);
+    }
     if (orbiting && orbitStart) {
+      event.preventDefault();
+      event.stopPropagation();
       viewer.playerWrapper.rotation.y = orbitStart.rotation.y + (event.clientX - orbitStart.x) * 0.012;
       viewer.playerWrapper.rotation.x = Math.max(-1.35, Math.min(1.35, orbitStart.rotation.x + (event.clientY - orbitStart.y) * 0.008));
+      viewer.render?.();
     }
   };
-  const up = () => {
+  const up = event => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
     if (painting) { painting = false; lastKey = ''; onPaintEnd?.(); }
     if (orbiting) { orbiting = false; orbitStart = null; }
     viewer.controls.enabled = true;
+    if (event?.pointerId !== undefined) canvas.releasePointerCapture?.(event.pointerId);
   };
   const context = event => event.preventDefault();
-  canvas.addEventListener('pointerdown', down);
-  canvas.addEventListener('pointermove', move);
-  canvas.addEventListener('pointerup', up);
-  canvas.addEventListener('pointercancel', up);
+  const listenerOptions = { capture: true };
+  canvas.addEventListener('pointerdown', down, listenerOptions);
+  canvas.addEventListener('pointermove', move, listenerOptions);
+  canvas.addEventListener('pointerup', up, listenerOptions);
+  canvas.addEventListener('pointercancel', up, listenerOptions);
   canvas.addEventListener('contextmenu', context);
   const refreshGridSoon = () => {
     setGrid(true);
@@ -146,10 +253,10 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
     refreshGrid: refreshGridSoon,
     dispose: () => {
       setGrid(false);
-      canvas.removeEventListener('pointerdown', down);
-      canvas.removeEventListener('pointermove', move);
-      canvas.removeEventListener('pointerup', up);
-      canvas.removeEventListener('pointercancel', up);
+      canvas.removeEventListener('pointerdown', down, listenerOptions);
+      canvas.removeEventListener('pointermove', move, listenerOptions);
+      canvas.removeEventListener('pointerup', up, listenerOptions);
+      canvas.removeEventListener('pointercancel', up, listenerOptions);
       canvas.removeEventListener('contextmenu', context);
       viewer.controls.enabled = true;
     }

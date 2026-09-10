@@ -31,7 +31,7 @@
     "node-pty": "^1.1.0",
     "pidusage": "^4.0.1",
     "skinview3d": "^3.4.2",
-    "three": "^0.180.0"
+    "three": "^0.156.1"
   },
   "description": "A third-party Minecraft launcher for profiles, content, and self-hosted servers.",
   "keywords": [],

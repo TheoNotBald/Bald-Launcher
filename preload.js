@@ -24,6 +24,13 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   // profiles
   getRendererOptions: (mcVersion, loader) => ipcRenderer.invoke('launcher:get-renderer-options', { mcVersion, loader }),
   getVersions: () => ipcRenderer.invoke('launcher:get-versions'),
+  resolveCustomSkinLoader: profileId => ipcRenderer.invoke('launcher:custom-skin-loader:resolve', { profileId }),
+  diagnoseCustomSkinLoader: profileId => ipcRenderer.invoke('launcher:custom-skin-loader:diagnose', { profileId }),
+  installCustomSkinLoader: profileId => ipcRenderer.invoke('launcher:custom-skin-loader:install', { profileId }),
+  repairCustomSkinLoader: profileId => ipcRenderer.invoke('launcher:custom-skin-loader:repair', { profileId }),
+  disableCustomSkinLoader: profileId => ipcRenderer.invoke('launcher:custom-skin-loader:disable', { profileId }),
+  removeCustomSkinLoader: profileId => ipcRenderer.invoke('launcher:custom-skin-loader:remove', { profileId }),
+  getCustomSkinLoaderOwnership: profileId => ipcRenderer.invoke('launcher:custom-skin-loader:ownership', { profileId }),
   createProfile: profile => ipcRenderer.invoke('launcher:create-profile', profile),
   updateProfile: profile => ipcRenderer.invoke('launcher:update-profile', profile),
   duplicateProfile: (profileId, name) => ipcRenderer.invoke('launcher:duplicate-profile', { profileId, name }),
