@@ -10,6 +10,8 @@
     projects: [],
     catalog: [],
     catalogVersion: null,
+    catalogError: null,
+    catalogError: null,
     libraryQuery: '',
     libraryFilter: 'All packs',
     librarySort: 'Recently edited',
@@ -46,6 +48,7 @@
     redo: [],
     dirty: false,
     importSummary: null,
+    requestGeneration: 0,
   };
   let catalogRequest = null;
   let preview = null;
@@ -159,6 +162,8 @@
   async function openProject(id) {
     const selected = state.projects.find(entry => entry.id === id);
     if (!selected) return;
+    state.requestGeneration += 1;
+    const generation = state.requestGeneration;
     const editor = reviveEditor(selected.data || defaultEditor(selected.name, selected.version));
     Object.assign(state, editor, {
       view: 'editor',
@@ -177,7 +182,7 @@
     });
     persist();
     render();
-    await loadCatalog(state.version);
+    await loadCatalog(state.version, generation);
   }
 
   function openLibrary() {
@@ -219,16 +224,25 @@
     render();
   }
 
-  async function loadCatalog(version) {
+  async function loadCatalog(version, generation = state.requestGeneration) {
     if (!window.launcherAPI?.getResourcePackCatalog) return;
+    state.catalogError = null;
     if (catalogRequest && state.catalogVersion === version) return catalogRequest;
     catalogRequest = window.launcherAPI.getResourcePackCatalog(version).then(result => {
       if (!result?.ok || !Array.isArray(result.catalog)) throw new Error(result?.error || `No vanilla resources were found for Minecraft ${version}.`);
+      if (generation !== state.requestGeneration || state.version !== version) return;
+      state.catalogError = null;
       state.catalog = result.catalog;
       state.catalogVersion = version;
       if (!state.selectedId || !state.catalog.some(entry => entry.id === state.selectedId)) state.selectedId = state.catalog[0]?.id || null;
       render();
-    }).catch(error => setStatus(error.message, true)).finally(() => { catalogRequest = null; });
+    }).catch(error => {
+      state.catalog = [];
+      state.catalogVersion = version;
+      state.catalogError = error.message;
+      render();
+      setStatus(error.message, true);
+    }).finally(() => { catalogRequest = null; });
     return catalogRequest;
   }
 
@@ -337,7 +351,7 @@
     const current = item();
     const resources = filteredResources();
     const categories = categoryNames();
-    const loading = !state.catalog.length;
+    const loading = !state.catalog.length && !state.catalogError;
     return `
       <section class="rp-studio">
         <header class="rp-editor-bar">
@@ -349,8 +363,8 @@
             <div class="rp-pane-heading"><div><strong>Browse resources</strong><span>${loading ? 'Loading vanilla catalog…' : `${state.catalog.length} versioned resources`}</span></div><button class="rp-icon-button" data-rp-action="refresh" title="Reload catalog">↻</button></div>
             <input class="modal-input rp-search" id="rpSearch" placeholder="Search items, blocks, entities..." value="${esc(state.query)}">
             <div class="rp-browser-row"><select class="modal-select" id="rpCategory">${categories.map(category => `<option${category === state.category ? ' selected' : ''}>${esc(category)}</option>`).join('')}</select><select class="modal-select" id="rpSort">${['Popular', 'Name', 'Recently edited', 'Modified first'].map(sort => `<option${sort === state.sort ? ' selected' : ''}>${sort}</option>`).join('')}</select></div>
-            <div class="rp-resource-count">${resources.length} results</div>
-            <div class="rp-resource-grid">${resources.map(renderResourceTile).join('') || '<div class="rp-empty-small">No resources match this search.</div>'}</div>
+            <div class="rp-resource-count">${state.catalogError ? 'Catalog unavailable' : `${resources.length} results`}</div>
+            <div class="rp-resource-grid">${state.catalogError ? `<div class="rp-empty-small">${esc(state.catalogError)}<br><button class="modal-btn" data-rp-action="refresh">Retry catalog</button></div>` : resources.map(renderResourceTile).join('') || '<div class="rp-empty-small">No resources match this search.</div>'}</div>
           </aside>
           <main class="rp-edit-stage">
             ${current ? renderSelectedResource(current) : '<div class="rp-stage-empty">Choose a resource from the browser to begin editing.</div>'}
@@ -390,7 +404,9 @@
       if (tile) tile.querySelector('.rp-thumb').innerHTML = '<span class="rp-thumb-placeholder">Asset unavailable</span>';
       return;
     }
+    const generation = state.requestGeneration;
     const result = await window.launcherAPI.getResourcePackAsset(state.version, path);
+    if (generation !== state.requestGeneration || item()?.id !== entry.id) return;
     state.thumbnailCache[entry.id] = result?.ok ? { dataUrl: result.dataUrl } : { error: true };
     if (!tile?.isConnected) return;
     tile.querySelector('.rp-thumb').innerHTML = result?.ok
@@ -510,6 +526,7 @@
     state.selectedPath = null;
     state.recentResources = [id, ...state.recentResources.filter(entry => entry !== id)].slice(0, 30);
     state.selectedTab = 'workspace';
+    state.requestGeneration += 1;
     render();
     const browser = document.querySelector('#resourcePackStudioRoot .rp-browser');
     if (browser) browser.scrollTop = scrollTop;
@@ -525,7 +542,9 @@
     if (!entry || !window.launcherAPI?.getResourcePackModel) return null;
     const key = modelKey(entry);
     if (state.modelCache[key]) return state.modelCache[key];
+    const generation = state.requestGeneration;
     const result = await window.launcherAPI.getResourcePackModel(state.version, entry.modelName || entry.id);
+    if (generation !== state.requestGeneration || item()?.id !== entry.id) return null;
     if (!result?.ok) {
       setStatus(result?.error || 'Minecraft model unavailable.', true);
       return null;
@@ -549,6 +568,7 @@
     if (!result?.ok) { setStatus(result?.error || 'Vanilla texture unavailable.', true); return; }
     const image = new Image();
     image.onload = () => {
+      if (generation !== state.requestGeneration || item()?.id !== entry.id) return;
       const scratch = document.createElement('canvas');
       state.textureDimensions[entry.id] = { width: image.naturalWidth || image.width, height: image.naturalHeight || image.height };
       scratch.width = state.textureDimensions[entry.id].width; scratch.height = state.textureDimensions[entry.id].height;
@@ -649,7 +669,9 @@
     if (!canvas || !window.THREE || !item()) return;
     if (preview?.renderer) preview.renderer.dispose();
     const entry = item();
+    const generation = state.requestGeneration;
     const model = await loadModel(entry);
+    if (generation !== state.requestGeneration || item()?.id !== entry.id) return;
     const width = Math.max(260, canvas.parentElement.clientWidth);
     const height = Math.max(260, canvas.parentElement.clientHeight);
     const scene = new THREE.Scene();
@@ -669,7 +691,7 @@
     const animate = () => { if (!document.getElementById('rp3dCanvas')) { renderer.dispose(); return; } if (state.autoRotate) root.rotation.y += .008; root.scale.setScalar(state.scale); renderer.render(scene, camera); requestAnimationFrame(animate); };
     preview = { renderer, scene, camera, mesh: root, root }; animate();
     canvas.onwheel = event => { event.preventDefault(); state.cameraZoom = Math.max(.55, Math.min(2.5, state.cameraZoom + event.deltaY * -.001)); camera.position.z = 3.2 / state.cameraZoom; };
-    let dragging = false; let lastX = 0; let lastY = 0;
+    let dragging = false; let panMode = false; let lastX = 0; let lastY = 0;
     let painting = false;
     canvas.onpointerdown = event => {
       if (event.button === 0) {
@@ -677,18 +699,25 @@
         beginHistoryAction();
         paintModelAt(event);
       } else if (event.button === 2 || event.button === 1) {
-        dragging = true; lastX = event.clientX; lastY = event.clientY;
+        dragging = true; panMode = event.button === 1; lastX = event.clientX; lastY = event.clientY;
       }
       canvas.setPointerCapture(event.pointerId);
     };
     canvas.onpointermove = event => {
       if (painting) paintModelAt(event);
       if (!dragging) return;
-      root.rotation.y += (event.clientX - lastX) * .01; root.rotation.x = Math.max(-1.2, Math.min(1.2, root.rotation.x + (event.clientY - lastY) * .01)); lastX = event.clientX; lastY = event.clientY;
+      if (panMode) {
+        camera.position.x -= (event.clientX - lastX) * .006;
+        camera.position.y += (event.clientY - lastY) * .006;
+      } else {
+        root.rotation.y += (event.clientX - lastX) * .01;
+        root.rotation.x = Math.max(-1.2, Math.min(1.2, root.rotation.x + (event.clientY - lastY) * .01));
+      }
+      lastX = event.clientX; lastY = event.clientY;
     };
     const finishPreviewPointer = () => {
       if (painting) commitHistoryAction('3D paint stroke');
-      painting = false; dragging = false;
+      painting = false; dragging = false; panMode = false;
     };
     canvas.onpointerup = finishPreviewPointer;
     canvas.onpointercancel = finishPreviewPointer;
@@ -702,19 +731,23 @@
     model.elements.forEach((element, elementIndex) => {
       const from = element.from || [0, 0, 0], to = element.to || [16, 16, 16];
       Object.entries(element.faces || {}).forEach(([side, face]) => {
-        const positions = faceVertices(from, to, side);
+        let positions = faceVertices(from, to, side);
         if (!positions) return;
+        positions = applyElementRotation(positions, element.rotation);
         const geometry = new THREE.BufferGeometry();
-        const uv = face.uv || defaultFaceUv(side, from, to);
-        const u0 = Number(uv?.[0] ?? 0) / 16, v0 = 1 - Number(uv?.[1] ?? 0) / 16;
-        const u1 = Number(uv?.[2] ?? 16) / 16, v1 = 1 - Number(uv?.[3] ?? 16) / 16;
-        const order = face.rotation ? [0, 1, 3, 2] : [0, 1, 2, 3];
+        const textureRef = resolveTexture(model.textures || {}, face.texture);
+        const target = textureEntryForRef(textureRef) || entry;
+        const dimensions = dimensionsFor(target);
+        const uv = face.uv || defaultFaceUv(side, from, to, dimensions);
+        const u0 = Number(uv?.[0] ?? 0) / dimensions.width, v0 = 1 - Number(uv?.[1] ?? dimensions.height) / dimensions.height;
+        const u1 = Number(uv?.[2] ?? dimensions.width) / dimensions.width, v1 = 1 - Number(uv?.[3] ?? dimensions.height) / dimensions.height;
+        const turns = ((Number(face.rotation) || 0) / 90) % 4;
+        const order = turns === 1 ? [1, 2, 3, 0] : turns === 2 ? [2, 3, 0, 1] : turns === 3 ? [3, 0, 1, 2] : [0, 1, 2, 3];
         const pos = [positions[order[0]], positions[order[1]], positions[order[2]], positions[order[0]], positions[order[2]], positions[order[3]]].flat();
         const uvs = [u0, v0, u1, v0, u1, v1, u0, v0, u1, v1, u0, v1];
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
         geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
         geometry.computeVertexNormals();
-        const textureRef = resolveTexture(model.textures || {}, face.texture);
         const material = new THREE.MeshStandardMaterial({ map: textureFor(textureRef, entry), color: 0xffffff, roughness: .88, side: THREE.DoubleSide });
         const mesh = new THREE.Mesh(geometry, material);
         mesh.userData = { textureRef, elementIndex, side, entryId: entry.id };
@@ -722,6 +755,21 @@
       });
     });
     return meshes;
+  }
+
+  function applyElementRotation(positions, rotation) {
+    if (!rotation?.axis || !Number.isFinite(Number(rotation.angle))) return positions;
+    const origin = new THREE.Vector3(...(rotation.origin || [8, 8, 8]).map(value => Number(value) / 16 - .5));
+    const axis = new THREE.Vector3(
+      rotation.axis === 'x' ? 1 : 0,
+      rotation.axis === 'y' ? 1 : 0,
+      rotation.axis === 'z' ? 1 : 0,
+    );
+    const quaternion = new THREE.Quaternion().setFromAxisAngle(axis, THREE.MathUtils.degToRad(Number(rotation.angle)));
+    return positions.map(values => {
+      const point = new THREE.Vector3(...values).sub(origin).applyQuaternion(quaternion).add(origin);
+      return [point.x, point.y, point.z];
+    });
   }
 
   function resolveTexture(textures, reference) {
@@ -751,7 +799,9 @@
     if (cached) return cached;
     const texture = new THREE.Texture();
     texture.magFilter = THREE.NearestFilter; texture.minFilter = THREE.NearestFilter; texture.generateMipmaps = false;
-    const assetPath = /^(?:items|blocks|entity)\//.test(textureRef) ? `${textureRef}.png` : `blocks/${textureRef}.png`;
+    const assetPath = /^(?:items|blocks|entity)\//.test(textureRef)
+      ? `${textureRef}.png`
+      : textureRef.startsWith('item/') ? `items/${textureRef}.png` : `blocks/${textureRef}.png`;
     window.launcherAPI?.getResourcePackAsset?.(state.version, assetPath).then(result => {
       if (!result?.ok) return;
       const image = new Image();
@@ -776,11 +826,12 @@
     return values ? [values.slice(0, 3), values.slice(3, 6), values.slice(6, 9), values.slice(9, 12)] : null;
   }
 
-  function defaultFaceUv(side, from, to) {
+  function defaultFaceUv(side, from, to, dimensions = { width: 16, height: 16 }) {
     const [x0, y0, z0] = from, [x1, y1, z1] = to;
-    if (side === 'up' || side === 'down') return [x0, z0, x1, z1];
-    if (side === 'north' || side === 'south') return [x0, 16 - y1, x1, 16 - y0];
-    return [z0, 16 - y1, z1, 16 - y0];
+    const scaleX = dimensions.width / 16, scaleY = dimensions.height / 16;
+    if (side === 'up' || side === 'down') return [x0 * scaleX, z0 * scaleY, x1 * scaleX, z1 * scaleY];
+    if (side === 'north' || side === 'south') return [x0 * scaleX, dimensions.height - y1 * scaleY, x1 * scaleX, dimensions.height - y0 * scaleY];
+    return [z0 * scaleX, dimensions.height - y1 * scaleY, z1 * scaleX, dimensions.height - y0 * scaleY];
   }
 
   function paintModelAt(event) {

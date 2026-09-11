@@ -4382,18 +4382,20 @@ ipcMain.handle('launcher:get-resource-pack-catalog', async (_event, requestedVer
   if (resourcePackCatalogCache.has(version)) return resourcePackCatalogCache.get(version);
   const base = `https://raw.githubusercontent.com/PrismarineJS/minecraft-data/master/data/pc/${encodeURIComponent(version)}`;
   try {
-    const [itemsResponse, blocksResponse, entitiesResponse, itemTexturesResponse, blockTexturesResponse] = await Promise.all([
+    const responses = await Promise.allSettled([
       axios.get(`${base}/items.json`, { headers: { 'User-Agent': 'BaldLauncher/ResourcePackStudio' }, timeout: 15000 }),
       axios.get(`${base}/blocks.json`, { headers: { 'User-Agent': 'BaldLauncher/ResourcePackStudio' }, timeout: 15000 }),
       axios.get(`${base}/entities.json`, { headers: { 'User-Agent': 'BaldLauncher/ResourcePackStudio' }, timeout: 15000 }),
       axios.get(`https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/${encodeURIComponent(version)}/items_textures.json`, { timeout: 15000 }),
       axios.get(`https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/${encodeURIComponent(version)}/blocks_textures.json`, { timeout: 15000 }),
     ]);
-    const items = Array.isArray(itemsResponse.data) ? itemsResponse.data : [];
-    const blocks = Array.isArray(blocksResponse.data) ? blocksResponse.data : [];
-    const entities = Array.isArray(entitiesResponse.data) ? entitiesResponse.data : [];
-    const itemTextures = Array.isArray(itemTexturesResponse.data) ? itemTexturesResponse.data : [];
-    const blockTextures = Array.isArray(blockTexturesResponse.data) ? blockTexturesResponse.data : [];
+    const responseData = index => responses[index]?.status === 'fulfilled' ? responses[index].value?.data : [];
+    const items = Array.isArray(responseData(0)) ? responseData(0) : [];
+    const blocks = Array.isArray(responseData(1)) ? responseData(1) : [];
+    const entities = Array.isArray(responseData(2)) ? responseData(2) : [];
+    const itemTextures = Array.isArray(responseData(3)) ? responseData(3) : [];
+    const blockTextures = Array.isArray(responseData(4)) ? responseData(4) : [];
+    if (!items.length && !blocks.length) throw new Error('Minecraft resource metadata returned no items or blocks.');
     const itemTextureByName = new Map(itemTextures.map(entry => [entry.name, entry]));
     const blockTextureByName = new Map(blockTextures.map(entry => [entry.name, entry]));
     const blockNames = new Set(blocks.filter(block => block.name !== 'air').map(block => block.name));
@@ -4416,7 +4418,10 @@ ipcMain.handle('launcher:get-resource-pack-catalog', async (_event, requestedVer
     const rawCatalog = [
       ...items.filter(item => item.name !== 'air' && isDistinctItem(item)).map(item => ({
         id: item.name, name: item.displayName || item.name, category: 'Items',
-        path: `assets/minecraft/textures/item/${item.name}.png`, texturePath: minecraftAssetPath(itemTextureByName.get(item.name)?.texture, 'items', item.name), shape: 'item',
+        path: `assets/minecraft/textures/item/${item.name}.png`,
+        texturePath: minecraftAssetPath(itemTextureByName.get(item.name)?.texture, 'items', item.name),
+        modelName: itemTextureByName.get(item.name)?.model?.replace(/^minecraft:items?\//, '') || item.name,
+        shape: 'item',
       })),
       ...blocks.filter(block => block.name !== 'air').map(block => ({
         id: block.name, name: block.displayName || block.name, category: 'Blocks',
@@ -4463,12 +4468,47 @@ ipcMain.handle('launcher:get-resource-pack-asset', async (_event, requestedVersi
   }
 });
 
+const vanillaClientModelCache = new Map();
+const vanillaClientArchiveCache = new Map();
+async function loadVanillaClientModel(version, model, kind) {
+  const cacheKey = `${version}:${kind}:${model}`;
+  if (vanillaClientModelCache.has(cacheKey)) return vanillaClientModelCache.get(cacheKey);
+  const manifest = (await axios.get(VERSION_MANIFEST_URL, { timeout: 15000 })).data;
+  const match = (manifest.versions || []).find(entry => entry.id === version)
+    || (manifest.versions || []).find(entry => entry.type === 'release' && entry.id.startsWith(String(version).split('.')[0] + '.'));
+  if (!match?.url) return null;
+  const versionData = (await axios.get(match.url, { timeout: 15000 })).data;
+  const clientUrl = versionData.downloads?.client?.url;
+  if (!clientUrl) return null;
+  let jar = vanillaClientArchiveCache.get(match.id);
+  if (!jar) {
+    jar = new AdmZip(Buffer.from((await axios.get(clientUrl, { responseType: 'arraybuffer', timeout: 120000 })).data));
+    vanillaClientArchiveCache.set(match.id, jar);
+  }
+  const read = (name, seen = new Set()) => {
+    const normalized = String(name || '').replace(/^minecraft:/, '').replace(/\.json$/i, '');
+    if (!normalized || seen.has(normalized)) return {};
+    seen.add(normalized);
+    const path = `assets/minecraft/models/${normalized}.json`;
+    const entry = jar.getEntry(path);
+    if (!entry) return {};
+    const source = JSON.parse(entry.getData().toString('utf8'));
+    const parent = read(source.parent, seen);
+    return { ...parent, ...source, textures: { ...(parent.textures || {}), ...(source.textures || {}) } };
+  };
+  const result = read(`${kind}/${model}`);
+  if (!Object.keys(result).length) return null;
+  vanillaClientModelCache.set(cacheKey, result);
+  return result;
+}
+
 ipcMain.handle('launcher:get-resource-pack-model', async (_event, requestedVersion, requestedModel) => {
   const version = String(requestedVersion || '1.21.4');
   const requested = String(requestedModel || '').replace(/^minecraft:/, '');
   const model = requested.replace(/^(?:block|blocks|item|items)\//, '');
   if (!/^[\w./-]+$/.test(model)) return { ok: false, error: 'Invalid Minecraft model name.' };
-  const key = `${version}:${model}`;
+  const modelKind = requested.startsWith('item/') || requested.startsWith('items/') ? 'item' : 'block';
+  const key = `${version}:${modelKind}:${model}`;
   if (resourcePackModelCache.has(key)) return resourcePackModelCache.get(key);
   try {
     const sources = requested.startsWith('item/') || requested.startsWith('items/')
@@ -4485,7 +4525,13 @@ ipcMain.handle('launcher:get-resource-pack-model', async (_event, requestedVersi
       }
     }
     const modelData = response?.data?.[model];
-    if (!modelData) return { ok: false, model, error: `Vanilla model ${model} was not found.` };
+    if (!modelData) {
+      const jarModel = await loadVanillaClientModel(version, model, modelKind);
+      if (!jarModel) return { ok: false, model, error: `Vanilla ${modelKind} model ${model} was not found.` };
+      const result = { ok: true, model, source: 'minecraft-client.jar', data: jarModel };
+      resourcePackModelCache.set(key, result);
+      return result;
+    }
     const resolveModel = (name, seen = new Set()) => {
       const key = String(name || '').replace(/^minecraft:(?:block|item)\//, '').replace(/^(?:block|item)\//, '');
       if (!key || seen.has(key)) return {};
