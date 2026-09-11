@@ -4424,42 +4424,15 @@ ipcMain.handle('launcher:get-resource-pack-catalog', async (_event, requestedVer
 ipcMain.handle('launcher:get-resource-pack-asset', async (_event, requestedVersion, requestedPath) => {
   const version = String(requestedVersion || '1.21.4');
   const assetPath = String(requestedPath || '').replace(/^[/\\]+/, '').replace(/\.\.(?:[/\\]|$)/g, '');
-  if (!/^(?:items|blocks|entity)\/[\w./-]+\.png$/i.test(assetPath)) return { ok: false, error: 'Invalid Minecraft asset path.' };
+  if (!/^(?:items|blocks|entity|models|gui|environment|particle|painting|font|misc|colormap)\/[\w./-]+\.png$/i.test(assetPath)) return { ok: false, error: 'Invalid Minecraft asset path.' };
   const key = `${version}:${assetPath}`;
   if (resourcePackAssetCache.has(key)) return resourcePackAssetCache.get(key);
   try {
-    const candidatePaths = [assetPath];
-    if (assetPath.startsWith('items/')) candidatePaths.push(assetPath.replace(/^items\//, 'blocks/'));
-    if (assetPath.startsWith('blocks/')) candidatePaths.push(assetPath.replace(/^blocks\//, 'items/'));
-    if (assetPath.startsWith('entity/')) candidatePaths.push(assetPath.replace(/^entity\//, 'items/'));
-    let response;
-    let resolvedPath = assetPath;
-    let lastError;
-    for (const candidatePath of candidatePaths) {
-      try {
-        response = await axios.get(`https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/${encodeURIComponent(version)}/${candidatePath}`, { responseType: 'arraybuffer', timeout: 20000 });
-        resolvedPath = candidatePath;
-        break;
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    if (!response) throw lastError || new Error(`No asset found for ${assetPath}`);
-    const result = { ok: true, path: resolvedPath, requestedPath: resolvedPath === assetPath ? undefined : assetPath, dataUrl: `data:image/png;base64,${Buffer.from(response.data).toString('base64')}` };
+    const response = await axios.get(`https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/${encodeURIComponent(version)}/${assetPath}`, { responseType: 'arraybuffer', timeout: 20000 });
+    const result = { ok: true, path: assetPath, dataUrl: `data:image/png;base64,${Buffer.from(response.data).toString('base64')}` };
     resourcePackAssetCache.set(key, result);
     return result;
   } catch (error) {
-    const fallbackPath = assetPath.startsWith('items/') ? assetPath.replace(/^items\//, 'blocks/') : assetPath.startsWith('blocks/') ? assetPath.replace(/^blocks\//, 'items/') : assetPath.startsWith('entity/') ? assetPath.replace(/^entity\//, 'items/') : null;
-    if (fallbackPath) {
-      try {
-        const response = await axios.get(`https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/${encodeURIComponent(version)}/${fallbackPath}`, { responseType: 'arraybuffer', timeout: 20000 });
-        const result = { ok: true, path: fallbackPath, requestedPath: assetPath, dataUrl: `data:image/png;base64,${Buffer.from(response.data).toString('base64')}` };
-        resourcePackAssetCache.set(key, result);
-        return result;
-      } catch (fallbackError) {
-        return { ok: false, path: assetPath, error: `Vanilla texture could not be loaded from ${assetPath} or ${fallbackPath}: ${fallbackError.message}` };
-      }
-    }
     return { ok: false, path: assetPath, error: `Vanilla texture could not be loaded: ${error.message}` };
   }
 });

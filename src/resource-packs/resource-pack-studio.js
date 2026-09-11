@@ -18,7 +18,7 @@
     sort: 'Popular',
     selectedId: null,
     selectedPath: null,
-    selectedTab: 'texture',
+    selectedTab: 'workspace',
     version: '1.21.4',
     packName: 'My Resource Pack',
     description: '',
@@ -34,6 +34,8 @@
     autoRotate: false,
     cameraZoom: 1,
     buffers: {},
+    textureDimensions: {},
+    textureDimensions: {},
     vanillaLoaded: {},
     modifiedResources: {},
     modelCache: {},
@@ -83,6 +85,7 @@
   function reviveEditor(editor) {
     const revived = { ...editor };
     revived.buffers = Object.fromEntries(Object.entries(editor?.buffers || {}).map(([key, value]) => [key, new Uint8ClampedArray(value)]));
+    revived.textureDimensions ||= {};
     revived.modifiedResources ||= {};
     revived.recentResources ||= [];
     return revived;
@@ -117,6 +120,7 @@
       iconDataUrl: state.iconDataUrl,
       favorite: state.favorite,
       buffers: state.buffers,
+      textureDimensions: state.textureDimensions,
       modifiedResources: state.modifiedResources,
       recentResources: state.recentResources,
       resolution: state.resolution,
@@ -166,7 +170,7 @@
       selectedPath: null,
       query: '',
       category: 'All resources',
-      selectedTab: 'texture',
+      selectedTab: 'workspace',
       undo: [],
       redo: [],
     });
@@ -368,14 +372,16 @@
 
   function renderSelectedResource(entry) {
     return `<div class="rp-edit-header"><div><div class="rp-eyebrow">${esc(entry.category)}</div><h2>${esc(entry.name)}</h2><span>${esc(entry.path || `minecraft:${entry.id}`)}</span></div><div class="rp-resource-actions"><button class="rp-icon-button" data-rp-action="favorite-resource">${state.favorites[entry.id] ? '♥' : '♡'}</button><button class="modal-btn" data-rp-action="reset">Reset vanilla</button></div></div>
-      <div class="rp-tabs">${['texture', 'model', 'details'].map(tab => `<button class="${state.selectedTab === tab ? 'active' : ''}" data-rp-tab="${tab}">${tab[0].toUpperCase() + tab.slice(1)}</button>`).join('')}</div>
-      ${state.selectedTab === 'texture' ? renderTextureEditor(entry) : state.selectedTab === 'model' ? renderModelEditor(entry) : renderDetails(entry)}`;
+      <div class="rp-unified-editor">
+        <div class="rp-unified-model">${renderModelEditor(entry)}</div>
+        <div class="rp-unified-texture">${renderTextureEditor(entry)}</div>
+      </div>`;
   }
 
   function renderTextureEditor(entry) {
-    return `<div class="rp-canvas-panel"><div class="rp-canvas-toolbar"><div class="rp-tool-group">${['pencil', 'eraser'].map(tool => `<button class="modal-btn ${state.tool === tool ? 'primary' : ''}" data-rp-tool="${tool}">${tool === 'pencil' ? 'Pencil' : 'Eraser'}</button>`).join('')}<input id="rpColor" type="color" value="${esc(state.color)}" title="Paint color"><select class="modal-select" id="rpBrushSize">${[1, 2, 4, 8].map(size => `<option value="${size}"${size === state.brushSize ? ' selected' : ''}>${size}px brush</option>`).join('')}</select></div><label class="rp-check"><input id="rpGrid" type="checkbox"${state.showGrid ? ' checked' : ''}> Pixel grid</label></div>
+    return `<div class="rp-canvas-panel"><div class="rp-canvas-toolbar"><div class="rp-tool-group">${['pencil', 'eraser', 'fill', 'eyedropper', 'line', 'rectangle'].map(tool => `<button class="modal-btn ${state.tool === tool ? 'primary' : ''}" data-rp-tool="${tool}">${tool[0].toUpperCase() + tool.slice(1)}</button>`).join('')}<input id="rpColor" type="color" value="${esc(state.color)}" title="Paint color"><select class="modal-select" id="rpBrushSize">${[1, 2, 4, 8].map(size => `<option value="${size}"${size === state.brushSize ? ' selected' : ''}>${size}px brush</option>`).join('')}</select></div><label class="rp-check"><input id="rpGrid" type="checkbox"${state.showGrid ? ' checked' : ''}> Pixel grid</label></div>
       <div class="rp-canvas-wrap"><canvas id="rpPaintCanvas" width="256" height="256"></canvas><div class="rp-canvas-caption">Drag to paint · right-click or Eraser removes pixels</div></div>
-      <div class="rp-edit-footer"><div><strong>${state.resolution} × ${state.resolution}</strong><span>Texture resolution</span></div><select class="modal-select" id="rpResolution">${RESOLUTIONS.map(size => `<option value="${size}"${size === state.resolution ? ' selected' : ''}>${size} × ${size}</option>`).join('')}</select><button class="modal-btn" data-rp-action="undo">Undo</button><button class="modal-btn" data-rp-action="redo">Redo</button></div></div>`;
+      <div class="rp-edit-footer"><div><strong>${textureLabel(entry)}</strong><span>Source texture dimensions</span></div><select class="modal-select" id="rpResolution">${RESOLUTIONS.map(size => `<option value="${size}"${size === state.resolution ? ' selected' : ''}>Convert to ${size} × ${size}</option>`).join('')}</select><button class="modal-btn" data-rp-action="undo">Undo</button><button class="modal-btn" data-rp-action="redo">Redo</button></div></div>`;
   }
 
   function renderModelEditor(entry) {
@@ -391,7 +397,7 @@
 
   function renderInspector(entry) {
     const model = state.modelCache[modelKey(entry)];
-    const viewport = state.selectedTab === 'model' ? '' : `<div class="rp-preview-wrap"><canvas id="rp3dCanvas"></canvas><span>Left click paints · right drag orbits · wheel zooms</span></div>`;
+    const viewport = `<div class="rp-preview-wrap"><canvas id="rp3dCanvas"></canvas><span>Left click paints · right drag orbits · wheel zooms · middle drag pans</span></div>`;
     return `<div class="rp-inspector-heading"><strong>Model preview</strong><button class="rp-icon-button" data-rp-action="auto-rotate">${state.autoRotate ? '⏸' : '↻'}</button></div>${viewport}
       <div class="rp-model-facts"><span>${model?.elements?.length || 0} cuboids</span><span>${Object.keys(model?.textures || {}).length} textures</span></div>
       <div class="rp-inspector-section"><div class="rp-pane-heading"><strong>Display</strong></div><label class="rp-range-label">In-game scale <b>${Math.round(state.scale * 100)}%</b></label><input id="rpScale" type="range" min=".5" max="4" step=".05" value="${state.scale}"><p class="rp-muted">Visual scale changes preview only. Texture resolution stays ${state.resolution}px.</p></div>
@@ -429,13 +435,12 @@
     root.querySelector('#rpSearch')?.addEventListener('input', event => { state.query = event.target.value; render(); document.getElementById('rpSearch')?.focus(); });
     root.querySelector('#rpCategory')?.addEventListener('change', event => { state.category = event.target.value; render(); });
     root.querySelector('#rpSort')?.addEventListener('change', event => { state.sort = event.target.value; render(); });
-    root.querySelector('#rpResolution')?.addEventListener('change', event => { state.resolution = Number(event.target.value); render(); loadVanillaTexture(item()); });
+    root.querySelector('#rpResolution')?.addEventListener('change', event => { convertTexture(item(), Number(event.target.value)); render(); loadVanillaTexture(item()); });
     root.querySelector('#rpBrushSize')?.addEventListener('change', event => { state.brushSize = Number(event.target.value); });
     root.querySelector('#rpColor')?.addEventListener('input', event => { state.color = event.target.value; });
     root.querySelector('#rpGrid')?.addEventListener('change', event => { state.showGrid = event.target.checked; drawPainter(); });
     root.querySelector('#rpScale')?.addEventListener('input', event => { state.scale = Number(event.target.value); updatePreview(); });
     root.querySelectorAll('[data-rp-tool]').forEach(button => button.addEventListener('click', () => { state.tool = button.dataset.rpTool; render(); }));
-    root.querySelectorAll('[data-rp-tab]').forEach(button => button.addEventListener('click', () => { state.selectedTab = button.dataset.rpTab; render(); }));
     root.querySelectorAll('[data-rp-resource]').forEach(button => button.addEventListener('click', () => selectResource(button.dataset.rpResource)));
     root.querySelector('[data-rp-action="favorite-resource"]')?.addEventListener('click', () => { state.favorites[state.selectedId] = !state.favorites[state.selectedId]; render(); });
     root.querySelector('[data-rp-action="reset"]')?.addEventListener('click', resetResource);
@@ -453,7 +458,7 @@
     state.selectedId = id;
     state.selectedPath = null;
     state.recentResources = [id, ...state.recentResources.filter(entry => entry !== id)].slice(0, 30);
-    state.selectedTab = 'texture';
+    state.selectedTab = 'workspace';
     render();
     await loadModel(item());
     await loadVanillaTexture(item());
@@ -477,30 +482,26 @@
   }
 
   function createBuffer(size, entry) {
-    const data = new Uint8ClampedArray(size * size * 4);
-    const seed = [...String(entry?.id || '')].reduce((sum, character) => sum + character.charCodeAt(0), 0);
-    for (let index = 0; index < data.length; index += 4) {
-      const value = 80 + ((index / 4 + seed) % 40);
-      data[index] = value; data[index + 1] = value; data[index + 2] = value; data[index + 3] = 255;
-    }
-    return data;
+    const dimensions = state.textureDimensions[entry?.id] || { width: size, height: size };
+    return new Uint8ClampedArray(dimensions.width * dimensions.height * 4);
   }
 
   async function loadVanillaTexture(entry) {
     if (!entry || !window.launcherAPI?.getResourcePackAsset) return;
     const path = resourcePath(entry);
     if (!path || !/\.png$/i.test(path)) { drawPainter(); setupPreview(); return; }
-    const key = `${entry.id}:${state.resolution}`;
+    const key = bufferKey(entry);
     if (state.vanillaLoaded[key]) { drawPainter(); setupPreview(); return; }
     const result = await window.launcherAPI.getResourcePackAsset(state.version, path);
     if (!result?.ok) { setStatus(result?.error || 'Vanilla texture unavailable.', true); return; }
     const image = new Image();
     image.onload = () => {
       const scratch = document.createElement('canvas');
-      scratch.width = state.resolution; scratch.height = state.resolution;
+      state.textureDimensions[entry.id] = { width: image.naturalWidth || image.width, height: image.naturalHeight || image.height };
+      scratch.width = state.textureDimensions[entry.id].width; scratch.height = state.textureDimensions[entry.id].height;
       const context = scratch.getContext('2d');
       context.imageSmoothingEnabled = false;
-      context.drawImage(image, 0, 0, scratch.width, scratch.height);
+      context.drawImage(image, 0, 0);
       const pixels = context.getImageData(0, 0, scratch.width, scratch.height).data;
       if (!state.buffers[key] || !isModified(entry)) state.buffers[key] = pixels;
       state.vanillaLoaded[key] = true;
@@ -517,19 +518,21 @@
     const paint = event => {
       if (!drawing) return;
       const rect = canvas.getBoundingClientRect();
-      const x = Math.max(0, Math.min(state.resolution - 1, Math.floor((event.clientX - rect.left) / rect.width * state.resolution)));
-      const y = Math.max(0, Math.min(state.resolution - 1, Math.floor((event.clientY - rect.top) / rect.height * state.resolution)));
+      const dimensions = dimensionsFor(item());
+      const x = Math.max(0, Math.min(dimensions.width - 1, Math.floor((event.clientX - rect.left) / rect.width * dimensions.width)));
+      const y = Math.max(0, Math.min(dimensions.height - 1, Math.floor((event.clientY - rect.top) / rect.height * dimensions.height)));
       const buffer = getBuffer(item());
       const before = new Uint8ClampedArray(buffer);
       for (let offsetY = -state.brushSize + 1; offsetY < state.brushSize; offsetY += 1) for (let offsetX = -state.brushSize + 1; offsetX < state.brushSize; offsetX += 1) {
         const targetX = x + offsetX; const targetY = y + offsetY;
-        if (targetX < 0 || targetY < 0 || targetX >= state.resolution || targetY >= state.resolution) continue;
-        const index = (targetY * state.resolution + targetX) * 4;
+        if (targetX < 0 || targetY < 0 || targetX >= dimensions.width || targetY >= dimensions.height) continue;
+        const index = (targetY * dimensions.width + targetX) * 4;
         if (state.tool === 'eraser') buffer[index + 3] = 0;
         else { const rgb = hexToRgb(state.color); buffer[index] = rgb[0]; buffer[index + 1] = rgb[1]; buffer[index + 2] = rgb[2]; buffer[index + 3] = Math.round(state.opacity * 255); }
       }
+      if (state.tool === 'fill') fillBuffer(buffer, dimensions, hexToRgba(state.color, state.opacity));
       state.undo.push({ key: bufferKey(item()), before, after: new Uint8ClampedArray(buffer) }); state.redo = [];
-      markModified(item()); drawPainter(); updatePreview();
+      markModified(item()); drawPainter(); updatePreview(); updatePreviewTexture();
     };
     canvas.addEventListener('pointerdown', event => { drawing = true; canvas.setPointerCapture(event.pointerId); paint(event); });
     canvas.addEventListener('pointermove', paint);
@@ -543,16 +546,18 @@
     if (!canvas || !entry) return;
     const context = canvas.getContext('2d');
     const buffer = getBuffer(entry);
-    const image = new ImageData(buffer, state.resolution, state.resolution);
-    const scratch = document.createElement('canvas'); scratch.width = state.resolution; scratch.height = state.resolution;
+    const dimensions = dimensionsFor(entry);
+    const image = new ImageData(buffer, dimensions.width, dimensions.height);
+    const scratch = document.createElement('canvas'); scratch.width = dimensions.width; scratch.height = dimensions.height;
     scratch.getContext('2d').putImageData(image, 0, 0);
     context.imageSmoothingEnabled = false;
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.drawImage(scratch, 0, 0, canvas.width, canvas.height);
-    if (state.showGrid && state.resolution <= 64) {
+    if (state.showGrid && Math.max(dimensions.width, dimensions.height) <= 128) {
       context.strokeStyle = 'rgba(255,255,255,.16)'; context.lineWidth = 1;
-      const size = canvas.width / state.resolution;
-      for (let line = 0; line <= state.resolution; line += 1) { context.beginPath(); context.moveTo(line * size, 0); context.lineTo(line * size, canvas.height); context.stroke(); context.beginPath(); context.moveTo(0, line * size); context.lineTo(canvas.width, line * size); context.stroke(); }
+      const cellWidth = canvas.width / dimensions.width, cellHeight = canvas.height / dimensions.height;
+      for (let line = 0; line <= dimensions.width; line += 1) { context.beginPath(); context.moveTo(line * cellWidth, 0); context.lineTo(line * cellWidth, canvas.height); context.stroke(); }
+      for (let line = 0; line <= dimensions.height; line += 1) { context.beginPath(); context.moveTo(0, line * cellHeight); context.lineTo(canvas.width, line * cellHeight); context.stroke(); }
     }
   }
 
@@ -638,11 +643,13 @@
   }
 
   function textureFor(textureRef, entry) {
-    const key = `${state.version}:${textureRef}:${state.resolution}`;
-    const buffer = state.buffers[bufferKey(entry)];
+    const target = textureEntryForRef(textureRef) || entry;
+    const dimensions = dimensionsFor(target);
+    const key = `${state.version}:${textureRef}:${dimensions.width}x${dimensions.height}`;
+    const buffer = state.buffers[bufferKey(target)];
     const selectedTextureRef = resourcePath(entry).replace(/\.png$/i, '').replace(/^blocks\//, 'block/').replace(/^items\//, 'item/');
     if (textureRef === selectedTextureRef || textureRef === resourcePath(entry)) {
-      const texture = new THREE.DataTexture(buffer || getBuffer(entry), state.resolution, state.resolution, THREE.RGBAFormat);
+      const texture = new THREE.DataTexture(buffer || getBuffer(target), dimensions.width, dimensions.height, THREE.RGBAFormat);
       texture.magFilter = THREE.NearestFilter; texture.minFilter = THREE.NearestFilter; texture.needsUpdate = true;
       return texture;
     }
@@ -689,30 +696,76 @@
     const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(pointer, preview.camera);
     const hit = raycaster.intersectObject(preview.root, true).find(result => result.uv);
     if (!hit?.uv) return;
-    const x = Math.max(0, Math.min(state.resolution - 1, Math.floor(hit.uv.x * state.resolution)));
-    const y = Math.max(0, Math.min(state.resolution - 1, Math.floor((1 - hit.uv.y) * state.resolution)));
-    paintPixel(item(), x, y);
+    const textureRef = hit.object?.userData?.textureRef;
+    const target = textureEntryForRef(textureRef) || item();
+    const dimensions = dimensionsFor(target);
+    const x = Math.max(0, Math.min(dimensions.width - 1, Math.floor(hit.uv.x * dimensions.width)));
+    const y = Math.max(0, Math.min(dimensions.height - 1, Math.floor((1 - hit.uv.y) * dimensions.height)));
+    paintPixel(target, x, y);
   }
 
   function paintPixel(entry, x, y) {
-    const buffer = getBuffer(entry), index = (y * state.resolution + x) * 4;
+    const dimensions = dimensionsFor(entry), buffer = getBuffer(entry), index = (y * dimensions.width + x) * 4;
     if (state.tool === 'eraser') buffer[index + 3] = 0;
     else { const rgb = hexToRgb(state.color); buffer[index] = rgb[0]; buffer[index + 1] = rgb[1]; buffer[index + 2] = rgb[2]; buffer[index + 3] = Math.round(state.opacity * 255); }
-    markModified(entry); drawPainter(); setupPreview();
-    canvas.onpointerup = () => { dragging = false; };
+    markModified(entry); drawPainter(); updatePreviewTexture();
   }
 
   function updatePreview() {
     if (preview?.mesh) preview.mesh.scale.setScalar(state.scale);
   }
 
+  function updatePreviewTexture() {
+    if (!preview?.root) return;
+    preview.root.traverse(node => {
+      const textureRef = node.userData?.textureRef;
+      if (!textureRef || !node.material?.map?.isDataTexture) return;
+      const target = textureEntryForRef(textureRef) || item();
+      node.material.map.image.data = getBuffer(target);
+      node.material.map.image.width = dimensionsFor(target).width;
+      node.material.map.image.height = dimensionsFor(target).height;
+      node.material.map.needsUpdate = true;
+      node.material.needsUpdate = true;
+    });
+  }
+
+  function dimensionsFor(entry) { return state.textureDimensions[entry?.id] || { width: state.resolution, height: state.resolution }; }
+  function textureLabel(entry) { const dimensions = dimensionsFor(entry); return `${dimensions.width} × ${dimensions.height}`; }
+  function textureEntryForRef(reference) {
+    const normalized = String(reference || '').replace(/^#/, '').replace(/^minecraft:/, '').replace(/^textures\//, '');
+    return state.catalog.find(entry => {
+      const path = resourcePath(entry).replace(/\.png$/i, '').replace(/^items\//, 'item/').replace(/^blocks\//, 'block/');
+      return path === normalized;
+    });
+  }
+  function hexToRgba(value, opacity) { const rgb = hexToRgb(value); return [...rgb, Math.round(opacity * 255)]; }
+  function fillBuffer(buffer, dimensions, rgba) { for (let index = 0; index < buffer.length; index += 4) rgba.forEach((value, offset) => { buffer[index + offset] = value; }); }
+  function convertTexture(entry, size) {
+    if (!entry) return;
+    const beforeDimensions = dimensionsFor(entry);
+    const before = getBuffer(entry);
+    const after = new Uint8ClampedArray(size * size * 4);
+    for (let y = 0; y < size; y += 1) for (let x = 0; x < size; x += 1) {
+      const sourceX = Math.min(beforeDimensions.width - 1, Math.floor(x * beforeDimensions.width / size));
+      const sourceY = Math.min(beforeDimensions.height - 1, Math.floor(y * beforeDimensions.height / size));
+      const sourceIndex = (sourceY * beforeDimensions.width + sourceX) * 4;
+      const targetIndex = (y * size + x) * 4;
+      after.set(before.slice(sourceIndex, sourceIndex + 4), targetIndex);
+    }
+    state.undo.push({ key: bufferKey(entry), before, after });
+    state.redo = [];
+    state.textureDimensions[entry.id] = { width: size, height: size };
+    state.buffers[bufferKey(entry)] = after;
+    state.resolution = size;
+    markModified(entry);
+  }
   function getBuffer(entry) {
     const key = bufferKey(entry);
     if (!state.buffers[key]) state.buffers[key] = createBuffer(state.resolution, entry);
     return state.buffers[key];
   }
 
-  function bufferKey(entry) { return `${entry?.id || 'unknown'}:${state.resolution}`; }
+  function bufferKey(entry) { return `${entry?.id || 'unknown'}`; }
   function markModified(entry) { state.modifiedResources[entry.path || resourcePath(entry) || entry.id] = true; state.dirty = true; persist(); }
   function hexToRgb(value) { const normalized = String(value).replace('#', ''); return [parseInt(normalized.slice(0, 2), 16) || 0, parseInt(normalized.slice(2, 4), 16) || 0, parseInt(normalized.slice(4, 6), 16) || 0]; }
   function readFileAsDataUrl(file) {
@@ -726,14 +779,14 @@
 
   function undo() {
     const change = state.undo.pop(); if (!change) return;
-    state.redo.push({ ...change, before: change.after, after: change.before });
-    state.buffers[change.key] = change.before; markModified(item()); drawPainter(); updatePreview();
+    state.redo.push(change);
+    state.buffers[change.key] = change.before; markModified(item()); drawPainter(); updatePreviewTexture();
   }
 
   function redo() {
     const change = state.redo.pop(); if (!change) return;
-    state.undo.push({ ...change, before: change.after, after: change.before });
-    state.buffers[change.key] = change.before; markModified(item()); drawPainter(); updatePreview();
+    state.undo.push(change);
+    state.buffers[change.key] = change.after; markModified(item()); drawPainter(); updatePreviewTexture();
   }
 
   function resetResource() {
@@ -783,8 +836,9 @@
       const entry = state.catalog.find(candidate => candidate.path === path || resourcePath(candidate) === path || candidate.id === path);
       if (!entry) return;
       const buffer = state.buffers[bufferKey(entry)]; if (!buffer) return;
-      const canvas = document.createElement('canvas'); canvas.width = state.resolution; canvas.height = state.resolution;
-      canvas.getContext('2d').putImageData(new ImageData(buffer, state.resolution, state.resolution), 0, 0);
+      const dimensions = dimensionsFor(entry);
+      const canvas = document.createElement('canvas'); canvas.width = dimensions.width; canvas.height = dimensions.height;
+      canvas.getContext('2d').putImageData(new ImageData(buffer, dimensions.width, dimensions.height), 0, 0);
       entries.push({ path: entry.path || `assets/minecraft/textures/${path}`, dataUrl: canvas.toDataURL('image/png') });
     });
     (current?.data?.importedEntries || []).forEach(entry => { if (entry.path !== 'pack.mcmeta' && !entries.some(candidate => candidate.path === entry.path)) entries.push({ path: entry.path, dataUrl: entry.data }); });
