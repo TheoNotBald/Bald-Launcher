@@ -11,7 +11,6 @@
     catalog: [],
     catalogVersion: null,
     catalogError: null,
-    catalogError: null,
     libraryQuery: '',
     libraryFilter: 'All packs',
     librarySort: 'Recently edited',
@@ -21,6 +20,7 @@
     selectedId: null,
     selectedPath: null,
     selectedTab: 'workspace',
+    editorMode: 'texture',
     version: '1.21.4',
     packName: 'My Resource Pack',
     description: '',
@@ -33,6 +33,9 @@
     brushSize: 1,
     opacity: 1,
     showGrid: true,
+    mirror: false,
+    alphaLock: false,
+    tiled: false,
     autoRotate: false,
     cameraZoom: 1,
     buffers: {},
@@ -355,23 +358,35 @@
     return `
       <section class="rp-studio">
         <header class="rp-editor-bar">
-          <div class="rp-editor-title"><button class="rp-back" data-rp-action="library">←</button><div><div class="rp-eyebrow">RESOURCE PACK STUDIO</div><strong>${esc(state.packName)}</strong><span>${esc(state.version)} · ${state.dirty ? 'Unsaved changes' : 'Saved'}</span></div></div>
+          <div class="rp-editor-title"><button class="rp-back" data-rp-action="library" title="Back to packs">←</button><div><div class="rp-eyebrow">RESOURCE PACK STUDIO / JAVA EDITION</div><strong>${esc(state.packName)}</strong><span>${esc(state.version)} · ${state.dirty ? 'Unsaved changes' : 'Saved'}</span></div></div>
           <div class="rp-toolbar"><button class="modal-btn" data-rp-action="metadata">Pack settings</button><button class="modal-btn" data-rp-action="save">Save</button><button class="modal-btn" data-rp-action="export">Export ZIP</button><button class="modal-btn primary" data-rp-action="install">Install to active profile</button></div>
         </header>
+        <nav class="rp-editor-nav" aria-label="Editor sections">
+          ${[['workspace', 'Workspace'], ['looks', 'Looks'], ['pack', 'Pack files']].map(([tab, label]) => `<button class="${state.selectedTab === tab ? 'active' : ''}" data-rp-tab="${tab}">${label}</button>`).join('')}
+          <span class="rp-editor-nav-spacer"></span>
+          <span class="rp-save-state">${state.dirty ? '● Unsaved changes' : '✓ All changes saved'}</span>
+        </nav>
         <div class="rp-workspace">
           <aside class="rp-browser">
-            <div class="rp-pane-heading"><div><strong>Browse resources</strong><span>${loading ? 'Loading vanilla catalog…' : `${state.catalog.length} versioned resources`}</span></div><button class="rp-icon-button" data-rp-action="refresh" title="Reload catalog">↻</button></div>
+            <div class="rp-pane-heading"><div><strong>Resource browser</strong><span>${loading ? 'Loading vanilla catalog…' : `${state.catalog.length} versioned resources`}</span></div><button class="rp-icon-button" data-rp-action="refresh" title="Reload catalog">↻</button></div>
             <input class="modal-input rp-search" id="rpSearch" placeholder="Search items, blocks, entities..." value="${esc(state.query)}">
             <div class="rp-browser-row"><select class="modal-select" id="rpCategory">${categories.map(category => `<option${category === state.category ? ' selected' : ''}>${esc(category)}</option>`).join('')}</select><select class="modal-select" id="rpSort">${['Popular', 'Name', 'Recently edited', 'Modified first'].map(sort => `<option${sort === state.sort ? ' selected' : ''}>${sort}</option>`).join('')}</select></div>
             <div class="rp-resource-count">${state.catalogError ? 'Catalog unavailable' : `${resources.length} results`}</div>
             <div class="rp-resource-grid">${state.catalogError ? `<div class="rp-empty-small">${esc(state.catalogError)}<br><button class="modal-btn" data-rp-action="refresh">Retry catalog</button></div>` : resources.map(renderResourceTile).join('') || '<div class="rp-empty-small">No resources match this search.</div>'}</div>
           </aside>
           <main class="rp-edit-stage">
-            ${current ? renderSelectedResource(current) : '<div class="rp-stage-empty">Choose a resource from the browser to begin editing.</div>'}
+            ${state.selectedTab === 'workspace' ? (current ? renderSelectedResource(current) : '<div class="rp-stage-empty">Choose a resource from the browser to begin editing.</div>') : renderProjectTab()}
           </main>
           <aside class="rp-inspector">${current ? renderInspector(current) : ''}</aside>
         </div>
       </section>`;
+  }
+
+  function renderProjectTab() {
+    if (state.selectedTab === 'looks') {
+      return `<div class="rp-project-tab"><div class="rp-eyebrow">JAVA RESOURCE-PACK VARIANTS</div><h2>Looks and overrides</h2><p>Keep alternate blockstate, named look, and Custom Model Data variants together with this pack.</p><div class="rp-look-grid"><button class="rp-look-card active"><strong>Vanilla look</strong><span>Base texture and model</span></button><button class="rp-look-card"><strong>Blockstate look</strong><span>Java block variant override</span></button><button class="rp-look-card"><strong>Custom Model Data</strong><span>Item model override</span></button><button class="rp-look-card"><strong>Named look</strong><span>Java 1.21.5+ item variant</span></button></div><div class="rp-info-callout">Select a resource in the browser to edit its active look. Variant data stays local to this project.</div></div>`;
+    }
+    return `<div class="rp-project-tab"><div class="rp-eyebrow">PACK CONTENTS</div><h2>Pack files</h2><p>Imported files and generated assets that will be included in the next export.</p><div class="rp-file-list">${(project()?.data?.importedEntries || []).map(entry => `<div><span>${esc(entry.path)}</span><small>Imported</small></div>`).join('') || '<div class="rp-empty-small">No additional files imported yet.</div>'}</div><button class="modal-btn" data-rp-action="import">Import ZIP contents</button></div>`;
   }
 
   function renderResourceTile(entry) {
@@ -434,7 +449,7 @@
   }
 
   function renderSelectedResource(entry) {
-    return `<div class="rp-edit-header"><div><div class="rp-eyebrow">${esc(entry.category)}</div><h2>${esc(entry.name)}</h2><span>${esc(entry.path || `minecraft:${entry.id}`)}</span></div><div class="rp-resource-actions"><button class="rp-icon-button" data-rp-action="favorite-resource">${state.favorites[entry.id] ? '♥' : '♡'}</button><button class="modal-btn" data-rp-action="reset">Reset vanilla</button></div></div>
+    return `<div class="rp-edit-header"><div><div class="rp-eyebrow">${esc(entry.category)} / ${esc(entry.shape || 'RESOURCE')}</div><h2>${esc(entry.name)}</h2><span>${esc(entry.path || `minecraft:${entry.id}`)}</span></div><div class="rp-resource-actions"><button class="rp-icon-button" data-rp-action="favorite-resource">${state.favorites[entry.id] ? '♥' : '♡'}</button><button class="modal-btn" data-rp-action="reset">Reset vanilla</button></div></div>
       <div class="rp-unified-editor">
         <div class="rp-unified-model">${renderModelEditor(entry)}</div>
         <div class="rp-unified-texture">${renderTextureEditor(entry)}</div>
@@ -442,9 +457,11 @@
   }
 
   function renderTextureEditor(entry) {
-    return `<div class="rp-canvas-panel"><div class="rp-canvas-toolbar"><div class="rp-tool-group">${['pencil', 'eraser', 'fill', 'eyedropper', 'line', 'rectangle'].map(tool => `<button class="modal-btn ${state.tool === tool ? 'primary' : ''}" data-rp-tool="${tool}">${tool[0].toUpperCase() + tool.slice(1)}</button>`).join('')}<input id="rpColor" type="color" value="${esc(state.color)}" title="Paint color"><select class="modal-select" id="rpBrushSize">${[1, 2, 4, 8].map(size => `<option value="${size}"${size === state.brushSize ? ' selected' : ''}>${size}px brush</option>`).join('')}</select></div><label class="rp-check"><input id="rpGrid" type="checkbox"${state.showGrid ? ' checked' : ''}> Pixel grid</label></div>
+    const tools = [['pencil', '✎', 'Pencil'], ['eraser', '⌫', 'Eraser'], ['line', '╱', 'Line'], ['rectangle', '□', 'Rectangle'], ['ellipse', '○', 'Ellipse'], ['fill', '▧', 'Fill'], ['replace', '↺', 'Replace'], ['shade', '◒', 'Shade'], ['fade', '◐', 'Fade'], ['eyedropper', '⌕', 'Eyedropper'], ['spray', '⁙', 'Spray'], ['pan', '✥', 'Pan']];
+    return `<div class="rp-canvas-panel"><div class="rp-canvas-toolbar"><div class="rp-tool-palette">${tools.map(([tool, icon, label]) => `<button class="rp-tool-button ${state.tool === tool ? 'active' : ''}" data-rp-tool="${tool}" title="${label}"><b>${icon}</b><span>${label}</span></button>`).join('')}</div><div class="rp-color-controls"><input id="rpColor" type="color" value="${esc(state.color)}" title="Paint color"><select class="modal-select" id="rpBrushSize">${[1, 2, 4, 8, 16].map(size => `<option value="${size}"${size === state.brushSize ? ' selected' : ''}>${size}px</option>`).join('')}</select><label class="rp-opacity">Opacity <input id="rpOpacity" type="range" min="0.05" max="1" step="0.05" value="${state.opacity}"></label></div></div>
+      <div class="rp-canvas-options"><label class="rp-check"><input id="rpGrid" type="checkbox"${state.showGrid ? ' checked' : ''}> Pixel grid</label><button class="rp-option-toggle ${state.mirror ? 'active' : ''}" data-rp-toggle="mirror">Mirror</button><button class="rp-option-toggle ${state.alphaLock ? 'active' : ''}" data-rp-toggle="alphaLock">Alpha lock</button><button class="rp-option-toggle ${state.tiled ? 'active' : ''}" data-rp-toggle="tiled">Tiled</button><span class="rp-zoom-label">Zoom ${Math.round(state.cameraZoom * 100)}%</span></div>
       <div class="rp-canvas-wrap"><canvas id="rpPaintCanvas" width="256" height="256"></canvas><div class="rp-canvas-caption">Drag to paint · right-click or Eraser removes pixels</div></div>
-      <div class="rp-edit-footer"><div><strong>${textureLabel(entry)}</strong><span>Source texture dimensions</span></div><select class="modal-select" id="rpResolution">${RESOLUTIONS.map(size => `<option value="${size}"${size === state.resolution ? ' selected' : ''}>Convert to ${size} × ${size}</option>`).join('')}</select><button class="modal-btn" data-rp-action="undo">Undo</button><button class="modal-btn" data-rp-action="redo">Redo</button></div></div>`;
+      <div class="rp-edit-footer"><div><strong>${textureLabel(entry)}</strong><span>Texture resolution</span></div><select class="modal-select" id="rpResolution">${RESOLUTIONS.map(size => `<option value="${size}"${size === state.resolution ? ' selected' : ''}>${size} × ${size}</option>`).join('')}</select><button class="modal-btn" data-rp-action="undo">Undo</button><button class="modal-btn" data-rp-action="redo">Redo</button><button class="modal-btn" data-rp-action="flip-horizontal">Flip</button><button class="modal-btn" data-rp-action="rotate">Rotate</button></div></div>`;
   }
 
   function renderModelEditor(entry) {
@@ -501,8 +518,15 @@
     root.querySelector('#rpResolution')?.addEventListener('change', event => { convertTexture(item(), Number(event.target.value)); render(); loadVanillaTexture(item()); });
     root.querySelector('#rpBrushSize')?.addEventListener('change', event => { state.brushSize = Number(event.target.value); });
     root.querySelector('#rpColor')?.addEventListener('input', event => { state.color = event.target.value; });
+    root.querySelector('#rpOpacity')?.addEventListener('input', event => { state.opacity = Number(event.target.value); });
     root.querySelector('#rpGrid')?.addEventListener('change', event => { state.showGrid = event.target.checked; drawPainter(); });
     root.querySelector('#rpScale')?.addEventListener('input', event => { state.scale = Number(event.target.value); updatePreview(); });
+    root.querySelectorAll('[data-rp-tab]').forEach(button => button.addEventListener('click', () => { state.selectedTab = button.dataset.rpTab; render(); }));
+    root.querySelectorAll('[data-rp-toggle]').forEach(button => button.addEventListener('click', () => {
+      const key = button.dataset.rpToggle;
+      state[key] = !state[key];
+      render();
+    }));
     root.querySelectorAll('[data-rp-tool]').forEach(button => button.addEventListener('click', () => { state.tool = button.dataset.rpTool; render(); }));
     root.querySelectorAll('[data-rp-resource]').forEach(button => {
       button.addEventListener('mousedown', event => event.preventDefault());
@@ -510,6 +534,8 @@
     });
     root.querySelector('[data-rp-action="favorite-resource"]')?.addEventListener('click', () => { state.favorites[state.selectedId] = !state.favorites[state.selectedId]; render(); });
     root.querySelector('[data-rp-action="reset"]')?.addEventListener('click', resetResource);
+    root.querySelector('[data-rp-action="flip-horizontal"]')?.addEventListener('click', () => transformTexture('flip-horizontal'));
+    root.querySelector('[data-rp-action="rotate"]')?.addEventListener('click', () => transformTexture('rotate'));
     root.querySelector('[data-rp-action="undo"]')?.addEventListener('click', undo);
     root.querySelector('[data-rp-action="redo"]')?.addEventListener('click', redo);
     root.querySelector('[data-rp-action="auto-rotate"]')?.addEventListener('click', () => { state.autoRotate = !state.autoRotate; render(); setupPreview(); });
@@ -912,11 +938,14 @@
     recordMutation(entry);
     const dimensions = dimensionsFor(entry), buffer = getBuffer(entry);
     const rgba = state.tool === 'eraser' ? [0, 0, 0, 0] : [...hexToRgb(state.color), Math.round(state.opacity * 255)];
-    for (let offsetY = -state.brushSize + 1; offsetY < state.brushSize; offsetY += 1) {
+    const points = [{ x, y }];
+    if (state.mirror) points.push({ x: dimensions.width - 1 - x, y });
+    for (const point of points) for (let offsetY = -state.brushSize + 1; offsetY < state.brushSize; offsetY += 1) {
       for (let offsetX = -state.brushSize + 1; offsetX < state.brushSize; offsetX += 1) {
-        const targetX = x + offsetX, targetY = y + offsetY;
+        const targetX = point.x + offsetX, targetY = point.y + offsetY;
         if (targetX < 0 || targetY < 0 || targetX >= dimensions.width || targetY >= dimensions.height) continue;
         const index = (targetY * dimensions.width + targetX) * 4;
+        if (state.alphaLock && buffer[index + 3] === 0) continue;
         rgba.forEach((value, offset) => { buffer[index + offset] = value; });
       }
     }
@@ -1026,6 +1055,28 @@
     state.buffers[bufferKey(entry)] = after;
     state.resolution = size;
     commitHistoryAction('Convert texture resolution');
+  }
+  function transformTexture(operation) {
+    const entry = item();
+    if (!entry) return;
+    const dimensions = dimensionsFor(entry);
+    const before = getBuffer(entry);
+    const width = operation === 'rotate' ? dimensions.height : dimensions.width;
+    const height = operation === 'rotate' ? dimensions.width : dimensions.height;
+    const after = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < dimensions.height; y += 1) for (let x = 0; x < dimensions.width; x += 1) {
+      const source = (y * dimensions.width + x) * 4;
+      const targetPoint = operation === 'rotate' ? { x: dimensions.height - 1 - y, y: x } : { x: dimensions.width - 1 - x, y };
+      after.set(before.slice(source, source + 4), (targetPoint.y * width + targetPoint.x) * 4);
+    }
+    beginHistoryAction();
+    recordMutation(entry);
+    state.textureDimensions[entry.id] = { width, height };
+    state.buffers[bufferKey(entry)] = after;
+    commitHistoryAction(operation === 'rotate' ? 'Rotate texture' : 'Flip texture');
+    render();
+    drawPainter();
+    updatePreviewTexture();
   }
   function getBuffer(entry) {
     const key = bufferKey(entry);
