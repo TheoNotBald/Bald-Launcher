@@ -9,6 +9,10 @@ class MinecraftPlayerPreview {
     this.viewer.fov = 50;
     this.viewer.zoom = 1.05;
     this.viewer.autoRotate = false;
+    this.viewer.controls.enableRotate = true;
+    this.viewer.controls.enableZoom = true;
+    this.viewer.controls.enablePan = false;
+    this.canvas.style.touchAction = "none";
     if (window.skinview3d.WalkingAnimation) {
       this.viewer.animation = new window.skinview3d.WalkingAnimation();
       this.viewer.animation.speed = 0.7;

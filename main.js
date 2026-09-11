@@ -29,6 +29,18 @@ let stateFilePath;
 let writeStatePending = false;
 const contentSearchCache = new Map();
 const CONTENT_SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
+const resourcePackCatalogCache = new Map();
+const resourcePackAssetCache = new Map();
+const resourcePackModelCache = new Map();
+function minecraftAssetPath(textureName, fallbackType, fallbackName) {
+  const normalized = String(textureName || '').replace(/^minecraft:/, '');
+  const match = normalized.match(/^(?:item|items|block|blocks|entity)\/(.+?)(?:\.png)?$/);
+  if (match) {
+    const group = normalized.startsWith('entity/') ? 'entity' : normalized.startsWith('item') ? 'items' : 'blocks';
+    return `${group}/${match[1]}.png`;
+  }
+  return `${fallbackType}/${fallbackName}.png`;
+}
 const playitManager = createPlayitManager({
   app,
   shell,
@@ -4364,6 +4376,190 @@ function resolveInstalledContentPath(profile, entry, disabled) {
   });
   return match ? path.join(folderPath, match) : null;
 }
+
+ipcMain.handle('launcher:get-resource-pack-catalog', async (_event, requestedVersion) => {
+  const version = String(requestedVersion || '1.21.4');
+  if (resourcePackCatalogCache.has(version)) return resourcePackCatalogCache.get(version);
+  const base = `https://raw.githubusercontent.com/PrismarineJS/minecraft-data/master/data/pc/${encodeURIComponent(version)}`;
+  try {
+    const [itemsResponse, blocksResponse, entitiesResponse, itemTexturesResponse, blockTexturesResponse] = await Promise.all([
+      axios.get(`${base}/items.json`, { headers: { 'User-Agent': 'BaldLauncher/ResourcePackStudio' }, timeout: 15000 }),
+      axios.get(`${base}/blocks.json`, { headers: { 'User-Agent': 'BaldLauncher/ResourcePackStudio' }, timeout: 15000 }),
+      axios.get(`${base}/entities.json`, { headers: { 'User-Agent': 'BaldLauncher/ResourcePackStudio' }, timeout: 15000 }),
+      axios.get(`https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/${encodeURIComponent(version)}/items_textures.json`, { timeout: 15000 }),
+      axios.get(`https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/${encodeURIComponent(version)}/blocks_textures.json`, { timeout: 15000 }),
+    ]);
+    const items = Array.isArray(itemsResponse.data) ? itemsResponse.data : [];
+    const blocks = Array.isArray(blocksResponse.data) ? blocksResponse.data : [];
+    const entities = Array.isArray(entitiesResponse.data) ? entitiesResponse.data : [];
+    const itemTextures = Array.isArray(itemTexturesResponse.data) ? itemTexturesResponse.data : [];
+    const blockTextures = Array.isArray(blockTexturesResponse.data) ? blockTexturesResponse.data : [];
+    const itemTextureByName = new Map(itemTextures.map(entry => [entry.name, entry]));
+    const blockTextureByName = new Map(blockTextures.map(entry => [entry.name, entry]));
+    const catalog = [
+      ...items.filter(item => item.name !== 'air').map(item => ({
+        id: item.name, name: item.displayName || item.name, category: 'Items',
+        path: `assets/minecraft/textures/item/${item.name}.png`, texturePath: minecraftAssetPath(itemTextureByName.get(item.name)?.texture, 'items', item.name), shape: 'item',
+      })),
+      ...blocks.filter(block => block.name !== 'air').map(block => ({
+        id: block.name, name: block.displayName || block.name, category: 'Blocks',
+        path: `assets/minecraft/textures/block/${block.name}.png`, texturePath: minecraftAssetPath(blockTextureByName.get(block.name)?.texture, 'blocks', block.name),
+        modelName: blockTextureByName.get(block.name)?.model?.replace(/^minecraft:blocks?\//, '') || block.name,
+        shape: block.boundingBox === 'empty' ? 'flat' : block.boundingBox === 'block' ? 'cube' : 'model',
+      })),
+      ...entities.map(entity => ({
+        id: `entity_${entity.name}`, name: entity.displayName || entity.name, category: 'Entities',
+        path: `assets/minecraft/textures/entity/${entity.name}.png`, shape: 'entity',
+        width: Number(entity.width) || 1, height: Number(entity.height) || 1, entityType: entity.type,
+      })),
+    ];
+    const result = { ok: true, version, catalog };
+    resourcePackCatalogCache.set(version, result);
+    return result;
+  } catch (error) {
+    return { ok: false, version, catalog: [], error: `Minecraft ${version} data could not be loaded: ${error.message}` };
+  }
+});
+
+ipcMain.handle('launcher:get-resource-pack-asset', async (_event, requestedVersion, requestedPath) => {
+  const version = String(requestedVersion || '1.21.4');
+  const assetPath = String(requestedPath || '').replace(/^[/\\]+/, '').replace(/\.\.(?:[/\\]|$)/g, '');
+  if (!/^(?:items|blocks|entity)\/[\w./-]+\.png$/i.test(assetPath)) return { ok: false, error: 'Invalid Minecraft asset path.' };
+  const key = `${version}:${assetPath}`;
+  if (resourcePackAssetCache.has(key)) return resourcePackAssetCache.get(key);
+  try {
+    const candidatePaths = [assetPath];
+    if (assetPath.startsWith('items/')) candidatePaths.push(assetPath.replace(/^items\//, 'blocks/'));
+    if (assetPath.startsWith('blocks/')) candidatePaths.push(assetPath.replace(/^blocks\//, 'items/'));
+    if (assetPath.startsWith('entity/')) candidatePaths.push(assetPath.replace(/^entity\//, 'items/'));
+    let response;
+    let resolvedPath = assetPath;
+    let lastError;
+    for (const candidatePath of candidatePaths) {
+      try {
+        response = await axios.get(`https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/${encodeURIComponent(version)}/${candidatePath}`, { responseType: 'arraybuffer', timeout: 20000 });
+        resolvedPath = candidatePath;
+        break;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (!response) throw lastError || new Error(`No asset found for ${assetPath}`);
+    const result = { ok: true, path: resolvedPath, requestedPath: resolvedPath === assetPath ? undefined : assetPath, dataUrl: `data:image/png;base64,${Buffer.from(response.data).toString('base64')}` };
+    resourcePackAssetCache.set(key, result);
+    return result;
+  } catch (error) {
+    const fallbackPath = assetPath.startsWith('items/') ? assetPath.replace(/^items\//, 'blocks/') : assetPath.startsWith('blocks/') ? assetPath.replace(/^blocks\//, 'items/') : assetPath.startsWith('entity/') ? assetPath.replace(/^entity\//, 'items/') : null;
+    if (fallbackPath) {
+      try {
+        const response = await axios.get(`https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/${encodeURIComponent(version)}/${fallbackPath}`, { responseType: 'arraybuffer', timeout: 20000 });
+        const result = { ok: true, path: fallbackPath, requestedPath: assetPath, dataUrl: `data:image/png;base64,${Buffer.from(response.data).toString('base64')}` };
+        resourcePackAssetCache.set(key, result);
+        return result;
+      } catch (fallbackError) {
+        return { ok: false, path: assetPath, error: `Vanilla texture could not be loaded from ${assetPath} or ${fallbackPath}: ${fallbackError.message}` };
+      }
+    }
+    return { ok: false, path: assetPath, error: `Vanilla texture could not be loaded: ${error.message}` };
+  }
+});
+
+ipcMain.handle('launcher:get-resource-pack-model', async (_event, requestedVersion, requestedModel) => {
+  const version = String(requestedVersion || '1.21.4');
+  const model = String(requestedModel || '').replace(/^minecraft:(?:block|blocks)\//, '');
+  if (!/^[\w./-]+$/.test(model)) return { ok: false, error: 'Invalid Minecraft model name.' };
+  const key = `${version}:${model}`;
+  if (resourcePackModelCache.has(key)) return resourcePackModelCache.get(key);
+  try {
+    const response = await axios.get(`https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/${encodeURIComponent(version)}/blocks_models.json`, { timeout: 20000 });
+    const modelData = response.data?.[model];
+    if (!modelData) return { ok: false, model, error: `Vanilla model ${model} was not found.` };
+    const resolveModel = (name, seen = new Set()) => {
+      const key = String(name || '').replace(/^minecraft:block\//, '').replace(/^block\//, '');
+      if (!key || seen.has(key)) return {};
+      seen.add(key);
+      const source = response.data?.[key] || {};
+      const parent = resolveModel(source.parent, seen);
+      return { ...parent, ...source, textures: { ...(parent.textures || {}), ...(source.textures || {}) } };
+    };
+    const resolved = resolveModel(model);
+    const result = { ok: true, model, data: resolved };
+    resourcePackModelCache.set(key, result);
+    return result;
+  } catch (error) {
+    return { ok: false, model, error: `Vanilla model could not be loaded: ${error.message}` };
+  }
+});
+
+ipcMain.handle('launcher:import-resource-pack', async () => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Import Minecraft resource pack',
+      properties: ['openFile'],
+      filters: [{ name: 'Minecraft resource pack', extensions: ['zip'] }],
+    });
+    if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+    const sourcePath = result.filePaths[0];
+    const zip = new AdmZip(sourcePath);
+    const entries = zip.getEntries()
+      .filter(entry => !entry.isDirectory && (/^assets\/.+\.png$/i.test(entry.entryName) || entry.entryName === 'pack.mcmeta' || entry.entryName === 'pack.png'))
+      .map(entry => ({
+        path: entry.entryName,
+        data: entry.entryName.endsWith('.png') ? `data:image/png;base64,${entry.getData().toString('base64')}` : entry.getData().toString('utf8'),
+      }));
+    const metaEntry = entries.find(entry => entry.path === 'pack.mcmeta');
+    let packMeta = null;
+    if (metaEntry) {
+      try { packMeta = JSON.parse(metaEntry.data); } catch (_error) { packMeta = null; }
+    }
+    return { ok: true, fileName: path.basename(sourcePath), entries, packMeta };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:export-resource-pack', async (_event, payload) => {
+  try {
+    const packName = sanitizeFileName(payload?.packName || 'resource-pack') || 'resource-pack';
+    const version = String(payload?.version || '1.21.11');
+    const format = version.startsWith('1.21.11') ? 75 : version.startsWith('1.21.4') ? 46 : version.startsWith('1.21') ? 34 : version.startsWith('1.20') ? 22 : 15;
+    const zip = new AdmZip();
+    const description = String(payload?.description || payload?.packName || 'Bald Launcher Resource Pack');
+    zip.addFile('pack.mcmeta', Buffer.from(JSON.stringify({ pack: { pack_format: format, description }, author: String(payload?.author || '') }, null, 2)));
+    if (typeof payload?.iconDataUrl === 'string' && payload.iconDataUrl.startsWith('data:image/png;base64,')) {
+      zip.addFile('pack.png', Buffer.from(payload.iconDataUrl.slice('data:image/png;base64,'.length), 'base64'));
+    }
+    for (const entry of Array.isArray(payload?.entries) ? payload.entries : []) {
+      if (!entry?.path || typeof entry.dataUrl !== 'string' || !entry.dataUrl.startsWith('data:image/png;base64,')) continue;
+      const relativePath = String(entry.path).replace(/^[/\\]+/, '').replace(/\.\.(?:[/\\]|$)/g, '');
+      zip.addFile(relativePath, Buffer.from(entry.dataUrl.slice('data:image/png;base64,'.length), 'base64'));
+    }
+    let filePath;
+    if (payload?.install) {
+      const profile = getActiveProfile();
+      if (!profile) throw new Error('No active profile');
+      const folder = getContentFolder('resourcepack', getMinecraftRootFor(profile.id));
+      fs.mkdirSync(folder, { recursive: true });
+      filePath = path.join(folder, `${packName}.zip`);
+    } else {
+      const result = await dialog.showSaveDialog(mainWindow, { title: 'Export resource pack', defaultPath: `${packName}.zip`, filters: [{ name: 'Minecraft resource pack', extensions: ['zip'] }] });
+      if (result.canceled || !result.filePath) return { ok: false, error: 'Export canceled.' };
+      filePath = result.filePath.toLowerCase().endsWith('.zip') ? result.filePath : `${result.filePath}.zip`;
+    }
+    zip.writeZip(filePath);
+    if (payload?.install) {
+      const profile = getActiveProfile();
+      const entry = normalizeInstalledContent({ id: `bald-resource-pack:${packName}`, name: packName, type: 'resourcepack', enabled: true, source: 'bald-launcher' });
+      if (profile && !profile.mods.some(item => item.id === entry.id)) {
+        profile.mods.push(entry);
+        scheduleStateWrite();
+      }
+    }
+    return { ok: true, path: filePath };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
 
 ipcMain.handle('launcher:install-content', async (_event, payload) => {
   try {

@@ -49,6 +49,11 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   // content
   searchContent: params => ipcRenderer.invoke('launcher:search-content', params),
   installContent: payload => ipcRenderer.invoke('launcher:install-content', payload),
+  exportResourcePack: payload => ipcRenderer.invoke('launcher:export-resource-pack', payload),
+  importResourcePack: () => ipcRenderer.invoke('launcher:import-resource-pack'),
+  getResourcePackCatalog: version => ipcRenderer.invoke('launcher:get-resource-pack-catalog', version),
+  getResourcePackAsset: (version, assetPath) => ipcRenderer.invoke('launcher:get-resource-pack-asset', version, assetPath),
+  getResourcePackModel: (version, modelName) => ipcRenderer.invoke('launcher:get-resource-pack-model', version, modelName),
   removeContent: payload => ipcRenderer.invoke('launcher:remove-content', payload),
   toggleContent: payload => ipcRenderer.invoke('launcher:toggle-content', payload),
   openFolder: folderType => ipcRenderer.invoke('launcher:open-folder', folderType),

@@ -2,15 +2,23 @@
 
 import * as THREE from '../../../node_modules/three/build/three.module.js';
 
-window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPixel, onPaintEnd, getPaintLayer) {
+window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPixel, onPaintEnd, getPaintLayer, dimensions = {}) {
   const canvas = viewer.canvas;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   const skin = viewer.playerObject?.skin;
   const cape = viewer.playerObject?.cape;
+  const capeMesh = cape?.cape;
   const isCape = kind === 'cape';
-  const textureWidth = 64;
-  const textureHeight = isCape ? 32 : 64;
+  let textureWidth = dimensions.width || 64;
+  let textureHeight = dimensions.height || (isCape ? 32 : 64);
+  const targetTexture = isCape ? cape?.map : skin?.map;
+  if (targetTexture) {
+    targetTexture.magFilter = THREE.NearestFilter;
+    targetTexture.minFilter = THREE.NearestFilter;
+    targetTexture.generateMipmaps = false;
+    targetTexture.needsUpdate = true;
+  }
   [skin?.layer1Material, skin?.layer1MaterialBiased, skin?.layer2Material, skin?.layer2MaterialBiased].forEach(material => {
     if (material) {
       material.side = THREE.DoubleSide;
@@ -34,7 +42,8 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
     const vertices = [];
     const line = (a, b) => vertices.push(a.x, a.y, a.z, b.x, b.y, b.z);
     const groups = geometry.groups?.length ? geometry.groups : [{ start: 0, count: positions.count }];
-    const pixelSize = 1 / textureWidth;
+    const pixelSizeU = 1 / textureWidth;
+    const pixelSizeV = 1 / textureHeight;
     const offset = 0.01;
     for (const group of groups) {
         const faceIndices = [];
@@ -71,8 +80,8 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
         const normal = cornerB.clone().sub(cornerA).cross(cornerC.clone().sub(cornerA)).normalize();
         if (normal.dot(faceCenter) < 0) normal.negate();
         normal.multiplyScalar(offset);
-      const columns = Math.max(1, Math.round((u1 - u0) / pixelSize));
-      const rows = Math.max(1, Math.round((v1 - v0) / pixelSize));
+      const columns = Math.max(1, Math.round((u1 - u0) / pixelSizeU));
+      const rows = Math.max(1, Math.round((v1 - v0) / pixelSizeV));
       for (let column = 0; column <= columns; column += 1) {
         const u = u0 + ((u1 - u0) * column) / columns;
         const start = sample(u, v0);
@@ -102,7 +111,7 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
     viewer.playerObject.traverse(node => {
       if (!node.isMesh || !node.geometry?.attributes?.position || node.userData?.studioGrid) return;
       if (isCape) {
-        if (node === cape?.cape && node.visible) meshes.push(node);
+        if (node === capeMesh && node.visible) meshes.push(node);
         return;
       }
       const paintLayer = getPaintLayer?.() === 'outer' ? 'outer' : 'inner';
@@ -117,9 +126,9 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
       const overlay = new THREE.LineSegments(
         grid,
         new THREE.LineBasicMaterial({
-          color: 0x72e64b,
+          color: 0xffffff,
           transparent: true,
-          opacity: 0.8,
+          opacity: 0.35,
           depthTest: true,
           depthWrite: false,
           polygonOffset: true,
@@ -163,6 +172,7 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
       return false;
     };
     const matchesTarget = item => {
+      if (isCape) return item.object === capeMesh && cape?.visible;
       const materials = Array.isArray(item.object.material) ? item.object.material : [item.object.material];
       return !targetMaterial[0] || materials.some(material => targetMaterial.includes(material));
     };
@@ -250,6 +260,11 @@ window.attachStudio3DPainter = function attachStudio3DPainter(viewer, kind, onPi
   };
   return {
     setGrid,
+    setDimensions: (width, height) => {
+      textureWidth = width;
+      textureHeight = height;
+      setGrid(true);
+    },
     refreshGrid: refreshGridSoon,
     dispose: () => {
       setGrid(false);
