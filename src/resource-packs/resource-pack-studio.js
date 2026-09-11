@@ -36,6 +36,8 @@
     buffers: {},
     vanillaLoaded: {},
     modifiedResources: {},
+    modelCache: {},
+    modelTextureCache: {},
     favorites: {},
     recentResources: [],
     undo: [],
@@ -377,7 +379,10 @@
   }
 
   function renderModelEditor(entry) {
-    return `<div class="rp-model-placeholder"><div class="rp-model-icon">${entry.shape === 'cube' ? '◇' : '◈'}</div><h3>Vanilla model preview</h3><p>The selected resource uses the Minecraft model resolved for ${esc(state.version)}. Texture edits are shown live in the preview rail.</p><button class="modal-btn" data-rp-action="reset-camera">Reset preview</button></div>`;
+    const model = state.modelCache[modelKey(entry)];
+    const elements = model?.elements?.length || 0;
+    const textures = Object.keys(model?.textures || {}).length;
+    return `<div class="rp-model-editor"><div class="rp-model-editor-head"><div><div class="rp-eyebrow">RESOLVED MINECRAFT MODEL</div><h3>${esc(entry.modelName || entry.id)}</h3><p>${model ? `${elements} cuboids · ${textures} texture slots · click a face to paint its UV pixels` : 'Loading model elements and texture references…'}</p></div><button class="modal-btn" data-rp-action="reset-camera">Reset view</button></div><div class="rp-model-viewport"><canvas id="rp3dCanvas"></canvas><span>Left click paints · right drag orbits · wheel zooms</span></div></div>`;
   }
 
   function renderDetails(entry) {
@@ -385,7 +390,10 @@
   }
 
   function renderInspector(entry) {
-    return `<div class="rp-inspector-heading"><strong>Preview</strong><button class="rp-icon-button" data-rp-action="auto-rotate">${state.autoRotate ? '⏸' : '↻'}</button></div><div class="rp-preview-wrap"><canvas id="rp3dCanvas"></canvas><span>Drag to rotate · wheel to zoom</span></div>
+    const model = state.modelCache[modelKey(entry)];
+    const viewport = state.selectedTab === 'model' ? '' : `<div class="rp-preview-wrap"><canvas id="rp3dCanvas"></canvas><span>Left click paints · right drag orbits · wheel zooms</span></div>`;
+    return `<div class="rp-inspector-heading"><strong>Model preview</strong><button class="rp-icon-button" data-rp-action="auto-rotate">${state.autoRotate ? '⏸' : '↻'}</button></div>${viewport}
+      <div class="rp-model-facts"><span>${model?.elements?.length || 0} cuboids</span><span>${Object.keys(model?.textures || {}).length} textures</span></div>
       <div class="rp-inspector-section"><div class="rp-pane-heading"><strong>Display</strong></div><label class="rp-range-label">In-game scale <b>${Math.round(state.scale * 100)}%</b></label><input id="rpScale" type="range" min=".5" max="4" step=".05" value="${state.scale}"><p class="rp-muted">Visual scale changes preview only. Texture resolution stays ${state.resolution}px.</p></div>
       <div class="rp-inspector-section"><div class="rp-pane-heading"><strong>Pack changes</strong><span>${Object.keys(state.modifiedResources).length}</span></div><p class="rp-muted">${isModified(entry) ? 'This resource will be included in the next export.' : 'This resource is still vanilla.'}</p><button class="modal-btn" data-rp-action="metadata" style="width:100%">Edit pack metadata</button></div>
       <div id="rpStatus" class="rp-status"></div>`;
@@ -437,6 +445,7 @@
     root.querySelector('[data-rp-action="reset-camera"]')?.addEventListener('click', () => { state.cameraZoom = 1; updatePreview(); });
     setupPainter();
     setupPreview();
+    loadModel(item()).then(() => { if (document.getElementById('rp3dCanvas')) setupPreview(); });
     loadVanillaTexture(item());
   }
 
@@ -446,7 +455,25 @@
     state.recentResources = [id, ...state.recentResources.filter(entry => entry !== id)].slice(0, 30);
     state.selectedTab = 'texture';
     render();
+    await loadModel(item());
     await loadVanillaTexture(item());
+  }
+
+  function modelKey(entry) {
+    return `${state.version}:${entry?.modelName || entry?.id || 'missing'}`;
+  }
+
+  async function loadModel(entry) {
+    if (!entry || !window.launcherAPI?.getResourcePackModel) return null;
+    const key = modelKey(entry);
+    if (state.modelCache[key]) return state.modelCache[key];
+    const result = await window.launcherAPI.getResourcePackModel(state.version, entry.modelName || entry.id);
+    if (!result?.ok) {
+      setStatus(result?.error || 'Minecraft model unavailable.', true);
+      return null;
+    }
+    state.modelCache[key] = result.data || {};
+    return state.modelCache[key];
   }
 
   function createBuffer(size, entry) {
@@ -529,10 +556,12 @@
     }
   }
 
-  function setupPreview() {
+  async function setupPreview() {
     const canvas = document.getElementById('rp3dCanvas');
     if (!canvas || !window.THREE || !item()) return;
     if (preview?.renderer) preview.renderer.dispose();
+    const entry = item();
+    const model = await loadModel(entry);
     const width = Math.max(260, canvas.parentElement.clientWidth);
     const height = Math.max(260, canvas.parentElement.clientHeight);
     const scene = new THREE.Scene();
@@ -541,15 +570,135 @@
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.setSize(width, height, false);
     scene.add(new THREE.HemisphereLight(0xffffff, 0x25323b, 2));
-    const geometry = item().shape === 'slab' ? new THREE.BoxGeometry(2.4, .7, 2.4) : new THREE.BoxGeometry(2, 2, 2);
-    const material = new THREE.MeshStandardMaterial({ color: 0x79a35c, roughness: .9 });
-    const mesh = new THREE.Mesh(geometry, material); scene.add(mesh);
-    const animate = () => { if (!document.getElementById('rp3dCanvas')) return; if (state.autoRotate) mesh.rotation.y += .008; mesh.scale.setScalar(state.scale); renderer.render(scene, camera); requestAnimationFrame(animate); };
-    preview = { renderer, scene, camera, mesh }; animate();
+    const root = new THREE.Group();
+    const meshes = buildModelMeshes(model, entry);
+    meshes.forEach(mesh => root.add(mesh));
+    if (!meshes.length) {
+      setStatus('This resource has no renderable Minecraft model elements.', true);
+    }
+    root.position.set(-.5, -.5, -.5);
+    scene.add(root);
+    const animate = () => { if (!document.getElementById('rp3dCanvas')) { renderer.dispose(); return; } if (state.autoRotate) root.rotation.y += .008; root.scale.setScalar(state.scale); renderer.render(scene, camera); requestAnimationFrame(animate); };
+    preview = { renderer, scene, camera, mesh: root, root }; animate();
     canvas.onwheel = event => { event.preventDefault(); state.cameraZoom = Math.max(.55, Math.min(2.5, state.cameraZoom + event.deltaY * -.001)); camera.position.z = 3.2 / state.cameraZoom; };
     let dragging = false; let lastX = 0; let lastY = 0;
-    canvas.onpointerdown = event => { dragging = true; lastX = event.clientX; lastY = event.clientY; canvas.setPointerCapture(event.pointerId); };
-    canvas.onpointermove = event => { if (!dragging) return; mesh.rotation.y += (event.clientX - lastX) * .01; mesh.rotation.x += (event.clientY - lastY) * .01; lastX = event.clientX; lastY = event.clientY; };
+    let painting = false;
+    canvas.onpointerdown = event => {
+      if (event.button === 0) { painting = true; paintModelAt(event); }
+      else { dragging = true; lastX = event.clientX; lastY = event.clientY; }
+      canvas.setPointerCapture(event.pointerId);
+    };
+    canvas.onpointermove = event => {
+      if (painting) paintModelAt(event);
+      if (!dragging) return;
+      root.rotation.y += (event.clientX - lastX) * .01; root.rotation.x = Math.max(-1.2, Math.min(1.2, root.rotation.x + (event.clientY - lastY) * .01)); lastX = event.clientX; lastY = event.clientY;
+    };
+    canvas.onpointerup = () => { painting = false; dragging = false; };
+    canvas.oncontextmenu = event => event.preventDefault();
+  }
+
+  function buildModelMeshes(model, entry) {
+    if (!model?.elements?.length) return [];
+    const meshes = [];
+    model.elements.forEach((element, elementIndex) => {
+      const from = element.from || [0, 0, 0], to = element.to || [16, 16, 16];
+      Object.entries(element.faces || {}).forEach(([side, face]) => {
+        const positions = faceVertices(from, to, side);
+        if (!positions) return;
+        const geometry = new THREE.BufferGeometry();
+        const uv = face.uv || defaultFaceUv(side, from, to);
+        const u0 = Number(uv?.[0] ?? 0) / 16, v0 = 1 - Number(uv?.[1] ?? 0) / 16;
+        const u1 = Number(uv?.[2] ?? 16) / 16, v1 = 1 - Number(uv?.[3] ?? 16) / 16;
+        const order = face.rotation ? [0, 1, 3, 2] : [0, 1, 2, 3];
+        const pos = [positions[order[0]], positions[order[1]], positions[order[2]], positions[order[0]], positions[order[2]], positions[order[3]]].flat();
+        const uvs = [u0, v0, u1, v0, u1, v1, u0, v0, u1, v1, u0, v1];
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geometry.computeVertexNormals();
+        const textureRef = resolveTexture(model.textures || {}, face.texture);
+        const material = new THREE.MeshStandardMaterial({ map: textureFor(textureRef, entry), color: 0xffffff, roughness: .88, side: THREE.DoubleSide });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.userData = { textureRef, elementIndex, side, entryId: entry.id };
+        meshes.push(mesh);
+      });
+    });
+    return meshes;
+  }
+
+  function resolveTexture(textures, reference) {
+    let value = String(reference || '').replace(/^#/, '');
+    const seen = new Set();
+    while (value.startsWith('#') || textures[value]) {
+      if (seen.has(value)) break;
+      seen.add(value);
+      value = String(textures[value] || value).replace(/^#/, '');
+      if (!textures[value]) break;
+    }
+    return value.replace(/^minecraft:/, '').replace(/^textures\//, '').replace(/\.png$/i, '') || 'block/missing';
+  }
+
+  function textureFor(textureRef, entry) {
+    const key = `${state.version}:${textureRef}:${state.resolution}`;
+    const buffer = state.buffers[bufferKey(entry)];
+    const selectedTextureRef = resourcePath(entry).replace(/\.png$/i, '').replace(/^blocks\//, 'block/').replace(/^items\//, 'item/');
+    if (textureRef === selectedTextureRef || textureRef === resourcePath(entry)) {
+      const texture = new THREE.DataTexture(buffer || getBuffer(entry), state.resolution, state.resolution, THREE.RGBAFormat);
+      texture.magFilter = THREE.NearestFilter; texture.minFilter = THREE.NearestFilter; texture.needsUpdate = true;
+      return texture;
+    }
+    const cached = state.modelTextureCache[key];
+    if (cached) return cached;
+    const texture = new THREE.Texture();
+    texture.magFilter = THREE.NearestFilter; texture.minFilter = THREE.NearestFilter; texture.generateMipmaps = false;
+    const assetPath = /^(?:items|blocks|entity)\//.test(textureRef) ? `${textureRef}.png` : `blocks/${textureRef}.png`;
+    window.launcherAPI?.getResourcePackAsset?.(state.version, assetPath).then(result => {
+      if (!result?.ok) return;
+      const image = new Image();
+      image.onload = () => { texture.image = image; texture.needsUpdate = true; };
+      image.src = result.dataUrl;
+    });
+    state.modelTextureCache[key] = texture;
+    return texture;
+  }
+
+  function faceVertices(from, to, side) {
+    const [x0, y0, z0] = from.map(value => Number(value) / 16 - .5);
+    const [x1, y1, z1] = to.map(value => Number(value) / 16 - .5);
+    const values = {
+      down: [x0, y0, z1, x1, y0, z1, x1, y0, z0, x0, y0, z0],
+      up: [x0, y1, z0, x1, y1, z0, x1, y1, z1, x0, y1, z1],
+      north: [x1, y1, z0, x0, y1, z0, x0, y0, z0, x1, y0, z0],
+      south: [x0, y1, z1, x1, y1, z1, x1, y0, z1, x0, y0, z1],
+      west: [x0, y1, z0, x0, y1, z1, x0, y0, z1, x0, y0, z0],
+      east: [x1, y1, z1, x1, y1, z0, x1, y0, z0, x1, y0, z1]
+    }[side];
+    return values ? [values.slice(0, 3), values.slice(3, 6), values.slice(6, 9), values.slice(9, 12)] : null;
+  }
+
+  function defaultFaceUv(side, from, to) {
+    const [x0, y0, z0] = from, [x1, y1, z1] = to;
+    if (side === 'up' || side === 'down') return [x0, z0, x1, z1];
+    if (side === 'north' || side === 'south') return [x0, 16 - y1, x1, 16 - y0];
+    return [z0, 16 - y1, z1, 16 - y0];
+  }
+
+  function paintModelAt(event) {
+    if (!preview?.root || !item()) return;
+    const canvas = event.currentTarget, rect = canvas.getBoundingClientRect();
+    const pointer = new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+    const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(pointer, preview.camera);
+    const hit = raycaster.intersectObject(preview.root, true).find(result => result.uv);
+    if (!hit?.uv) return;
+    const x = Math.max(0, Math.min(state.resolution - 1, Math.floor(hit.uv.x * state.resolution)));
+    const y = Math.max(0, Math.min(state.resolution - 1, Math.floor((1 - hit.uv.y) * state.resolution)));
+    paintPixel(item(), x, y);
+  }
+
+  function paintPixel(entry, x, y) {
+    const buffer = getBuffer(entry), index = (y * state.resolution + x) * 4;
+    if (state.tool === 'eraser') buffer[index + 3] = 0;
+    else { const rgb = hexToRgb(state.color); buffer[index] = rgb[0]; buffer[index + 1] = rgb[1]; buffer[index + 2] = rgb[2]; buffer[index + 3] = Math.round(state.opacity * 255); }
+    markModified(entry); drawPainter(); setupPreview();
     canvas.onpointerup = () => { dragging = false; };
   }
 
