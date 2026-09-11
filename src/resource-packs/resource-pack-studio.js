@@ -47,6 +47,7 @@
     thumbnailCache: {},
     favorites: {},
     recentResources: [],
+    resourceLimit: 240,
     undo: [],
     redo: [],
     dirty: false,
@@ -55,6 +56,7 @@
   };
   let catalogRequest = null;
   let preview = null;
+  let previewGeneration = 0;
   let activeHistoryAction = null;
 
   const esc = value => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
@@ -357,6 +359,7 @@
   function renderEditor() {
     const current = item();
     const resources = filteredResources();
+    const visibleResources = resources.slice(0, state.resourceLimit);
     const categories = categoryNames();
     const loading = !state.catalog.length && !state.catalogError;
     return `
@@ -376,7 +379,8 @@
             <input class="modal-input rp-search" id="rpSearch" placeholder="Search items, blocks, entities..." value="${esc(state.query)}">
             <div class="rp-browser-row"><select class="modal-select" id="rpCategory">${categories.map(category => `<option${category === state.category ? ' selected' : ''}>${esc(category)}</option>`).join('')}</select><select class="modal-select" id="rpSort">${['Popular', 'Name', 'Recently edited', 'Modified first'].map(sort => `<option${sort === state.sort ? ' selected' : ''}>${sort}</option>`).join('')}</select></div>
             <div class="rp-resource-count">${state.catalogError ? 'Catalog unavailable' : `${resources.length} results`}</div>
-            <div class="rp-resource-grid">${state.catalogError ? `<div class="rp-empty-small">${esc(state.catalogError)}<br><button class="modal-btn" data-rp-action="refresh">Retry catalog</button></div>` : resources.map(renderResourceTile).join('') || '<div class="rp-empty-small">No resources match this search.</div>'}</div>
+            <div class="rp-resource-grid">${state.catalogError ? `<div class="rp-empty-small">${esc(state.catalogError)}<br><button class="modal-btn" data-rp-action="refresh">Retry catalog</button></div>` : visibleResources.map(renderResourceTile).join('') || '<div class="rp-empty-small">No resources match this search.</div>'}</div>
+            ${!state.catalogError && resources.length > visibleResources.length ? `<button class="modal-btn rp-load-more" data-rp-action="load-more-resources">Show more (${resources.length - visibleResources.length} remaining)</button>` : ''}
           </aside>
           <main class="rp-edit-stage">
             ${state.selectedTab === 'workspace' ? (current ? renderSelectedResource(current) : '<div class="rp-stage-empty">Choose a resource from the browser to begin editing.</div>') : renderProjectTab()}
@@ -441,15 +445,15 @@
       const entry = state.catalog.find(candidate => candidate.id === tile.dataset.rpResource);
       if (entry) loadThumbnail(entry, tile);
     };
-    if (!('IntersectionObserver' in window)) {
-      tiles.slice(0, 30).forEach(load);
-      return;
-    }
+    // Keep the first render bounded. More thumbnails are loaded as the user
+    // scrolls instead of starting hundreds of IPC/network requests at once.
+    tiles.slice(0, 24).forEach(load);
+    if (!('IntersectionObserver' in window)) return;
     const observer = new IntersectionObserver(entries => entries.filter(entry => entry.isIntersecting).forEach(entry => {
       load(entry.target);
       observer.unobserve(entry.target);
-    }), { root: browser, rootMargin: '240px' });
-    tiles.forEach(tile => observer.observe(tile));
+    }), { root: browser, rootMargin: '120px' });
+    tiles.slice(24).forEach(tile => observer.observe(tile));
   }
 
   function renderSelectedResource(entry) {
@@ -491,13 +495,16 @@
 
   function bindLibraryEvents() {
     const root = document.getElementById('resourcePackStudioRoot');
-    root.addEventListener('click', event => {
-      const target = event.target instanceof Element ? event.target : null;
-      const button = target?.closest('[data-rp-open]');
-      if (!button || !root.contains(button)) return;
-      event.preventDefault();
-      void openProject(button.dataset.rpOpen);
-    });
+    if (root.dataset.rpLibraryEventsBound !== 'true') {
+      root.dataset.rpLibraryEventsBound = 'true';
+      root.addEventListener('click', event => {
+        const target = event.target instanceof Element ? event.target : null;
+        const button = target?.closest('[data-rp-open]');
+        if (!button || !root.contains(button)) return;
+        event.preventDefault();
+        void openProject(button.dataset.rpOpen);
+      });
+    }
     root.querySelector('[data-rp-action="show-create"]')?.addEventListener('click', () => { const card = document.getElementById('rpCreateCard'); if (card) card.hidden = false; document.getElementById('rpNewName')?.focus(); });
     root.querySelector('[data-rp-action="hide-create"]')?.addEventListener('click', () => { const card = document.getElementById('rpCreateCard'); if (card) card.hidden = true; });
     root.querySelector('[data-rp-action="create"]')?.addEventListener('click', async () => {
@@ -522,8 +529,9 @@
     root.querySelector('[data-rp-action="install"]')?.addEventListener('click', () => exportPack(true));
     root.querySelector('[data-rp-action="metadata"]')?.addEventListener('click', editMetadata);
     root.querySelector('[data-rp-action="refresh"]')?.addEventListener('click', () => { state.catalogVersion = null; loadCatalog(state.version); });
-    root.querySelector('#rpSearch')?.addEventListener('input', event => { state.query = event.target.value; render(); });
-    root.querySelector('#rpCategory')?.addEventListener('change', event => { state.category = event.target.value; render(); });
+    root.querySelector('[data-rp-action="load-more-resources"]')?.addEventListener('click', () => { state.resourceLimit += 240; render(); });
+    root.querySelector('#rpSearch')?.addEventListener('input', event => { state.query = event.target.value; state.resourceLimit = 240; render(); });
+    root.querySelector('#rpCategory')?.addEventListener('change', event => { state.category = event.target.value; state.resourceLimit = 240; render(); });
     root.querySelector('#rpSort')?.addEventListener('change', event => { state.sort = event.target.value; render(); });
     root.querySelector('#rpResolution')?.addEventListener('change', event => { convertTexture(item(), Number(event.target.value)); render(); loadVanillaTexture(item()); });
     root.querySelector('#rpBrushSize')?.addEventListener('change', event => { state.brushSize = Number(event.target.value); });
@@ -551,10 +559,12 @@
     root.querySelector('[data-rp-action="auto-rotate"]')?.addEventListener('click', () => { state.autoRotate = !state.autoRotate; render(); setupPreview(); });
     root.querySelector('[data-rp-action="reset-camera"]')?.addEventListener('click', () => { state.cameraZoom = 1; updatePreview(); });
     setupPainter();
+    const selectedEntry = item();
+    if (!selectedEntry) return;
     setupPreview();
-    const selectedId = item()?.id;
+    const selectedId = selectedEntry.id;
     const modelWasLoaded = Boolean(state.modelCache[modelKey(item())]);
-    loadModel(item()).then(() => {
+    loadModel(selectedEntry).then(() => {
       if (item()?.id !== selectedId) return;
       if (modelWasLoaded) setupPreview();
       else render();
@@ -710,11 +720,13 @@
   async function setupPreview() {
     const canvas = document.getElementById('rp3dCanvas');
     if (!canvas || !window.THREE || !item()) return;
-    if (preview?.renderer) preview.renderer.dispose();
+    const generation = ++previewGeneration;
+    preview?.stop?.();
+    preview = null;
     const entry = item();
-    const generation = state.requestGeneration;
+    const requestGeneration = state.requestGeneration;
     const model = await loadModel(entry);
-    if (generation !== state.requestGeneration || item()?.id !== entry.id) return;
+    if (generation !== previewGeneration || requestGeneration !== state.requestGeneration || item()?.id !== entry.id) return;
     const width = Math.max(260, canvas.parentElement.clientWidth);
     const height = Math.max(260, canvas.parentElement.clientHeight);
     const scene = new THREE.Scene();
@@ -731,8 +743,27 @@
     }
     root.position.set(-.5, -.5, -.5);
     scene.add(root);
-    const animate = () => { if (!document.getElementById('rp3dCanvas')) { renderer.dispose(); return; } if (state.autoRotate) root.rotation.y += .008; root.scale.setScalar(state.scale); renderer.render(scene, camera); requestAnimationFrame(animate); };
-    preview = { renderer, scene, camera, mesh: root, root }; animate();
+    let stopped = false;
+    const stop = () => {
+      stopped = true;
+      renderer.dispose();
+    };
+    const animate = () => {
+      if (stopped || generation !== previewGeneration || !document.getElementById('rp3dCanvas')) {
+        stop();
+        return;
+      }
+      if (!state.autoRotate) {
+        renderer.render(scene, camera);
+        return;
+      }
+      root.rotation.y += .008;
+      root.scale.setScalar(state.scale);
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    };
+    preview = { renderer, scene, camera, mesh: root, root, stop };
+    animate();
     canvas.onwheel = event => { event.preventDefault(); state.cameraZoom = Math.max(.55, Math.min(2.5, state.cameraZoom + event.deltaY * -.001)); camera.position.z = 3.2 / state.cameraZoom; };
     let dragging = false; let panMode = false; let lastX = 0; let lastY = 0;
     let painting = false;
