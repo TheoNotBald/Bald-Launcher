@@ -4420,7 +4420,7 @@ ipcMain.handle('launcher:get-resource-pack-catalog', async (_event, requestedVer
         id: item.name, name: item.displayName || item.name, category: 'Items',
         path: `assets/minecraft/textures/item/${item.name}.png`,
         texturePath: minecraftAssetPath(itemTextureByName.get(item.name)?.texture, 'items', item.name),
-        modelName: itemTextureByName.get(item.name)?.model?.replace(/^minecraft:items?\//, '') || item.name,
+        modelName: `item/${itemTextureByName.get(item.name)?.model?.replace(/^minecraft:items?\//, '') || item.name}`,
         shape: 'item',
       })),
       ...blocks.filter(block => block.name !== 'air').map(block => ({

@@ -406,7 +406,7 @@
     }
     const generation = state.requestGeneration;
     const result = await window.launcherAPI.getResourcePackAsset(state.version, path);
-    if (generation !== state.requestGeneration || item()?.id !== entry.id) return;
+    if (generation !== state.requestGeneration) return;
     state.thumbnailCache[entry.id] = result?.ok ? { dataUrl: result.dataUrl } : { error: true };
     if (!tile?.isConnected) return;
     tile.querySelector('.rp-thumb').innerHTML = result?.ok
@@ -516,7 +516,13 @@
     root.querySelector('[data-rp-action="reset-camera"]')?.addEventListener('click', () => { state.cameraZoom = 1; updatePreview(); });
     setupPainter();
     setupPreview();
-    loadModel(item()).then(() => { if (document.getElementById('rp3dCanvas')) setupPreview(); });
+    const selectedId = item()?.id;
+    const modelWasLoaded = Boolean(state.modelCache[modelKey(item())]);
+    loadModel(item()).then(() => {
+      if (item()?.id !== selectedId) return;
+      if (modelWasLoaded) setupPreview();
+      else render();
+    });
     loadVanillaTexture(item());
   }
 
@@ -560,6 +566,7 @@
 
   async function loadVanillaTexture(entry) {
     if (!entry || !window.launcherAPI?.getResourcePackAsset) return;
+    const generation = state.requestGeneration;
     const path = resourcePath(entry);
     if (!path || !/\.png$/i.test(path)) { drawPainter(); setupPreview(); return; }
     const key = bufferKey(entry);
@@ -726,7 +733,22 @@
   }
 
   function buildModelMeshes(model, entry) {
-    if (!model?.elements?.length) return [];
+    if (!model?.elements?.length) {
+      const textureRef = resolveTexture(model?.textures || {}, '#layer0');
+      const dimensions = dimensionsFor(entry);
+      const aspect = dimensions.width / Math.max(1, dimensions.height);
+      const geometry = new THREE.PlaneGeometry(Math.max(.35, aspect), 1);
+      const material = new THREE.MeshStandardMaterial({
+        map: textureFor(textureRef, entry),
+        color: 0xffffff,
+        roughness: .88,
+        side: THREE.DoubleSide,
+        transparent: true,
+      });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.userData = { textureRef, elementIndex: 0, side: 'generated', entryId: entry.id };
+      return [mesh];
+    }
     const meshes = [];
     model.elements.forEach((element, elementIndex) => {
       const from = element.from || [0, 0, 0], to = element.to || [16, 16, 16];
