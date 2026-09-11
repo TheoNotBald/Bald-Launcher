@@ -4396,8 +4396,25 @@ ipcMain.handle('launcher:get-resource-pack-catalog', async (_event, requestedVer
     const blockTextures = Array.isArray(blockTexturesResponse.data) ? blockTexturesResponse.data : [];
     const itemTextureByName = new Map(itemTextures.map(entry => [entry.name, entry]));
     const blockTextureByName = new Map(blockTextures.map(entry => [entry.name, entry]));
-    const catalog = [
-      ...items.filter(item => item.name !== 'air').map(item => ({
+    const blockNames = new Set(blocks.filter(block => block.name !== 'air').map(block => block.name));
+    const isDistinctItem = item => {
+      const itemTexture = itemTextureByName.get(item.name);
+      const blockTexture = blockTextureByName.get(item.name);
+      if (!blockNames.has(item.name) || !blockTexture) return true;
+      const normalizeModel = model => String(model || '')
+        .replace(/^minecraft:/, '')
+        .replace(/^items?\//, '')
+        .replace(/^blocks?\//, '')
+        .split('/')
+        .pop();
+      const itemModel = normalizeModel(itemTexture?.model);
+      const blockModel = normalizeModel(blockTexture?.model);
+      const itemPath = minecraftAssetPath(itemTexture?.texture, 'items', item.name);
+      const blockPath = minecraftAssetPath(blockTexture?.texture, 'blocks', item.name);
+      return Boolean(itemModel && blockModel && itemModel !== blockModel) || itemPath !== blockPath;
+    };
+    const rawCatalog = [
+      ...items.filter(item => item.name !== 'air' && isDistinctItem(item)).map(item => ({
         id: item.name, name: item.displayName || item.name, category: 'Items',
         path: `assets/minecraft/textures/item/${item.name}.png`, texturePath: minecraftAssetPath(itemTextureByName.get(item.name)?.texture, 'items', item.name), shape: 'item',
       })),
@@ -4413,6 +4430,15 @@ ipcMain.handle('launcher:get-resource-pack-catalog', async (_event, requestedVer
         width: Number(entity.width) || 1, height: Number(entity.height) || 1, entityType: entity.type,
       })),
     ];
+    const identity = entry => [entry.category, entry.id, entry.path, entry.modelName || '', entry.texturePath || ''].join('|');
+    const seen = new Set();
+    const catalog = rawCatalog.filter(entry => {
+      const key = identity(entry);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).sort((left, right) => String(left.name).localeCompare(String(right.name)) || String(left.category).localeCompare(String(right.category)));
+    console.info(`[ResourcePackStudio] catalog raw=${rawCatalog.length} normalized=${catalog.length} duplicatesRemoved=${rawCatalog.length - catalog.length}`);
     const result = { ok: true, version, catalog };
     resourcePackCatalogCache.set(version, result);
     return result;

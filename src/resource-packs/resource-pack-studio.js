@@ -40,6 +40,7 @@
     modifiedResources: {},
     modelCache: {},
     modelTextureCache: {},
+    thumbnailCache: {},
     favorites: {},
     recentResources: [],
     undo: [],
@@ -277,11 +278,20 @@
   function render() {
     const root = document.getElementById('resourcePackStudioRoot');
     if (!root) return;
+    const browser = root.querySelector('.rp-browser');
+    const browserScrollTop = browser?.scrollTop || 0;
+    const searchHadFocus = document.activeElement?.id === 'rpSearch';
     root.style.maxWidth = 'none';
     root.style.padding = '0';
     root.innerHTML = state.view === 'library' ? renderLibrary() : renderEditor();
     if (state.view === 'library') bindLibraryEvents();
     else bindEditorEvents();
+    if (state.view === 'editor') {
+      const nextBrowser = root.querySelector('.rp-browser');
+      if (nextBrowser) nextBrowser.scrollTop = browserScrollTop;
+      if (searchHadFocus) root.querySelector('#rpSearch')?.focus();
+      loadVisibleThumbnails();
+    }
   }
 
   function renderLibrary() {
@@ -360,14 +370,51 @@
 
   function texturePreview(entry) {
     const path = resourcePath(entry);
-    const buffer = state.buffers[`${entry.id}:${state.resolution}`];
+    const buffer = state.buffers[bufferKey(entry)];
     if (buffer) {
       const canvas = document.createElement('canvas');
-      canvas.width = state.resolution; canvas.height = state.resolution;
-      canvas.getContext('2d').putImageData(new ImageData(buffer, state.resolution, state.resolution), 0, 0);
+      const dimensions = dimensionsFor(entry);
+      canvas.width = dimensions.width; canvas.height = dimensions.height;
+      canvas.getContext('2d').putImageData(new ImageData(buffer, dimensions.width, dimensions.height), 0, 0);
       return `<img src="${canvas.toDataURL()}" alt="" class="rp-thumb-image">`;
     }
-    return `<span class="rp-thumb-placeholder">${entry.category === 'Blocks' ? '▦' : entry.category === 'Entities' ? '◉' : '◆'}</span>`;
+    const cached = state.thumbnailCache[entry.id];
+    return cached?.dataUrl ? `<img src="${cached.dataUrl}" alt="" class="rp-thumb-image">` : `<span class="rp-thumb-placeholder">${cached?.error ? 'Asset unavailable' : 'Loading…'}</span>`;
+  }
+
+  async function loadThumbnail(entry, tile) {
+    if (!entry || state.thumbnailCache[entry.id] || !window.launcherAPI?.getResourcePackAsset) return;
+    const path = resourcePath(entry);
+    if (!path) {
+      state.thumbnailCache[entry.id] = { error: true };
+      if (tile) tile.querySelector('.rp-thumb').innerHTML = '<span class="rp-thumb-placeholder">Asset unavailable</span>';
+      return;
+    }
+    const result = await window.launcherAPI.getResourcePackAsset(state.version, path);
+    state.thumbnailCache[entry.id] = result?.ok ? { dataUrl: result.dataUrl } : { error: true };
+    if (!tile?.isConnected) return;
+    tile.querySelector('.rp-thumb').innerHTML = result?.ok
+      ? `<img src="${result.dataUrl}" alt="" class="rp-thumb-image">`
+      : '<span class="rp-thumb-placeholder">Asset unavailable</span>';
+  }
+
+  function loadVisibleThumbnails() {
+    const browser = document.querySelector('#resourcePackStudioRoot .rp-browser');
+    if (!browser) return;
+    const tiles = [...browser.querySelectorAll('[data-rp-resource]')];
+    const load = tile => {
+      const entry = state.catalog.find(candidate => candidate.id === tile.dataset.rpResource);
+      if (entry) loadThumbnail(entry, tile);
+    };
+    if (!('IntersectionObserver' in window)) {
+      tiles.slice(0, 30).forEach(load);
+      return;
+    }
+    const observer = new IntersectionObserver(entries => entries.filter(entry => entry.isIntersecting).forEach(entry => {
+      load(entry.target);
+      observer.unobserve(entry.target);
+    }), { root: browser, rootMargin: '240px' });
+    tiles.forEach(tile => observer.observe(tile));
   }
 
   function renderSelectedResource(entry) {
@@ -432,7 +479,7 @@
     root.querySelector('[data-rp-action="install"]')?.addEventListener('click', () => exportPack(true));
     root.querySelector('[data-rp-action="metadata"]')?.addEventListener('click', editMetadata);
     root.querySelector('[data-rp-action="refresh"]')?.addEventListener('click', () => { state.catalogVersion = null; loadCatalog(state.version); });
-    root.querySelector('#rpSearch')?.addEventListener('input', event => { state.query = event.target.value; render(); document.getElementById('rpSearch')?.focus(); });
+    root.querySelector('#rpSearch')?.addEventListener('input', event => { state.query = event.target.value; render(); });
     root.querySelector('#rpCategory')?.addEventListener('change', event => { state.category = event.target.value; render(); });
     root.querySelector('#rpSort')?.addEventListener('change', event => { state.sort = event.target.value; render(); });
     root.querySelector('#rpResolution')?.addEventListener('change', event => { convertTexture(item(), Number(event.target.value)); render(); loadVanillaTexture(item()); });
@@ -441,7 +488,10 @@
     root.querySelector('#rpGrid')?.addEventListener('change', event => { state.showGrid = event.target.checked; drawPainter(); });
     root.querySelector('#rpScale')?.addEventListener('input', event => { state.scale = Number(event.target.value); updatePreview(); });
     root.querySelectorAll('[data-rp-tool]').forEach(button => button.addEventListener('click', () => { state.tool = button.dataset.rpTool; render(); }));
-    root.querySelectorAll('[data-rp-resource]').forEach(button => button.addEventListener('click', () => selectResource(button.dataset.rpResource)));
+    root.querySelectorAll('[data-rp-resource]').forEach(button => {
+      button.addEventListener('mousedown', event => event.preventDefault());
+      button.addEventListener('click', () => selectResource(button.dataset.rpResource));
+    });
     root.querySelector('[data-rp-action="favorite-resource"]')?.addEventListener('click', () => { state.favorites[state.selectedId] = !state.favorites[state.selectedId]; render(); });
     root.querySelector('[data-rp-action="reset"]')?.addEventListener('click', resetResource);
     root.querySelector('[data-rp-action="undo"]')?.addEventListener('click', undo);
@@ -455,11 +505,14 @@
   }
 
   async function selectResource(id) {
+    const scrollTop = document.querySelector('#resourcePackStudioRoot .rp-browser')?.scrollTop || 0;
     state.selectedId = id;
     state.selectedPath = null;
     state.recentResources = [id, ...state.recentResources.filter(entry => entry !== id)].slice(0, 30);
     state.selectedTab = 'workspace';
     render();
+    const browser = document.querySelector('#resourcePackStudioRoot .rp-browser');
+    if (browser) browser.scrollTop = scrollTop;
     await loadModel(item());
     await loadVanillaTexture(item());
   }
