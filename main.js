@@ -4465,16 +4465,29 @@ ipcMain.handle('launcher:get-resource-pack-asset', async (_event, requestedVersi
 
 ipcMain.handle('launcher:get-resource-pack-model', async (_event, requestedVersion, requestedModel) => {
   const version = String(requestedVersion || '1.21.4');
-  const model = String(requestedModel || '').replace(/^minecraft:(?:block|blocks)\//, '');
+  const requested = String(requestedModel || '').replace(/^minecraft:/, '');
+  const model = requested.replace(/^(?:block|blocks|item|items)\//, '');
   if (!/^[\w./-]+$/.test(model)) return { ok: false, error: 'Invalid Minecraft model name.' };
   const key = `${version}:${model}`;
   if (resourcePackModelCache.has(key)) return resourcePackModelCache.get(key);
   try {
-    const response = await axios.get(`https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/${encodeURIComponent(version)}/blocks_models.json`, { timeout: 20000 });
-    const modelData = response.data?.[model];
+    const sources = requested.startsWith('item/') || requested.startsWith('items/')
+      ? ['items_models.json', 'blocks_models.json']
+      : ['blocks_models.json', 'items_models.json'];
+    let response;
+    let sourceName;
+    for (const candidate of sources) {
+      try {
+        const result = await axios.get(`https://raw.githubusercontent.com/PrismarineJS/minecraft-assets/master/data/${encodeURIComponent(version)}/${candidate}`, { timeout: 20000 });
+        if (result.data?.[model]) { response = result; sourceName = candidate; break; }
+      } catch (error) {
+        if (candidate === sources[sources.length - 1]) throw error;
+      }
+    }
+    const modelData = response?.data?.[model];
     if (!modelData) return { ok: false, model, error: `Vanilla model ${model} was not found.` };
     const resolveModel = (name, seen = new Set()) => {
-      const key = String(name || '').replace(/^minecraft:block\//, '').replace(/^block\//, '');
+      const key = String(name || '').replace(/^minecraft:(?:block|item)\//, '').replace(/^(?:block|item)\//, '');
       if (!key || seen.has(key)) return {};
       seen.add(key);
       const source = response.data?.[key] || {};
@@ -4482,7 +4495,7 @@ ipcMain.handle('launcher:get-resource-pack-model', async (_event, requestedVersi
       return { ...parent, ...source, textures: { ...(parent.textures || {}), ...(source.textures || {}) } };
     };
     const resolved = resolveModel(model);
-    const result = { ok: true, model, data: resolved };
+    const result = { ok: true, model, source: sourceName, data: resolved };
     resourcePackModelCache.set(key, result);
     return result;
   } catch (error) {

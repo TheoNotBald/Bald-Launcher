@@ -35,7 +35,6 @@
     cameraZoom: 1,
     buffers: {},
     textureDimensions: {},
-    textureDimensions: {},
     vanillaLoaded: {},
     modifiedResources: {},
     modelCache: {},
@@ -50,6 +49,7 @@
   };
   let catalogRequest = null;
   let preview = null;
+  let activeHistoryAction = null;
 
   const esc = value => String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
   const now = () => new Date().toISOString();
@@ -568,29 +568,59 @@
     if (!canvas) return;
     drawPainter();
     let drawing = false;
-    const paint = event => {
-      if (!drawing) return;
+    let lastPoint = null;
+    const pointFor = event => {
       const rect = canvas.getBoundingClientRect();
       const dimensions = dimensionsFor(item());
-      const x = Math.max(0, Math.min(dimensions.width - 1, Math.floor((event.clientX - rect.left) / rect.width * dimensions.width)));
-      const y = Math.max(0, Math.min(dimensions.height - 1, Math.floor((event.clientY - rect.top) / rect.height * dimensions.height)));
-      const buffer = getBuffer(item());
-      const before = new Uint8ClampedArray(buffer);
-      for (let offsetY = -state.brushSize + 1; offsetY < state.brushSize; offsetY += 1) for (let offsetX = -state.brushSize + 1; offsetX < state.brushSize; offsetX += 1) {
-        const targetX = x + offsetX; const targetY = y + offsetY;
-        if (targetX < 0 || targetY < 0 || targetX >= dimensions.width || targetY >= dimensions.height) continue;
-        const index = (targetY * dimensions.width + targetX) * 4;
-        if (state.tool === 'eraser') buffer[index + 3] = 0;
-        else { const rgb = hexToRgb(state.color); buffer[index] = rgb[0]; buffer[index + 1] = rgb[1]; buffer[index + 2] = rgb[2]; buffer[index + 3] = Math.round(state.opacity * 255); }
-      }
-      if (state.tool === 'fill') fillBuffer(buffer, dimensions, hexToRgba(state.color, state.opacity));
-      state.undo.push({ key: bufferKey(item()), before, after: new Uint8ClampedArray(buffer) }); state.redo = [];
-      markModified(item()); drawPainter(); updatePreview(); updatePreviewTexture();
+      return {
+        x: Math.max(0, Math.min(dimensions.width - 1, Math.floor((event.clientX - rect.left) / rect.width * dimensions.width))),
+        y: Math.max(0, Math.min(dimensions.height - 1, Math.floor((event.clientY - rect.top) / rect.height * dimensions.height))),
+      };
     };
-    canvas.addEventListener('pointerdown', event => { drawing = true; canvas.setPointerCapture(event.pointerId); paint(event); });
+    const paint = event => {
+      if (!drawing) return;
+      const point = pointFor(event);
+      if (state.tool === 'eyedropper') {
+        const dimensions = dimensionsFor(item()), buffer = getBuffer(item());
+        const index = (point.y * dimensions.width + point.x) * 4;
+        state.color = `#${[0, 1, 2].map(offset => buffer[index + offset].toString(16).padStart(2, '0')).join('')}`;
+        drawing = false;
+        return;
+      }
+      if (state.tool === 'fill') {
+        const entry = item();
+        beginHistoryAction();
+        recordMutation(entry);
+        floodFill(getBuffer(entry), dimensionsFor(entry), point.x, point.y, hexToRgba(state.color, state.opacity));
+        commitHistoryAction('Fill texture');
+        drawing = false;
+      } else {
+        const entry = item();
+        if (state.tool === 'line' || state.tool === 'rectangle') {
+          if (!lastPoint) lastPoint = point;
+          applyShape(entry, lastPoint, point, state.tool);
+        } else {
+          applyBrush(entry, point.x, point.y);
+        }
+      }
+      drawPainter(); updatePreview(); updatePreviewTexture();
+    };
+    canvas.addEventListener('pointerdown', event => {
+      if (event.button !== 0) return;
+      drawing = true; lastPoint = pointFor(event); beginHistoryAction();
+      canvas.setPointerCapture(event.pointerId); paint(event);
+    });
     canvas.addEventListener('pointermove', paint);
-    canvas.addEventListener('pointerup', () => { drawing = false; });
-    canvas.addEventListener('pointerleave', () => { drawing = false; });
+    const finish = () => {
+      if (!drawing) return;
+      drawing = false;
+      if (state.tool !== 'eyedropper' && state.tool !== 'fill') commitHistoryAction(`${state.tool} stroke`);
+      lastPoint = null;
+    };
+    canvas.addEventListener('pointerup', finish);
+    canvas.addEventListener('pointercancel', finish);
+    canvas.addEventListener('lostpointercapture', finish);
+    canvas.addEventListener('contextmenu', event => event.preventDefault());
   }
 
   function drawPainter() {
@@ -642,8 +672,13 @@
     let dragging = false; let lastX = 0; let lastY = 0;
     let painting = false;
     canvas.onpointerdown = event => {
-      if (event.button === 0) { painting = true; paintModelAt(event); }
-      else { dragging = true; lastX = event.clientX; lastY = event.clientY; }
+      if (event.button === 0) {
+        painting = true;
+        beginHistoryAction();
+        paintModelAt(event);
+      } else if (event.button === 2 || event.button === 1) {
+        dragging = true; lastX = event.clientX; lastY = event.clientY;
+      }
       canvas.setPointerCapture(event.pointerId);
     };
     canvas.onpointermove = event => {
@@ -651,7 +686,13 @@
       if (!dragging) return;
       root.rotation.y += (event.clientX - lastX) * .01; root.rotation.x = Math.max(-1.2, Math.min(1.2, root.rotation.x + (event.clientY - lastY) * .01)); lastX = event.clientX; lastY = event.clientY;
     };
-    canvas.onpointerup = () => { painting = false; dragging = false; };
+    const finishPreviewPointer = () => {
+      if (painting) commitHistoryAction('3D paint stroke');
+      painting = false; dragging = false;
+    };
+    canvas.onpointerup = finishPreviewPointer;
+    canvas.onpointercancel = finishPreviewPointer;
+    canvas.onlostpointercapture = finishPreviewPointer;
     canvas.oncontextmenu = event => event.preventDefault();
   }
 
@@ -757,11 +798,112 @@
     paintPixel(target, x, y);
   }
 
+  function beginHistoryAction() {
+    if (!activeHistoryAction) activeHistoryAction = { changes: new Map() };
+  }
+
+  function recordMutation(entry) {
+    if (!entry) return;
+    beginHistoryAction();
+    const key = bufferKey(entry);
+    if (!activeHistoryAction.changes.has(key)) {
+      activeHistoryAction.changes.set(key, {
+        entryId: entry.id,
+        before: new Uint8ClampedArray(getBuffer(entry)),
+        beforeDimensions: { ...dimensionsFor(entry) },
+      });
+    }
+  }
+
+  function commitHistoryAction(description) {
+    const action = activeHistoryAction;
+    activeHistoryAction = null;
+    if (!action) return;
+    const changes = [];
+    action.changes.forEach(change => {
+      const entry = state.catalog.find(candidate => candidate.id === change.entryId);
+      if (!entry) return;
+      const after = new Uint8ClampedArray(getBuffer(entry));
+      if (after.length !== change.before.length || after.some((value, index) => value !== change.before[index])) {
+        changes.push({ ...change, after, afterDimensions: { ...dimensionsFor(entry) } });
+        markModified(entry, false);
+      }
+    });
+    if (!changes.length) return;
+    state.undo.push({ type: 'texture-edit', changes, description });
+    state.redo = [];
+    persist();
+  }
+
+  function applyBrush(entry, x, y) {
+    recordMutation(entry);
+    const dimensions = dimensionsFor(entry), buffer = getBuffer(entry);
+    const rgba = state.tool === 'eraser' ? [0, 0, 0, 0] : [...hexToRgb(state.color), Math.round(state.opacity * 255)];
+    for (let offsetY = -state.brushSize + 1; offsetY < state.brushSize; offsetY += 1) {
+      for (let offsetX = -state.brushSize + 1; offsetX < state.brushSize; offsetX += 1) {
+        const targetX = x + offsetX, targetY = y + offsetY;
+        if (targetX < 0 || targetY < 0 || targetX >= dimensions.width || targetY >= dimensions.height) continue;
+        const index = (targetY * dimensions.width + targetX) * 4;
+        rgba.forEach((value, offset) => { buffer[index + offset] = value; });
+      }
+    }
+  }
+
+  function applyShape(entry, start, end, type) {
+    const dimensions = dimensionsFor(entry), buffer = getBuffer(entry);
+    recordMutation(entry);
+    const rgba = state.tool === 'eraser' ? [0, 0, 0, 0] : [...hexToRgb(state.color), Math.round(state.opacity * 255)];
+    const set = (x, y) => {
+      if (x < 0 || y < 0 || x >= dimensions.width || y >= dimensions.height) return;
+      const index = (y * dimensions.width + x) * 4;
+      rgba.forEach((value, offset) => { buffer[index + offset] = value; });
+    };
+    if (type === 'line') {
+      let x = start.x, y = start.y;
+      const dx = Math.abs(end.x - x), sx = x < end.x ? 1 : -1;
+      const dy = -Math.abs(end.y - y), sy = y < end.y ? 1 : -1;
+      let error = dx + dy;
+      while (true) {
+        set(x, y);
+        if (x === end.x && y === end.y) break;
+        const twice = 2 * error;
+        if (twice >= dy) { error += dy; x += sx; }
+        if (twice <= dx) { error += dx; y += sy; }
+      }
+      return;
+    }
+    const left = Math.min(start.x, end.x), right = Math.max(start.x, end.x);
+    const top = Math.min(start.y, end.y), bottom = Math.max(start.y, end.y);
+    for (let y = top; y <= bottom; y += 1) for (let x = left; x <= right; x += 1) {
+      if (x === left || x === right || y === top || y === bottom) set(x, y);
+    }
+  }
+
+  function floodFill(buffer, dimensions, startX, startY, rgba) {
+    const startIndex = (startY * dimensions.width + startX) * 4;
+    const target = Array.from(buffer.slice(startIndex, startIndex + 4));
+    if (target.every((value, index) => value === rgba[index])) return;
+    const stack = [[startX, startY]];
+    const seen = new Set();
+    while (stack.length) {
+      const [x, y] = stack.pop();
+      if (x < 0 || y < 0 || x >= dimensions.width || y >= dimensions.height) continue;
+      const key = y * dimensions.width + x;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const index = key * 4;
+      if (target.some((value, offset) => buffer[index + offset] !== value)) continue;
+      rgba.forEach((value, offset) => { buffer[index + offset] = value; });
+      stack.push([x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]);
+    }
+  }
+
   function paintPixel(entry, x, y) {
     const dimensions = dimensionsFor(entry), buffer = getBuffer(entry), index = (y * dimensions.width + x) * 4;
+    recordMutation(entry);
     if (state.tool === 'eraser') buffer[index + 3] = 0;
     else { const rgb = hexToRgb(state.color); buffer[index] = rgb[0]; buffer[index + 1] = rgb[1]; buffer[index + 2] = rgb[2]; buffer[index + 3] = Math.round(state.opacity * 255); }
-    markModified(entry); drawPainter(); updatePreviewTexture();
+    drawPainter(); updatePreviewTexture();
   }
 
   function updatePreview() {
@@ -805,12 +947,12 @@
       const targetIndex = (y * size + x) * 4;
       after.set(before.slice(sourceIndex, sourceIndex + 4), targetIndex);
     }
-    state.undo.push({ key: bufferKey(entry), before, after });
-    state.redo = [];
+    beginHistoryAction();
+    recordMutation(entry);
     state.textureDimensions[entry.id] = { width: size, height: size };
     state.buffers[bufferKey(entry)] = after;
     state.resolution = size;
-    markModified(entry);
+    commitHistoryAction('Convert texture resolution');
   }
   function getBuffer(entry) {
     const key = bufferKey(entry);
@@ -819,7 +961,11 @@
   }
 
   function bufferKey(entry) { return `${entry?.id || 'unknown'}`; }
-  function markModified(entry) { state.modifiedResources[entry.path || resourcePath(entry) || entry.id] = true; state.dirty = true; persist(); }
+  function markModified(entry, shouldPersist = true) {
+    state.modifiedResources[entry.path || resourcePath(entry) || entry.id] = true;
+    state.dirty = true;
+    if (shouldPersist) persist();
+  }
   function hexToRgb(value) { const normalized = String(value).replace('#', ''); return [parseInt(normalized.slice(0, 2), 16) || 0, parseInt(normalized.slice(2, 4), 16) || 0, parseInt(normalized.slice(4, 6), 16) || 0]; }
   function readFileAsDataUrl(file) {
     return new Promise((resolve, reject) => {
@@ -833,13 +979,21 @@
   function undo() {
     const change = state.undo.pop(); if (!change) return;
     state.redo.push(change);
-    state.buffers[change.key] = change.before; markModified(item()); drawPainter(); updatePreviewTexture();
+    change.changes.forEach(entryChange => {
+      state.buffers[entryChange.entryId] = entryChange.before;
+      state.textureDimensions[entryChange.entryId] = entryChange.beforeDimensions;
+    });
+    state.dirty = true; persist(); drawPainter(); updatePreviewTexture();
   }
 
   function redo() {
     const change = state.redo.pop(); if (!change) return;
     state.undo.push(change);
-    state.buffers[change.key] = change.after; markModified(item()); drawPainter(); updatePreviewTexture();
+    change.changes.forEach(entryChange => {
+      state.buffers[entryChange.entryId] = entryChange.after;
+      state.textureDimensions[entryChange.entryId] = entryChange.afterDimensions;
+    });
+    state.dirty = true; persist(); drawPainter(); updatePreviewTexture();
   }
 
   function resetResource() {
@@ -917,6 +1071,16 @@
       const id = `resource-pack-${Date.now()}`;
       state.projects = [{ id, name: 'My Resource Pack', version: '1.21.4', createdAt: now(), updatedAt: now(), data: defaultEditor('My Resource Pack', '1.21.4') }];
     }
+    document.addEventListener('keydown', event => {
+      if (!(event.ctrlKey || event.metaKey) || !document.querySelector('#resourcePackStudioRoot .rp-studio')) return;
+      if (event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) redo(); else undo();
+      } else if (event.key.toLowerCase() === 'y') {
+        event.preventDefault();
+        redo();
+      }
+    }, { once: true });
     render();
   }
 
