@@ -185,7 +185,11 @@
     });
     persist();
     render();
-    await loadCatalog(state.version, generation);
+    try {
+      await loadCatalog(state.version, generation);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error), true);
+    }
   }
 
   function openLibrary() {
@@ -487,6 +491,13 @@
 
   function bindLibraryEvents() {
     const root = document.getElementById('resourcePackStudioRoot');
+    root.addEventListener('click', event => {
+      const target = event.target instanceof Element ? event.target : null;
+      const button = target?.closest('[data-rp-open]');
+      if (!button || !root.contains(button)) return;
+      event.preventDefault();
+      void openProject(button.dataset.rpOpen);
+    });
     root.querySelector('[data-rp-action="show-create"]')?.addEventListener('click', () => { const card = document.getElementById('rpCreateCard'); if (card) card.hidden = false; document.getElementById('rpNewName')?.focus(); });
     root.querySelector('[data-rp-action="hide-create"]')?.addEventListener('click', () => { const card = document.getElementById('rpCreateCard'); if (card) card.hidden = true; });
     root.querySelector('[data-rp-action="create"]')?.addEventListener('click', async () => {
@@ -498,7 +509,6 @@
     root.querySelector('#rpLibrarySearch')?.addEventListener('input', event => { state.libraryQuery = event.target.value; render(); document.getElementById('rpLibrarySearch')?.focus(); });
     root.querySelector('#rpLibrarySort')?.addEventListener('change', event => { state.librarySort = event.target.value; persist(); render(); });
     root.querySelectorAll('[data-rp-filter]').forEach(button => button.addEventListener('click', () => { state.libraryFilter = button.dataset.rpFilter; persist(); render(); }));
-    root.querySelectorAll('[data-rp-open]').forEach(button => button.addEventListener('click', () => openProject(button.dataset.rpOpen)));
     root.querySelectorAll('[data-rp-duplicate]').forEach(button => button.addEventListener('click', () => duplicateProject(button.dataset.rpDuplicate)));
     root.querySelectorAll('[data-rp-delete]').forEach(button => button.addEventListener('click', () => deleteProject(button.dataset.rpDelete)));
     root.querySelectorAll('[data-rp-favorite]').forEach(button => button.addEventListener('click', () => togglePackFavorite(button.dataset.rpFavorite)));
