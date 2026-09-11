@@ -2261,11 +2261,17 @@ function createWindow() {
   });
 
   mainWindow.removeMenu();
+  // Always restore native input handling when a packaged window is recreated.
+  mainWindow.setIgnoreMouseEvents(false);
+  mainWindow.setFocusable(true);
   mainWindow.webContents.on('console-message', (_event, details) => {
     console.error(`[renderer:${details.level}] ${details.sourceId}:${details.lineNumber} ${details.message}`);
   });
   mainWindow.loadFile(htmlPath);
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    mainWindow.focus();
+  });
 
   mainWindow.webContents.on('before-input-event', (_event, input) => {
     const isReload = input.key === 'F5' || (input.control && input.key.toLowerCase() === 'r');
