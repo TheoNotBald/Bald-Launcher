@@ -2,7 +2,7 @@ appId: com.baldlauncher.app
 productName: Bald Launcher
 npmRebuild: false
 directories:
-  output: build-release
+  output: build-release-validation
 win:
   target: nsis
   icon: build/icon.ico

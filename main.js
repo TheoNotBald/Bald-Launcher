@@ -2,6 +2,12 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const { execFile, execFileSync, spawn, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+process.on('uncaughtException', (err) => {
+  try { fs.writeFileSync(path.join(app.getPath('userData'), 'startup-error.txt'), String(err.stack || err)); } catch(e) {}
+});
+process.on('unhandledRejection', (err) => {
+  try { fs.writeFileSync(path.join(app.getPath('userData'), 'startup-error.txt'), String(err.stack || err)); } catch(e) {}
+});
 const crypto = require('crypto');
 const os = require('os');
 const axios = require('axios');
@@ -22,11 +28,28 @@ const { readOwnership } = require('./src/cosmetics/custom-skin-loader/ownership'
 app.commandLine.appendSwitch('disable-features', 'DIPS');
 
 const htmlPath = path.join(__dirname, 'bald_launcher_v7.html');
+let hasSingleInstanceLock = true;
+try {
+  hasSingleInstanceLock = app.requestSingleInstanceLock();
+} catch (error) {
+  console.warn('Single instance lock check failed:', error);
+}
+if (!hasSingleInstanceLock) {
+  console.warn('Single instance lock not acquired; continuing launch.');
+}
 const launcher = new MCLC.Client();
 let mainWindow;
 let reloadTimer;
 let stateFilePath;
 let writeStatePending = false;
+if (hasSingleInstanceLock) {
+  app.on('second-instance', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  });
+}
 const contentSearchCache = new Map();
 const CONTENT_SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 const resourcePackCatalogCache = new Map();
@@ -39,7 +62,44 @@ function minecraftAssetPath(textureName, fallbackType, fallbackName) {
     const group = normalized.startsWith('entity/') ? 'entity' : normalized.startsWith('item') ? 'items' : 'blocks';
     return `${group}/${match[1]}.png`;
   }
+
   return `${fallbackType}/${fallbackName}.png`;
+}
+
+function browseTextureName(entry, category, manifestPath) {
+  const parts = String(manifestPath || '').replace(/\.png$/i, '').split('/').filter(Boolean);
+  const leaf = parts[parts.length - 1] || String(entry.name || 'texture');
+  const parent = parts.length > 1 ? parts[parts.length - 2] : '';
+  const rawName = String(entry.name || '').trim();
+  const leafWithContext = parent && leaf.toLowerCase().startsWith(`${parent.toLowerCase()}_`)
+    ? leaf
+    : rawName.toLowerCase() === leaf.toLowerCase()
+      ? [leaf, parent].filter(Boolean).join(' ')
+      : [parent, leaf].filter(Boolean).join(' ');
+  const base = rawName && rawName.toLowerCase() !== parent.toLowerCase() && rawName.toLowerCase() !== leaf.toLowerCase()
+    ? rawName
+    : leafWithContext;
+  const suffix = {
+    block: 'Block Texture',
+    item: 'Item Texture',
+    entity: 'Entity Texture',
+    '3d_mob': 'Mob Skin',
+    gui: 'GUI Texture',
+    particle: 'Particle',
+    painting: 'Painting',
+    trims: 'Armor Trim',
+    mob_effect: 'Mob Effect Icon',
+    map: 'Map Texture',
+    environment: 'Environment Texture',
+    misc: 'Miscellaneous Texture',
+    font: 'Font Texture',
+    colormap: 'Color Map',
+    effect: 'Effect',
+  }[category] || 'Texture';
+  const normalized = base.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+    .replace(/\b\w/g, character => character.toUpperCase());
+  const suffixPattern = new RegExp(`\\s+${suffix.replace(/ /g, '\\s+')}\\s*$`, 'i');
+  return suffixPattern.test(normalized) ? normalized : `${normalized} ${suffix}`;
 }
 const playitManager = createPlayitManager({
   app,
@@ -2252,11 +2312,13 @@ function createWindow() {
     backgroundColor: '#0d0d0d',
     title: 'Bald Launcher',
     show: false,
+    center: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      backgroundThrottling: false,
     },
   });
 
@@ -2264,13 +2326,26 @@ function createWindow() {
   // Always restore native input handling when a packaged window is recreated.
   mainWindow.setIgnoreMouseEvents(false);
   mainWindow.setFocusable(true);
+  mainWindow.on('focus', () => {
+    if (!mainWindow.isDestroyed()) mainWindow.setIgnoreMouseEvents(false);
+  });
+  mainWindow.on('restore', () => {
+    if (mainWindow.isDestroyed()) return;
+    mainWindow.setIgnoreMouseEvents(false);
+    mainWindow.setFocusable(true);
+  });
+  mainWindow.on('show', () => {
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.setIgnoreMouseEvents(false);
+      mainWindow.setFocusable(true);
+    }
+  });
   mainWindow.webContents.on('console-message', (_event, details) => {
     console.error(`[renderer:${details.level}] ${details.sourceId}:${details.lineNumber} ${details.message}`);
   });
   mainWindow.loadFile(htmlPath);
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    mainWindow.focus();
   });
 
   mainWindow.webContents.on('before-input-event', (_event, input) => {
@@ -4388,6 +4463,44 @@ ipcMain.handle('launcher:get-resource-pack-catalog', async (_event, requestedVer
   if (resourcePackCatalogCache.has(version)) return resourcePackCatalogCache.get(version);
   const base = `https://raw.githubusercontent.com/PrismarineJS/minecraft-data/master/data/pc/${encodeURIComponent(version)}`;
   try {
+    const manifestResponse = await axios.get('https://resourcepackcreator.com/texture-manifest.json', {
+      headers: { 'User-Agent': 'BaldLauncher/ResourcePackStudio' },
+      timeout: 20000,
+    });
+    const textures = Array.isArray(manifestResponse.data?.textures) ? manifestResponse.data.textures : [];
+    if (textures.length) {
+      const categoryNames = {
+        block: 'Blocks', item: 'Items', entity: 'Entity Textures', '3d_mob': 'Mobs',
+        gui: 'HUD & Menus', particle: 'Particles', painting: 'Paintings', trims: 'Armor Trims',
+        mob_effect: 'Mob Effects', map: 'Maps', environment: 'Environment', misc: 'Misc',
+        font: 'Fonts', colormap: 'Colormaps', effect: 'Effects',
+      };
+      const assetFolders = {
+        block: 'block', item: 'item', entity: 'entity', '3d_mob': 'entity',
+        gui: 'gui', particle: 'particle', painting: 'painting', trims: 'item',
+        mob_effect: 'mob_effect', map: 'map', environment: 'environment', misc: 'misc',
+        font: 'font', colormap: 'colormap', effect: 'effect',
+      };
+      const catalog = textures.map((entry, index) => {
+        const category = String(entry.category || 'misc');
+        const diskCategory = String(entry.diskCategory || assetFolders[category] || 'misc');
+        const manifestPath = String(entry.path || '').replace(/^[/\\]+/, '');
+        const id = `browse_${category}_${manifestPath || index}`.replace(/[^a-zA-Z0-9_-]+/g, '_');
+        const name = browseTextureName(entry, category, manifestPath);
+        return {
+          id,
+          name,
+          category: categoryNames[category] || 'Misc',
+          path: `browse/${diskCategory}/${manifestPath}`,
+          texturePath: `browse/${diskCategory}/${manifestPath}`,
+          browseCategory: category,
+          shape: category === 'block' ? 'cube' : category === 'item' ? 'item' : 'flat',
+        };
+      }).filter(entry => entry.texturePath.endsWith('.png'));
+      const result = { ok: true, version, source: 'browse-v2', catalog };
+      resourcePackCatalogCache.set(version, result);
+      return result;
+    }
     const responses = await Promise.allSettled([
       axios.get(`${base}/items.json`, { headers: { 'User-Agent': 'BaldLauncher/ResourcePackStudio' }, timeout: 15000 }),
       axios.get(`${base}/blocks.json`, { headers: { 'User-Agent': 'BaldLauncher/ResourcePackStudio' }, timeout: 15000 }),
@@ -4401,7 +4514,50 @@ ipcMain.handle('launcher:get-resource-pack-catalog', async (_event, requestedVer
     const entities = Array.isArray(responseData(2)) ? responseData(2) : [];
     const itemTextures = Array.isArray(responseData(3)) ? responseData(3) : [];
     const blockTextures = Array.isArray(responseData(4)) ? responseData(4) : [];
-    if (!items.length && !blocks.length) throw new Error('Minecraft resource metadata returned no items or blocks.');
+    if (!items.length && !blocks.length) {
+      const manifestResponse = await axios.get('https://resourcepackcreator.com/texture-manifest.json', {
+        headers: { 'User-Agent': 'BaldLauncher/ResourcePackStudio' },
+        timeout: 20000,
+      });
+      const textures = Array.isArray(manifestResponse.data?.textures) ? manifestResponse.data.textures : [];
+      if (!textures.length) throw new Error('Browse-v2 texture manifest returned no textures.');
+      const categoryNames = {
+        block: 'Blocks',
+        item: 'Items',
+        entity: 'Entity Textures',
+        '3d_mob': 'Mobs',
+        gui: 'HUD & Menus',
+        particle: 'Particles',
+        painting: 'Paintings',
+        trims: 'Armor Trims',
+        mob_effect: 'Mob Effects',
+        map: 'Maps',
+        environment: 'Environment',
+        misc: 'Misc',
+        font: 'Fonts',
+        colormap: 'Colormaps',
+        effect: 'Effects',
+      };
+      const catalog = textures.map((entry, index) => {
+        const category = String(entry.category || 'misc');
+        const diskCategory = String(entry.diskCategory || category);
+        const manifestPath = String(entry.path || '').replace(/^[/\\]+/, '');
+        const id = `browse_${category}_${manifestPath || index}`.replace(/[^a-zA-Z0-9_-]+/g, '_');
+        const name = browseTextureName(entry, category, manifestPath);
+        return {
+          id,
+          name,
+          category: categoryNames[category] || 'Misc',
+          path: `browse/${diskCategory}/${manifestPath}`,
+          texturePath: `browse/${diskCategory}/${manifestPath}`,
+          browseCategory: category,
+          shape: category === 'block' ? 'cube' : category === 'item' ? 'item' : 'flat',
+        };
+      }).filter(entry => entry.texturePath.endsWith('.png'));
+      const result = { ok: true, version, source: 'browse-v2', catalog };
+      resourcePackCatalogCache.set(version, result);
+      return result;
+    }
     const itemTextureByName = new Map(itemTextures.map(entry => [entry.name, entry]));
     const blockTextureByName = new Map(blockTextures.map(entry => [entry.name, entry]));
     const blockNames = new Set(blocks.filter(block => block.name !== 'air').map(block => block.name));
@@ -4436,7 +4592,7 @@ ipcMain.handle('launcher:get-resource-pack-catalog', async (_event, requestedVer
         shape: block.boundingBox === 'empty' ? 'flat' : block.boundingBox === 'block' ? 'cube' : 'model',
       })),
       ...entities.map(entity => ({
-        id: `entity_${entity.name}`, name: entity.displayName || entity.name, category: 'Entities',
+        id: `entity_${entity.name}`, name: entity.displayName || entity.name, category: 'Entity Textures',
         path: `assets/minecraft/textures/entity/${entity.name}.png`, shape: 'entity',
         width: Number(entity.width) || 1, height: Number(entity.height) || 1, entityType: entity.type,
       })),
@@ -4461,6 +4617,22 @@ ipcMain.handle('launcher:get-resource-pack-catalog', async (_event, requestedVer
 ipcMain.handle('launcher:get-resource-pack-asset', async (_event, requestedVersion, requestedPath) => {
   const version = String(requestedVersion || '1.21.4');
   const assetPath = String(requestedPath || '').replace(/^[/\\]+/, '').replace(/\.\.(?:[/\\]|$)/g, '');
+  if (/^browse\/(?:items?|blocks?|entity|3d_mob|gui|particle|painting|trims|mob_effect|map|environment|misc|font|colormap|effect)\/[\w./-]+\.png$/i.test(assetPath)) {
+    const browsePath = assetPath.replace(/^browse\//i, '');
+    const key = `browse:${browsePath}`;
+    if (resourcePackAssetCache.has(key)) return resourcePackAssetCache.get(key);
+    try {
+      const response = await axios.get(`https://resourcepackcreator.com/textures/${browsePath}`, {
+        responseType: 'arraybuffer',
+        timeout: 20000,
+      });
+      const result = { ok: true, path: assetPath, dataUrl: `data:image/png;base64,${Buffer.from(response.data).toString('base64')}` };
+      resourcePackAssetCache.set(key, result);
+      return result;
+    } catch (error) {
+      return { ok: false, path: assetPath, error: `Browse-v2 texture could not be loaded: ${error.message}` };
+    }
+  }
   if (!/^(?:items|blocks|entity|models|gui|environment|particle|painting|font|misc|colormap)\/[\w./-]+\.png$/i.test(assetPath)) return { ok: false, error: 'Invalid Minecraft asset path.' };
   const key = `${version}:${assetPath}`;
   if (resourcePackAssetCache.has(key)) return resourcePackAssetCache.get(key);

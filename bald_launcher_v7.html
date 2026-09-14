@@ -1467,12 +1467,64 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
 <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
 <script src="node_modules/@xterm/addon-web-links/lib/addon-web-links.js"></script>
 <script src="node_modules/skinview3d/bundles/skinview3d.bundle.js"></script>
+<script src="node_modules/three/build/three.min.js"></script>
 <script src="src/cosmetics/studio/cosmetic-studio.js"></script>
 <script src="src/cosmetics/studio/cape-model.js"></script>
 <script type="module" src="src/cosmetics/studio/studio-3d-painter.mjs"></script>
 <script type="module" src="src/cosmetics/preview/minecraft-player-preview.mjs"></script>
 <script src="src/resource-packs/resource-pack-studio.js"></script>
 <script>
+function showInputModal(title, defaultValue = '') {
+  return new Promise(resolve => {
+    let modal = document.getElementById('globalLauncherInputModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'globalLauncherInputModal';
+      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;';
+      modal.innerHTML = `
+        <div style="background:#171d1b;border:1px solid #3b4a41;border-radius:10px;padding:20px;width:min(400px,90vw);box-shadow:0 10px 30px rgba(0,0,0,0.8);color:#dce4df;">
+          <h3 id="gimTitle" style="margin:0 0 14px 0;font-size:14px;color:#edf3ed;">Input</h3>
+          <input id="gimInput" class="modal-input" style="width:100%;box-sizing:border-box;margin-bottom:16px;padding:8px 10px;background:#101513;border:1px solid #3c4a42;border-radius:5px;color:#fff;font:inherit;">
+          <div style="display:flex;justify-content:flex-end;gap:8px;">
+            <button id="gimCancel" class="modal-btn" type="button">Cancel</button>
+            <button id="gimConfirm" class="modal-btn primary" type="button">OK</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+    const titleEl = modal.querySelector('#gimTitle');
+    const inputEl = modal.querySelector('#gimInput');
+    const cancelBtn = modal.querySelector('#gimCancel');
+    const confirmBtn = modal.querySelector('#gimConfirm');
+    
+    titleEl.textContent = title;
+    inputEl.value = defaultValue;
+    modal.style.display = 'flex';
+    inputEl.focus();
+    inputEl.select();
+
+    const cleanup = (val) => {
+      modal.style.display = 'none';
+      cancelBtn.onclick = null;
+      confirmBtn.onclick = null;
+      inputEl.onkeydown = null;
+      resolve(val);
+    };
+
+    cancelBtn.onclick = () => cleanup(null);
+    confirmBtn.onclick = () => cleanup(inputEl.value);
+    inputEl.onkeydown = (e) => {
+      if (e.key === 'Enter') cleanup(inputEl.value);
+      if (e.key === 'Escape') cleanup(null);
+    };
+  });
+}
+window.prompt = function(message, defaultText) {
+  console.warn('window.prompt called synchronously:', message);
+  return defaultText || '';
+};
+
 const launcherBridge = window.launcherAPI || null;
 const LOADERS = ['fabric','forge','neoforge','quilt','vanilla'];
 // Real version list comes from Mojang's manifest via the bridge (populated
@@ -2378,7 +2430,7 @@ async function exportCosmeticAsset(item){
 }
 async function renameCosmeticAsset(item){
   if (!item?.filePath || !launcherBridge?.renameCreatedCosmetic) return;
-  const name = prompt('Cosmetic name', item.name || 'Cosmetic');
+  const name = await showInputModal('Cosmetic name', item.name || 'Cosmetic');
   if (!name?.trim()) return;
   const result = await launcherBridge.renameCreatedCosmetic({ filePath: item.filePath, name });
   if (result?.ok === false) { alert(result.error || 'Could not rename cosmetic.'); return; }
@@ -3505,7 +3557,7 @@ async function saveServerFileEditor(serverId){
 
 async function createServerFolder(serverId){
   const browserState = serverFileBrowserState[serverId] || { currentPath: '.' };
-  const folderName = window.prompt('New folder name:', 'new-folder');
+  const folderName = await showInputModal('New folder name:', 'new-folder');
   if (!folderName || !folderName.trim()) return;
   const result = await launcherBridge.createServerFolder({ serverId, path: browserState.currentPath || '.', name: folderName.trim() });
   if (!result?.ok) {
@@ -3517,7 +3569,7 @@ async function createServerFolder(serverId){
 
 async function createServerFile(serverId){
   const browserState = serverFileBrowserState[serverId] || { currentPath: '.' };
-  const fileName = window.prompt('New file name:', 'server.properties');
+  const fileName = await showInputModal('New file name:', 'server.properties');
   if (!fileName || !fileName.trim() || !launcherBridge?.createServerFile) return;
   const result = await launcherBridge.createServerFile({ serverId, path: browserState.currentPath || '.', name: fileName.trim() });
   if (!result?.ok) alert(result?.error || 'Unable to create file');
@@ -4474,7 +4526,7 @@ async function resetCurrentCategory() {
 
 async function renameCurrentTheme() {
   const themeId = String(document.getElementById('themePresetSelect')?.value || '1');
-  const name = prompt('Theme name:', currentEditingTheme?.name || `Theme ${themeId}`);
+  const name = await showInputModal('Theme name:', currentEditingTheme?.name || `Theme ${themeId}`);
   if (!name) return;
   const result = await launcherBridge?.renameTheme?.(themeId, name);
   if (result?.ok) { currentEditingTheme = result.theme; await loadThemePreset(themeId); }
@@ -4483,9 +4535,9 @@ async function renameCurrentTheme() {
 async function duplicateCurrentTheme() {
   const result = await launcherBridge?.getThemes?.();
   if (!result?.themes) return;
-  const target = prompt(`Duplicate to preset id (${Object.keys(result.themes).join(', ')}):`, String(Number(document.getElementById('themePresetSelect')?.value || '1') + 1));
+  const target = await showInputModal(`Duplicate to preset id (${Object.keys(result.themes).join(', ')}):`, String(Number(document.getElementById('themePresetSelect')?.value || '1') + 1));
   if (!target || !/^[1-9][0-9]*$/.test(target)) return;
-  const name = prompt('New theme name:', `${currentEditingTheme?.name || 'Theme'} copy`);
+  const name = await showInputModal('New theme name:', `${currentEditingTheme?.name || 'Theme'} copy`);
   const duplicate = await launcherBridge?.duplicateTheme?.(document.getElementById('themePresetSelect').value, target, name);
   if (duplicate?.ok) { renderThemePresetOptions({ ...result.themes, [target]: duplicate.theme }, target); await loadThemePreset(target); }
   else if (duplicate?.error) alert(duplicate.error);

@@ -352,7 +352,8 @@
       <div class="rp-pack-card-head">${icon}<div class="rp-pack-card-title"><strong>${esc(entry.name)}</strong><span>Minecraft Java ${esc(entry.version)}</span></div><button class="rp-icon-button" data-rp-favorite="${esc(entry.id)}">${entry.data?.favorite ? '♥' : '♡'}</button></div>
       <p>${esc(entry.data?.description || 'No description yet.')}</p>
       <div class="rp-pack-stats"><span>${modifiedCount(entry)} modified</span><span>Edited ${relativeDate(entry.updatedAt)}</span></div>
-      <div class="rp-card-actions"><button class="modal-btn primary" data-rp-open="${esc(entry.id)}">Open studio</button><button class="modal-btn" data-rp-duplicate="${esc(entry.id)}">Duplicate</button><button class="rp-text-button" data-rp-delete="${esc(entry.id)}">Delete</button></div>
+      <div class="rp-card-actions"><button class="modal-btn primary" data-rp-open="${esc(entry.id)}">Edit</button><button class="modal-btn" data-rp-export="${esc(entry.id)}">Export</button><button class="modal-btn" data-rp-install="${esc(entry.id)}">Install</button></div>
+      <div class="rp-card-actions rp-card-actions-secondary"><button class="rp-text-button" data-rp-rename="${esc(entry.id)}">Rename</button><button class="rp-text-button" data-rp-duplicate="${esc(entry.id)}">Duplicate</button><button class="rp-text-button" data-rp-delete="${esc(entry.id)}">Delete</button></div>
     </article>`;
   }
 
@@ -412,7 +413,7 @@
       const canvas = document.createElement('canvas');
       const dimensions = dimensionsFor(entry);
       canvas.width = dimensions.width; canvas.height = dimensions.height;
-      canvas.getContext('2d').putImageData(new ImageData(buffer, dimensions.width, dimensions.height), 0, 0);
+      canvas.getContext('2d').putImageData(createImageData(entry), 0, 0);
       return `<img src="${canvas.toDataURL()}" alt="" class="rp-thumb-image">`;
     }
     const cached = state.thumbnailCache[entry.id];
@@ -485,7 +486,7 @@
 
   function renderInspector(entry) {
     const model = state.modelCache[modelKey(entry)];
-    const viewport = `<div class="rp-preview-wrap"><canvas id="rp3dCanvas"></canvas><span>Left click paints · right drag orbits · wheel zooms · middle drag pans</span></div>`;
+    const viewport = `<div class="rp-preview-wrap"><canvas id="rp3dInspectorCanvas"></canvas><span>Left click paints · right drag orbits · wheel zooms · middle drag pans</span></div>`;
     return `<div class="rp-inspector-heading"><strong>Model preview</strong><button class="rp-icon-button" data-rp-action="auto-rotate">${state.autoRotate ? '⏸' : '↻'}</button></div>${viewport}
       <div class="rp-model-facts"><span>${model?.elements?.length || 0} cuboids</span><span>${Object.keys(model?.textures || {}).length} textures</span></div>
       <div class="rp-inspector-section"><div class="rp-pane-heading"><strong>Display</strong></div><label class="rp-range-label">In-game scale <b>${Math.round(state.scale * 100)}%</b></label><input id="rpScale" type="range" min=".5" max="4" step=".05" value="${state.scale}"><p class="rp-muted">Visual scale changes preview only. Texture resolution stays ${state.resolution}px.</p></div>
@@ -516,9 +517,33 @@
     root.querySelector('#rpLibrarySearch')?.addEventListener('input', event => { state.libraryQuery = event.target.value; render(); document.getElementById('rpLibrarySearch')?.focus(); });
     root.querySelector('#rpLibrarySort')?.addEventListener('change', event => { state.librarySort = event.target.value; persist(); render(); });
     root.querySelectorAll('[data-rp-filter]').forEach(button => button.addEventListener('click', () => { state.libraryFilter = button.dataset.rpFilter; persist(); render(); }));
+    root.querySelectorAll('[data-rp-export]').forEach(button => button.addEventListener('click', () => runProjectAction(button.dataset.rpExport, false)));
+    root.querySelectorAll('[data-rp-install]').forEach(button => button.addEventListener('click', () => runProjectAction(button.dataset.rpInstall, true)));
+    root.querySelectorAll('[data-rp-rename]').forEach(button => button.addEventListener('click', () => renameProject(button.dataset.rpRename)));
     root.querySelectorAll('[data-rp-duplicate]').forEach(button => button.addEventListener('click', () => duplicateProject(button.dataset.rpDuplicate)));
     root.querySelectorAll('[data-rp-delete]').forEach(button => button.addEventListener('click', () => deleteProject(button.dataset.rpDelete)));
     root.querySelectorAll('[data-rp-favorite]').forEach(button => button.addEventListener('click', () => togglePackFavorite(button.dataset.rpFavorite)));
+  }
+
+  async function runProjectAction(id, install) {
+    const selected = state.projects.find(entry => entry.id === id);
+    if (!selected) return;
+    await openProject(id);
+    await exportPack(install);
+    openLibrary();
+  }
+
+  function renameProject(id) {
+    const selected = state.projects.find(entry => entry.id === id);
+    if (!selected) return;
+    const name = window.prompt('Resource pack name', selected.name);
+    if (name === null) return;
+    selected.name = name.trim() || selected.name;
+    selected.data ||= defaultEditor(selected.name, selected.version);
+    selected.data.packName = selected.name;
+    selected.updatedAt = now();
+    persist();
+    render();
   }
 
   function bindEditorEvents() {
@@ -528,6 +553,21 @@
     root.querySelector('[data-rp-action="export"]')?.addEventListener('click', () => exportPack(false));
     root.querySelector('[data-rp-action="install"]')?.addEventListener('click', () => exportPack(true));
     root.querySelector('[data-rp-action="metadata"]')?.addEventListener('click', editMetadata);
+    root.querySelector('[data-rp-action="hide-metadata"]')?.addEventListener('click', () => { const modal = document.getElementById('rpMetadataModal'); if (modal) modal.hidden = true; });
+    root.querySelector('[data-rp-action="save-metadata"]')?.addEventListener('click', () => {
+      const name = document.getElementById('rpMetaName')?.value.trim() || state.packName;
+      const desc = document.getElementById('rpMetaDesc')?.value || '';
+      const author = document.getElementById('rpMetaAuthor')?.value || '';
+      state.packName = name;
+      state.description = desc;
+      state.author = author;
+      state.dirty = true;
+      persist();
+      const modal = document.getElementById('rpMetadataModal');
+      if (modal) modal.hidden = true;
+      render();
+      setStatus('Pack settings saved.');
+    });
     root.querySelector('[data-rp-action="refresh"]')?.addEventListener('click', () => { state.catalogVersion = null; loadCatalog(state.version); });
     root.querySelector('[data-rp-action="load-more-resources"]')?.addEventListener('click', () => { state.resourceLimit += 240; render(); });
     root.querySelector('#rpSearch')?.addEventListener('input', event => { state.query = event.target.value; state.resourceLimit = 240; render(); });
@@ -595,13 +635,17 @@
     const key = modelKey(entry);
     if (state.modelCache[key]) return state.modelCache[key];
     const generation = state.requestGeneration;
-    const result = await window.launcherAPI.getResourcePackModel(state.version, entry.modelName || entry.id);
+    const modelName = entry.modelName || entry.id;
+    console.info('[RP Studio] loading model', { version: state.version, entryId: entry.id, modelName });
+    const result = await window.launcherAPI.getResourcePackModel(state.version, modelName);
     if (generation !== state.requestGeneration || item()?.id !== entry.id) return null;
     if (!result?.ok) {
+      console.warn('[RP Studio] model load failed', { version: state.version, entryId: entry.id, modelName, result });
       setStatus(result?.error || 'Minecraft model unavailable.', true);
       return null;
     }
     state.modelCache[key] = result.data || {};
+    console.info('[RP Studio] model loaded', { version: state.version, entryId: entry.id, modelName, elements: state.modelCache[key]?.elements?.length || 0, textures: Object.keys(state.modelCache[key]?.textures || {}).length });
     return state.modelCache[key];
   }
 
@@ -701,9 +745,8 @@
     const entry = item();
     if (!canvas || !entry) return;
     const context = canvas.getContext('2d');
-    const buffer = getBuffer(entry);
     const dimensions = dimensionsFor(entry);
-    const image = new ImageData(buffer, dimensions.width, dimensions.height);
+    const image = createImageData(entry);
     const scratch = document.createElement('canvas'); scratch.width = dimensions.width; scratch.height = dimensions.height;
     scratch.getContext('2d').putImageData(image, 0, 0);
     context.imageSmoothingEnabled = false;
@@ -719,16 +762,29 @@
 
   async function setupPreview() {
     const canvas = document.getElementById('rp3dCanvas');
-    if (!canvas || !window.THREE || !item()) return;
+    const entry = item();
+    if (!canvas) {
+      console.warn('[RP Studio] 3D canvas missing');
+      return;
+    }
+    if (!window.THREE) {
+      console.error('[RP Studio] Three.js is unavailable; renderer bootstrap failed.');
+      setStatus('Three.js did not initialize. 3D preview cannot render.', true);
+      return;
+    }
+    if (!entry) {
+      console.warn('[RP Studio] no selected resource for 3D preview');
+      return;
+    }
     const generation = ++previewGeneration;
     preview?.stop?.();
     preview = null;
-    const entry = item();
     const requestGeneration = state.requestGeneration;
+    console.info('[RP Studio] setup preview', { entryId: entry.id, modelName: entry.modelName, version: state.version, canvasWidth: canvas.clientWidth, canvasHeight: canvas.clientHeight });
     const model = await loadModel(entry);
     if (generation !== previewGeneration || requestGeneration !== state.requestGeneration || item()?.id !== entry.id) return;
-    const width = Math.max(260, canvas.parentElement.clientWidth);
-    const height = Math.max(260, canvas.parentElement.clientHeight);
+    const width = Math.max(260, canvas.parentElement?.clientWidth || canvas.clientWidth || 260);
+    const height = Math.max(260, canvas.parentElement?.clientHeight || canvas.clientHeight || 260);
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(34, width / height, .1, 100);
     camera.position.set(2.4, 1.8, 3.2);
@@ -1067,7 +1123,31 @@
     });
   }
 
-  function dimensionsFor(entry) { return state.textureDimensions[entry?.id] || { width: state.resolution, height: state.resolution }; }
+  function dimensionsFor(entry) {
+    const stored = state.textureDimensions[entry?.id];
+    const width = Number(stored?.width) || Number(state.resolution) || 16;
+    const height = Number(stored?.height) || Number(state.resolution) || 16;
+    return {
+      width: Math.max(1, Math.floor(width)),
+      height: Math.max(1, Math.floor(height)),
+    };
+  }
+
+  function bufferForImageData(entry) {
+    const dimensions = dimensionsFor(entry);
+    const expectedLength = dimensions.width * dimensions.height * 4;
+    const current = state.buffers[bufferKey(entry)];
+    if (current?.length === expectedLength) return current;
+    const normalized = new Uint8ClampedArray(expectedLength);
+    if (current) normalized.set(current.slice(0, expectedLength));
+    state.buffers[bufferKey(entry)] = normalized;
+    return normalized;
+  }
+
+  function createImageData(entry) {
+    const dimensions = dimensionsFor(entry);
+    return new ImageData(bufferForImageData(entry), dimensions.width, dimensions.height);
+  }
   function textureLabel(entry) { const dimensions = dimensionsFor(entry); return `${dimensions.width} × ${dimensions.height}`; }
   function textureEntryForRef(reference) {
     const normalized = String(reference || '').replace(/^#/, '').replace(/^minecraft:/, '').replace(/^textures\//, '');
@@ -1210,11 +1290,12 @@
       const buffer = state.buffers[bufferKey(entry)]; if (!buffer) return;
       const dimensions = dimensionsFor(entry);
       const canvas = document.createElement('canvas'); canvas.width = dimensions.width; canvas.height = dimensions.height;
-      canvas.getContext('2d').putImageData(new ImageData(buffer, dimensions.width, dimensions.height), 0, 0);
-      entries.push({ path: entry.path || `assets/minecraft/textures/${path}`, dataUrl: canvas.toDataURL('image/png') });
+      canvas.getContext('2d').putImageData(createImageData(entry), 0, 0);
+      const relativePath = resourcePath(entry).replace(/^browse\/(?:block|item|entity|gui|particle|painting|mob_effect|map|environment|misc|font|colormap|effect)\//i, '');
+      entries.push({ path: `assets/minecraft/textures/${relativePath}`, dataUrl: canvas.toDataURL('image/png') });
     });
     (current?.data?.importedEntries || []).forEach(entry => { if (entry.path !== 'pack.mcmeta' && !entries.some(candidate => candidate.path === entry.path)) entries.push({ path: entry.path, dataUrl: entry.data }); });
-    const result = await window.launcherAPI?.exportResourcePack?.({ packName: state.packName, description: state.description, author: state.author, version: state.version, entries, install });
+    const result = await window.launcherAPI?.exportResourcePack?.({ packName: state.packName, description: state.description, author: state.author, iconDataUrl: state.iconDataUrl, version: state.version, entries, install });
     setStatus(result?.ok ? (install ? 'Installed to the active profile.' : 'Exported resource pack ZIP.') : (result?.error || 'Export failed.'), !result?.ok);
   }
 

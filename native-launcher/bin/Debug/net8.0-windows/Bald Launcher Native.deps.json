@@ -1,0 +1,23 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v8.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v8.0": {
+      "Bald Launcher Native/1.0.0": {
+        "runtime": {
+          "Bald Launcher Native.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Bald Launcher Native/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

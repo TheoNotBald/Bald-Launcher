@@ -1,0 +1,22 @@
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\bin\Debug\net8.0-windows\Bald Launcher Native.exe
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\bin\Debug\net8.0-windows\Bald Launcher Native.deps.json
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\bin\Debug\net8.0-windows\Bald Launcher Native.runtimeconfig.json
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\bin\Debug\net8.0-windows\Bald Launcher Native.dll
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\bin\Debug\net8.0-windows\Bald Launcher Native.pdb
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\MainWindow.g.cs
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\App.g.cs
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\Bald Launcher Native_MarkupCompile.cache
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\Bald Launcher Native_MarkupCompile.lref
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\App.baml
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\MainWindow.baml
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\Bald Launcher Native.g.resources
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\BaldLauncher.Native.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\BaldLauncher.Native.AssemblyInfoInputs.cache
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\BaldLauncher.Native.AssemblyInfo.cs
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\BaldLauncher.Native.csproj.CoreCompileInputs.cache
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\BaldLauncher.Native.sourcelink.json
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\Bald Launcher Native.dll
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\refint\Bald Launcher Native.dll
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\Bald Launcher Native.pdb
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\BaldLauncher.Native.genruntimeconfig.cache
+C:\Users\chris\Downloads\bald launcher\bald launcher\native-launcher\obj\Debug\net8.0-windows\ref\Bald Launcher Native.dll
