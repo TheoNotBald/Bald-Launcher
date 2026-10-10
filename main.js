@@ -26,6 +26,7 @@ const { restoreWorldFromZip } = require('./src/servers/backup-restore');
 const { waitForLogResponse } = require('./src/servers/console-response');
 const { canAdoptDiscoveredProcess, findMatchingServerProcess, getProcessStartTime, matchesServerProcessIdentity: verifyServerProcessIdentity } = require('./src/servers/process-identity');
 const { ensureLauncherProfilesFile } = require('./src/shared/launcher-profiles');
+const { getLoaderJvmArguments } = require('./src/shared/loader-jvm-arguments');
 const { normalizeAccountCosmetics, getAccountCosmetics, setAccountSelection, pushRecentItem } = require('./src/cosmetics/account/cosmetic-state');
 const { createCosmeticLibrary } = require('./src/cosmetics/library/cosmetic-library');
 const { resolveCustomSkinLoader } = require('./src/cosmetics/custom-skin-loader/resolver');
@@ -8912,6 +8913,14 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       emitLog(profile.name, 'info', `Final launch command: java ${lastLaunchArguments.join(' ')}`, profile.id);
     });
     const javaExecutable = await resolveJavaForMinecraft(profile.mcVersion, profile.javaPath);
+    const loaderJvmArguments = getLoaderJvmArguments(
+      path.join(minecraftRoot, 'versions', versionNumber, `${versionNumber}.json`),
+      {
+        libraryDirectory: path.join(sharedCacheRoot, 'libraries'),
+        nativesDirectory: path.join(minecraftRoot, 'natives'),
+        versionName: versionNumber,
+      },
+    );
     const child = await profileLauncher.launch({
       root: minecraftRoot,
       version: versionNumber === profile.mcVersion
@@ -8919,7 +8928,7 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
         : { number: profile.mcVersion, type: 'custom', custom: versionNumber },
       memory: { min: '1G', max: `${Math.min(32, Math.max(1, memoryMax))}G` },
       javaPath: javaExecutable,
-      customArgs: getJvmArguments(settings),
+      customArgs: [...getJvmArguments(settings), ...loaderJvmArguments],
       authorization,
       overrides: {
         gameDirectory: minecraftRoot,
