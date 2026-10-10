@@ -1811,6 +1811,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
 <script type="module" src="src/cosmetics/preview/minecraft-player-preview.mjs"></script>
 <script src="src/resource-packs/resource-pack-studio.js"></script>
 <script src="src/servers/server-stats.js"></script>
+<script src="src/content/dependency-installer.js"></script>
 <script>
 function showInputModal(title, defaultValue = '') {
   return new Promise(resolve => {
@@ -3379,19 +3380,54 @@ async function installFromBrowse(id, name, type, iconUrl, source = browseSource)
     runBrowseSearch();
     renderServerFiles();
     renderServers();
+    if (type === 'mod') await offerRequiredContentDependencies(result.requiredDependencies, server, { serverId: server.id });
     return;
   }
   const p = getProfile(currentProfileId);
   if (p?.loader === 'vanilla' && type === 'mod') return;
   const payload = { id, name, slug: metadata.slug, type, iconUrl: iconUrl || null, source, author: metadata.author, description: metadata.desc, minecraftVersion: metadata.minecraftVersion, loader: metadata.loader, projectUrl: metadata.projectUrl, profileId: p?.id };
+  let requiredDependencies = [];
   if (launcherBridge?.installContent) {
     const result = await launcherBridge.installContent(payload);
     if (!result?.ok) { alert(result?.error || 'Unable to install content'); return; }
     if (result.entry) Object.assign(payload, result.entry);
+    requiredDependencies = result.requiredDependencies || [];
   }
   if (!isBrowseContentInstalled(p, payload)) p.mods.push({ ...payload, enabled:true });
   runBrowseSearch();
   renderLibrary();
+  if (type === 'mod') await offerRequiredContentDependencies(requiredDependencies, p, { profileId: p?.id });
+}
+
+async function offerRequiredContentDependencies(dependencies, target, scope){
+  if (!Array.isArray(dependencies) || !dependencies.length || !target || !scope || !launcherBridge?.searchContent || !launcherBridge?.installContent) return;
+  try {
+    const result = await window.ContentDependencyInstaller.installRequiredDependencies({
+      dependencies,
+      target,
+      scope,
+      confirmDownload: ({ names, transitive }) => window.confirm(
+        `${transitive ? 'These required dependencies were found while installing another dependency' : 'This mod requires additional dependencies'}:\n\n${names.map(name => `• ${name}`).join('\n')}\n\nDownload and install ${names.length === 1 ? 'this dependency' : 'these dependencies'} now? Required dependencies of these mods may also be requested.`
+      ),
+      searchContent: params => launcherBridge.searchContent(params),
+      installContent: payload => launcherBridge.installContent(payload),
+    });
+    if (result.installedCount > 0) {
+      if (scope.serverId) {
+        renderServerFiles();
+        renderServers();
+      } else {
+        renderLibrary();
+      }
+      runBrowseSearch();
+    }
+    if (result.errors.length) {
+      alert(`The selected mod was installed, but some required dependencies need attention:\n\n${result.errors.join('\n')}`);
+    }
+  } catch (error) {
+    console.error('[Content installer] Required dependency installation failed:', error);
+    alert(`The selected mod was installed, but its required dependencies could not be processed: ${error?.message || String(error)}`);
+  }
 }
 
 async function installFromBrowseFromButton(button){
