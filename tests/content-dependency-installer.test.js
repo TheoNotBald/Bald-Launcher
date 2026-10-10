@@ -69,6 +69,33 @@ test('installs exact compatible dependencies and prompts for required transitive
   assert.deepEqual(result.errors, []);
 });
 
+test('server dependency installs use the server loader and update server content state', async () => {
+  const target = { mcVersion: '1.21.1', serverType: 'fabric', installedContent: [] };
+  let searchParameters;
+  let installPayload;
+  const result = await installRequiredDependencies({
+    dependencies: [{ projectId: 'fabric-api' }],
+    target,
+    scope: { serverId: 'server-1' },
+    confirmDownload: async () => true,
+    searchContent: async params => {
+      searchParameters = params;
+      return { ok: true, hits: [{ id: 'fabric-api', slug: 'fabric-api', name: 'Fabric API', type: 'mod' }] };
+    },
+    installContent: async payload => {
+      installPayload = payload;
+      return { ok: true, entry: { id: 'fabric-api', name: 'Fabric API', type: 'mod' } };
+    },
+  });
+
+  assert.equal(result.installedCount, 1);
+  assert.equal(searchParameters.loader, 'fabric');
+  assert.equal(searchParameters.serverType, 'fabric');
+  assert.equal(installPayload.serverId, 'server-1');
+  assert.equal(installPayload.profileId, undefined);
+  assert.deepEqual(target.installedContent.map(entry => entry.id), ['fabric-api']);
+});
+
 test('does not install fuzzy or ambiguous project matches', async () => {
   const target = { mcVersion: '1.21.1', serverType: 'fabric', installedContent: [] };
   const installs = [];
