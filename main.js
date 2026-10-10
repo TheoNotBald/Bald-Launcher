@@ -21,6 +21,10 @@ const { autoUpdater } = require('electron-updater');
 const { createPlayitManager } = require('./playit-manager');
 const { createStateStore } = require('./src/shared/state-store');
 const ServerStats = require('./src/servers/server-stats');
+const { runDueSchedules } = require('./src/servers/schedule-runner');
+const { restoreWorldFromZip } = require('./src/servers/backup-restore');
+const { waitForLogResponse } = require('./src/servers/console-response');
+const { canAdoptDiscoveredProcess, findMatchingServerProcess, getProcessStartTime, matchesServerProcessIdentity: verifyServerProcessIdentity } = require('./src/servers/process-identity');
 const { normalizeAccountCosmetics, getAccountCosmetics, setAccountSelection, pushRecentItem } = require('./src/cosmetics/account/cosmetic-state');
 const { createCosmeticLibrary } = require('./src/cosmetics/library/cosmetic-library');
 const { resolveCustomSkinLoader } = require('./src/cosmetics/custom-skin-loader/resolver');
@@ -63,6 +67,8 @@ let mainWindow;
 let reloadTimer;
 let stateFilePath;
 let writeStatePending = false;
+let launcherUpdateStatus = { state: 'idle' };
+let updateCheckPromise = null;
 if (hasSingleInstanceLock) {
   app.on('second-instance', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -1386,7 +1392,7 @@ function getProcessDetails(pid) {
   if (!Number.isInteger(processId) || processId <= 0) return null;
   try {
     if (process.platform === 'win32') {
-      const script = `$p = Get-CimInstance Win32_Process -Filter \"ProcessId = ${processId}\"; if ($p) { $p | Select-Object ProcessId,Name,ExecutablePath,CommandLine | ConvertTo-Json -Compress }`;
+      const script = `$p = Get-CimInstance Win32_Process -Filter \"ProcessId = ${processId}\"; if ($p) { $p | Select-Object ProcessId,Name,ExecutablePath,CommandLine,CreationDate | ConvertTo-Json -Compress }`;
       const output = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
       return output ? JSON.parse(output) : null;
     }
@@ -1397,10 +1403,21 @@ function getProcessDetails(pid) {
   }
 }
 
+function isProcessIdAlive(pid) {
+  const processId = Number(pid);
+  if (!Number.isInteger(processId) || processId <= 0) return false;
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch (error) {
+    return !['ESRCH', 'EINVAL'].includes(error?.code);
+  }
+}
+
 function listJavaProcesses() {
   if (process.platform !== 'win32') return [];
   try {
-    const script = 'Get-CimInstance Win32_Process | Where-Object { $_.Name -match "^javaw?\\.exe$" } | Select-Object ProcessId,Name,ExecutablePath,CommandLine | ConvertTo-Json -Compress';
+    const script = 'Get-CimInstance Win32_Process | Where-Object { $_.Name -match "^javaw?\\.exe$" } | Select-Object ProcessId,Name,ExecutablePath,CommandLine,CreationDate | ConvertTo-Json -Compress';
     const output = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
     if (!output) return [];
     const parsed = JSON.parse(output);
@@ -1411,13 +1428,7 @@ function listJavaProcesses() {
 }
 
 function findLiveServerProcess(server) {
-  const jarFileName = String(server?.jarFileName || server?.runtime?.jarFileName || '').toLowerCase();
-  if (!jarFileName) return null;
-  const matches = listJavaProcesses().filter(details => {
-    const commandLine = String(details.CommandLine || '').toLowerCase();
-    return commandLine.includes(jarFileName) && /\bjava(?:w)?\.exe\b/i.test(commandLine);
-  });
-  return matches.length === 1 ? matches[0] : null;
+  return findMatchingServerProcess(server, listJavaProcesses());
 }
 
 function adoptLiveServerProcess(server, details) {
@@ -1431,7 +1442,7 @@ function adoptLiveServerProcess(server, details) {
     cwd: server.rootPath || server.runtime?.cwd || '',
     launchToken: server.runtime?.launchToken || `adopted-${Date.now()}`,
     startedAt: server.runtime?.startedAt || Date.now(),
-    processStartTime: server.runtime?.processStartTime || Date.now(),
+    processStartTime: server.runtime?.processStartTime || getProcessStartTime(details) || Date.now(),
     lastKnownState: 'process-alive',
     lastExitReason: '',
   };
@@ -1449,15 +1460,15 @@ function hasWorldSessionLock(server) {
 function matchesServerProcessIdentity(server, runtime = server?.runtime) {
   if (!server || !runtime?.pid) return false;
   const details = getProcessDetails(runtime.pid);
-  if (!details) return false;
-  const commandLine = String(details.CommandLine || '').toLowerCase();
-  const executablePath = String(details.ExecutablePath || '').toLowerCase();
-  const javaPath = String(runtime.javaPath || '').toLowerCase();
-  const jarFileName = String(server.jarFileName || runtime.jarFileName || '').toLowerCase();
-  if (!commandLine || !jarFileName) return false;
-  if (!commandLine.includes(jarFileName)) return false;
-  if (javaPath && executablePath && path.basename(executablePath) !== path.basename(javaPath)) return false;
-  return /(?:^|[\\/])java(?:w)?\.exe(?:\"|\s|$)/i.test(commandLine) || /\bjava(?:w)?\.exe\b/i.test(commandLine);
+  return verifyServerProcessIdentity(server, runtime, details);
+}
+
+function inspectPersistedServerProcess(server) {
+  const pid = Number(server?.runtime?.pid);
+  if (!Number.isInteger(pid) || pid <= 0 || !isProcessIdAlive(pid)) return 'stopped';
+  const details = getProcessDetails(pid);
+  if (!details) return 'unverified';
+  return verifyServerProcessIdentity(server, server.runtime, details) ? 'matched' : 'different-process';
 }
 
 function stopServerProcessPoller(serverId) {
@@ -1471,15 +1482,24 @@ function monitorPersistedServerProcess(server) {
   stopServerProcessPoller(server.id);
   const timer = setInterval(() => {
     const current = getServerById(server.id);
-    if (!current?.runtime?.pid || !matchesServerProcessIdentity(current)) {
+    const processState = current?.runtime?.pid ? inspectPersistedServerProcess(current) : 'stopped';
+    if (processState !== 'matched') {
       stopServerProcessPoller(server.id);
       if (current?.runtime?.pid) {
-        updateServerInState(server.id, {
-          status: 'idle',
-          playerCount: 0,
-          runtime: { ...current.runtime, pid: null, lastKnownState: 'unknown', lastExitReason: 'The server process could not be verified after launcher restart.' },
-        });
-        emitServerConsole(server.id, 'warn', 'The server process could not be verified after launcher restart. It was marked stopped/unknown.');
+        if (processState === 'unverified') {
+          updateServerInState(server.id, {
+            status: 'idle',
+            runtime: { ...current.runtime, lastKnownState: 'unknown', lastExitReason: 'The PID is alive, but the server process identity could not be verified.' },
+          });
+          emitServerConsole(server.id, 'warn', 'The saved Java PID is alive, but the server process identity could not be verified. The launcher did not stop or replace it.');
+        } else {
+          updateServerInState(server.id, {
+            status: 'idle',
+            playerCount: 0,
+            runtime: { ...current.runtime, pid: null, lastKnownState: 'unknown', lastExitReason: 'The saved PID no longer belongs to this server process.' },
+          });
+          emitServerConsole(server.id, 'warn', 'The saved PID no longer belongs to this server process. It was detached without terminating that process.');
+        }
       }
       return;
     }
@@ -1496,10 +1516,15 @@ function reconcilePersistedServerProcesses() {
       if (server.status !== 'idle') { changed = true; return { ...server, status: 'idle', playerCount: 0, runtime: { ...runtime, lastKnownState: 'stopped' } }; }
       return server;
     }
-    if (matchesServerProcessIdentity(server, runtime)) {
+    const processState = inspectPersistedServerProcess(server);
+    if (processState === 'matched') {
       changed = true;
       monitorPersistedServerProcess(server);
       return { ...server, status: 'running', playerCount: 0, runtime: { ...runtime, lastKnownState: 'process-alive' } };
+    }
+    if (processState === 'unverified') {
+      changed = true;
+      return { ...server, status: 'idle', playerCount: 0, runtime: { ...runtime, lastKnownState: 'unknown', lastExitReason: 'The PID is alive, but the server process identity could not be verified.' } };
     }
     changed = true;
     return { ...server, status: 'idle', playerCount: 0, runtime: { ...runtime, pid: null, lastKnownState: 'unknown', lastExitReason: 'Persisted process identity did not match a live Java server.' } };
@@ -3502,6 +3527,7 @@ function watchLauncherFile() {
 // IPC: state
 // ---------------------------------------------------------------------------
 ipcMain.handle('launcher:get-state', async () => launcherState);
+ipcMain.handle('launcher:get-update-status', async () => ({ ok: true, update: launcherUpdateStatus }));
 
 ipcMain.handle('server:playit-status', async () => ({ ok: true, playit: playitManager.state() }));
 
@@ -3539,7 +3565,7 @@ ipcMain.handle('launcher:open-external-url', async (_event, url) => {
   return { ok: true };
 });
 
-ipcMain.handle('launcher:apply-update', () => {
+ipcMain.handle('launcher:apply-update', async () => {
   if (!app.isPackaged) return { ok: false, error: 'Updates are available only in the packaged launcher.' };
   if (runningProcesses.size || serverProcesses.size) {
     return { ok: false, error: 'Stop Minecraft and all servers before restarting to install the update.' };
@@ -3555,17 +3581,30 @@ ipcMain.handle('launcher:apply-update', () => {
     console.error('[Updater] Could not create state safety snapshot:', error);
     return { ok: false, error: 'Could not create a safety snapshot of launcher data. The update was not started.' };
   }
+  const playitStop = await playitManager.stop();
+  if (!playitStop.ok) {
+    return { ok: false, error: `Playit could not be stopped safely. The update was not started. ${playitStop.error || ''}`.trim() };
+  }
+  quittingAfterPlayitStop = true;
   autoUpdater.quitAndInstall();
   return { ok: true };
 });
 
 ipcMain.handle('launcher:retry-update', async () => {
   if (!app.isPackaged) return { ok: false, error: 'Updates are available only in the packaged launcher.' };
+  if (updateCheckPromise) return updateCheckPromise;
+  launcherUpdateStatus = { state: 'checking' };
   try {
-    await autoUpdater.checkForUpdates();
+    updateCheckPromise = autoUpdater.checkForUpdates();
+    await updateCheckPromise;
     return { ok: true };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    const message = error instanceof Error ? error.message : String(error);
+    launcherUpdateStatus = { state: 'error', message };
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('launcher:update-error', { message });
+    return { ok: false, error: message };
+  } finally {
+    updateCheckPromise = null;
   }
 });
 
@@ -5243,15 +5282,16 @@ async function startServerProcess(server, startupTask = null) {
   const customArgs = String(server.javaArgs || '').trim() ? String(server.javaArgs).trim().split(/\s+/) : [];
   const serverMemory = getEffectiveServerMemory(server);
   writeServerStartBatch(rootPath, javaExecutable, serverMemory, customArgs, foundJar);
+  const launchToken = crypto.randomUUID();
   const launchArgs = [
     '-Xms512M',
     `-Xmx${serverMemory}G`,
+    `-Dbald.launcher.launch-token=${launchToken}`,
     ...customArgs,
     ...(String(foundJar).startsWith('@') ? ['@user_jvm_args.txt', foundJar] : ['-jar', foundJar]),
     'nogui',
   ];
   if (cancellationResult()) return cancellationResult();
-  const launchToken = crypto.randomUUID();
   const runtime = {
     pid: null,
     javaPath: javaExecutable,
@@ -5357,7 +5397,12 @@ async function startServerProcess(server, startupTask = null) {
       if (serverEntry.autoRestart && !memoryAllocationFailure && serverEntry.status !== 'stopping' && code !== 0) {
         setTimeout(() => {
           const current = getServerById(server.id);
-          if (current && !serverProcesses.has(server.id)) startServerProcess(current).catch(error => emitServerConsole(server.id, 'warn', `Auto-restart failed: ${error.message}`));
+          if (!current || serverProcesses.has(server.id) || serverStartupTasks.has(server.id)) return;
+          void startServerById(server.id).then(result => {
+            if (!result.ok) emitServerConsole(server.id, 'warn', `Auto-restart was not started: ${result.error || 'the server could not be safely restarted.'}`);
+          }).catch(error => {
+            emitServerConsole(server.id, 'warn', `Auto-restart failed: ${error instanceof Error ? error.message : String(error)}`);
+          });
         }, 2000);
       }
     }
@@ -5390,6 +5435,27 @@ function zipFolderToArchive(sourceFolder, archivePath, excludeNames = []) {
     execFile('tar', ['-czf', archivePath, ...tarExcludes ? [tarExcludes] : [], '-C', path.dirname(sourceFolder), path.basename(sourceFolder)], (error) => {
       if (error) reject(error); else resolve();
     });
+  });
+}
+
+async function sendServerConsoleCommandAndWait(serverId, rootPath, command, responsePattern) {
+  const processInfo = serverProcesses.get(serverId);
+  if (!processInfo?.stdin || processInfo.stdin.destroyed || processInfo.killed) {
+    throw new Error('The server console is not available to safely snapshot the world.');
+  }
+  const logPath = path.join(rootPath, 'logs', 'latest.log');
+  let startOffset = 0;
+  try {
+    startOffset = fs.statSync(logPath).size;
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  await new Promise((resolve, reject) => {
+    processInfo.stdin.write(`${command}\n`, error => error ? reject(error) : resolve());
+  });
+  await waitForLogResponse(logPath, responsePattern, {
+    startOffset,
+    isRunning: () => serverProcesses.get(serverId) === processInfo && !processInfo.killed,
   });
 }
 
@@ -5465,7 +5531,8 @@ ipcMain.handle('server:choose-folder', async (_event, payload) => {
   const serverId = String(payload?.serverId || '');
   const server = getServerById(serverId);
   if (!server) return { ok: false, error: 'Server not found' };
-  if (serverProcesses.has(serverId) || ['starting', 'running', 'stopping'].includes(server.status)) {
+  if (serverProcesses.has(serverId) || ['starting', 'running', 'stopping'].includes(server.status)
+    || ['matched', 'unverified'].includes(inspectPersistedServerProcess(server))) {
     return { ok: false, error: 'Stop the server before changing its folder.' };
   }
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -5494,14 +5561,40 @@ ipcMain.handle('server:choose-folder', async (_event, payload) => {
   return { ok: true, server: getServerById(server.id), path: selectedPath };
 });
 
-ipcMain.handle('launcher:start-server', async (_event, payload) => {
+async function startServerById(serverId) {
   try {
-    const serverId = payload?.serverId;
     const server = getServerById(serverId);
     if (!server) return { ok: false, error: 'Server not found' };
     if (serverProcesses.has(server.id) || serverStartupTasks.has(server.id)) return { ok: false, error: 'A server process is already active or starting for this server' };
+    const persistedProcessState = inspectPersistedServerProcess(server);
+    if (persistedProcessState === 'matched') {
+      monitorPersistedServerProcess(server);
+      updateServerInState(server.id, { status: 'running', runtime: { ...server.runtime, lastKnownState: 'process-alive' } });
+      return { ok: false, error: 'Server appears to already be running. The existing Java process was detected and no second process was started.', server: getServerById(server.id) };
+    }
+    if (persistedProcessState === 'unverified') {
+      return { ok: false, error: `The saved Java PID ${server.runtime.pid} is alive, but its identity cannot be verified. No server files were changed and no new process was started.` };
+    }
+    if (server.runtime?.pid) {
+      updateServerInState(server.id, {
+        runtime: {
+          ...server.runtime,
+          pid: null,
+          lastKnownState: 'unknown',
+          lastExitReason: persistedProcessState === 'different-process'
+            ? 'The saved PID now belongs to a different process.'
+            : 'The previous server process was no longer present.',
+        },
+      });
+    }
     const liveProcess = findLiveServerProcess(server);
     if (liveProcess) {
+      if (!canAdoptDiscoveredProcess(server, liveProcess)) {
+        return {
+          ok: false,
+          error: `A Java process using ${server.jarFileName || 'the same server JAR'} is already running (PID ${liveProcess.ProcessId}), but its identity cannot be verified for this server. No duplicate server was started.`,
+        };
+      }
       const adopted = adoptLiveServerProcess(server, liveProcess);
       return {
         ok: false,
@@ -5529,14 +5622,6 @@ ipcMain.handle('launcher:start-server', async (_event, payload) => {
       } catch (error) {
         return { ok: false, error: `The stale world lock could not be removed: ${error.message}` };
       }
-    }
-    if (server.runtime?.pid && matchesServerProcessIdentity(server)) {
-      monitorPersistedServerProcess(server);
-      updateServerInState(server.id, { status: 'running', runtime: { ...server.runtime, lastKnownState: 'process-alive' } });
-      return { ok: false, error: 'Server appears to already be running. The existing Java process was detected and no second process was started.', server: getServerById(server.id) };
-    }
-    if (server.runtime?.pid) {
-      updateServerInState(server.id, { runtime: { ...server.runtime, pid: null, lastKnownState: 'unknown', lastExitReason: 'The previous server process was no longer present.' } });
     }
     if (server.status === 'starting' || server.status === 'running') {
       updateServerInState(server.id, { status: 'idle', playerCount: 0, address: server.address || '' });
@@ -5576,7 +5661,9 @@ ipcMain.handle('launcher:start-server', async (_event, payload) => {
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
-});
+}
+
+ipcMain.handle('launcher:start-server', async (_event, payload) => startServerById(payload?.serverId));
 
 function updateServerProperties(server, port = Number(server?.serverPort) || readServerPort(getServerRoot(server.id))) {
   const rootPath = ensureServerRoot(server.id);
@@ -5605,9 +5692,8 @@ function updateServerProperties(server, port = Number(server?.serverPort) || rea
   if (server.eulaAccepted) fs.writeFileSync(path.join(rootPath, 'eula.txt'), 'eula=true\n', 'utf8');
 }
 
-ipcMain.handle('launcher:stop-server', async (_event, payload) => {
+async function stopServerById(serverId) {
   try {
-    const serverId = payload?.serverId;
     const server = getServerById(serverId);
     if (!server) return { ok: false, error: 'Server not found' };
     const processInfo = serverProcesses.get(serverId);
@@ -5622,14 +5708,21 @@ ipcMain.handle('launcher:stop-server', async (_event, payload) => {
         emitServerConsole(serverId, 'info', 'Server startup canceled. Any download already in progress will finish before cleanup can complete.');
         return { ok: true, server: getServerById(serverId) };
       }
-      if (server.runtime?.pid && matchesServerProcessIdentity(server)) {
+      const persistedProcessState = inspectPersistedServerProcess(server);
+      if (persistedProcessState === 'unverified') {
+        return { ok: false, error: `Java PID ${server.runtime.pid} is alive, but the launcher cannot verify its identity. It was not terminated.` };
+      }
+      if (persistedProcessState === 'matched') {
         updateServerInState(serverId, { status: 'stopping', runtime: { ...server.runtime, lastKnownState: 'stopping' } });
         emitServerConsole(serverId, 'warn', 'Stopping the adopted server process. Its console stdin could not be reattached after launcher restart.');
         await new Promise(resolve => {
           execFile('taskkill.exe', ['/PID', String(server.runtime.pid), '/T', '/F'], { windowsHide: true }, () => resolve());
         });
-        await new Promise(resolve => setTimeout(resolve, 500));
-        if (matchesServerProcessIdentity(server)) {
+        const deadline = Date.now() + 5000;
+        while (['matched', 'unverified'].includes(inspectPersistedServerProcess(server)) && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 200));
+        }
+        if (['matched', 'unverified'].includes(inspectPersistedServerProcess(server))) {
           return { ok: false, error: `The adopted Java process ${server.runtime.pid} is still running. The launcher did not mark the server stopped.` };
         }
         stopServerProcessPoller(serverId);
@@ -5647,7 +5740,17 @@ ipcMain.handle('launcher:stop-server', async (_event, payload) => {
         emitServerConsole(serverId, 'info', 'Server process stopped. The world lock was not deleted automatically.');
         return { ok: true, server: getServerById(serverId) };
       }
-      updateServerInState(serverId, { status: 'idle' });
+      if (server.runtime?.pid && persistedProcessState === 'different-process') {
+        updateServerInState(serverId, {
+          status: 'idle',
+          runtime: { ...server.runtime, pid: null, lastKnownState: 'unknown', lastExitReason: 'The saved PID now belongs to a different process and was not terminated.' },
+        });
+        emitServerConsole(serverId, 'warn', 'Detached a reused Java PID without terminating the unrelated process.');
+        return { ok: true, server: getServerById(serverId) };
+      }
+      updateServerInState(serverId, server.runtime?.pid
+        ? { status: 'idle', playerCount: 0, runtime: { ...server.runtime, pid: null, lastKnownState: 'stopped', lastExitReason: 'The saved server process is no longer running.' } }
+        : { status: 'idle' });
       return { ok: true, server: getServerById(serverId) };
     }
     updateServerInState(serverId, { status: 'stopping' });
@@ -5658,31 +5761,39 @@ ipcMain.handle('launcher:stop-server', async (_event, payload) => {
       processInfo.kill('SIGTERM');
     }
 
-    const exited = await new Promise(resolve => {
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        resolve(true);
-      };
-      processInfo.once('exit', finish);
-      setTimeout(() => finish(), 8000);
+    const waitForExit = timeoutMs => new Promise(resolve => {
+    if (!serverProcesses.has(serverId)) return resolve(true);
+    const onExit = () => {
+      clearTimeout(timeout);
+      resolve(true);
+    };
+    const timeout = setTimeout(() => {
+      processInfo.removeListener('exit', onExit);
+      resolve(false);
+    }, timeoutMs);
+    processInfo.once('exit', onExit);
     });
+    let exited = await waitForExit(8000);
     if (!exited || serverProcesses.has(serverId)) {
-      if (process.platform === 'win32' && processInfo.pid) {
-        await new Promise(resolve => {
-          execFile('taskkill.exe', ['/PID', String(processInfo.pid), '/T', '/F'], { windowsHide: true }, () => resolve());
+    if (process.platform === 'win32' && processInfo.pid) {
+      await new Promise(resolve => {
+        execFile('taskkill.exe', ['/PID', String(processInfo.pid), '/T', '/F'], { windowsHide: true }, () => resolve());
         });
       } else {
         processInfo.kill('SIGKILL');
       }
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      exited = await waitForExit(5000);
+    }
+    if (!exited || serverProcesses.has(serverId)) {
+      return { ok: false, error: `Server process ${processInfo.pid || ''} did not exit after the stop request. It remains marked as stopping.` };
     }
     return { ok: true, server: getServerById(serverId) };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
-});
+}
+
+ipcMain.handle('launcher:stop-server', async (_event, payload) => stopServerById(payload?.serverId));
 
 ipcMain.handle('server:get-console-history', async (_event, payload) => {
   try {
@@ -5785,23 +5896,48 @@ ipcMain.handle('server:rename-file', async (_event, payload) => {
   }
 });
 
-ipcMain.handle('server:backup', async (_event, payload) => {
+async function createServerBackup(serverId, payload = {}) {
+  let backupEntry = null;
+  let operationError = null;
+  let saveRecoveryError = null;
+  let saveModeDisabled = false;
   try {
-    const serverId = payload?.serverId;
     const server = getServerById(serverId);
     if (!server) return { ok: false, error: 'Server not found' };
     const rootPath = ensureServerRoot(serverId);
+    const processInfo = serverProcesses.get(serverId);
+    const persistedProcessState = inspectPersistedServerProcess(server);
+    if (!processInfo && (['matched', 'unverified'].includes(persistedProcessState) || findLiveServerProcess(server))) {
+      throw new Error('Stop the server before backing it up. Its console is not attached, so the world cannot be flushed safely.');
+    }
+    if (processInfo && ['velocity', 'waterfall', 'bungeecord'].includes(server.serverType)) {
+      throw new Error('Stop the proxy server before creating a backup.');
+    }
     const backupRoot = path.join(rootPath, 'backups');
     fs.mkdirSync(backupRoot, { recursive: true });
     const customName = String(payload?.name || '').trim();
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const fileStem = customName ? customName.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || `backup-${stamp}` : `backup-${stamp}`;
-    const archiveName = `${fileStem}.zip`;
+    let archiveName = `${fileStem}.zip`;
+    if (fs.existsSync(path.join(backupRoot, archiveName))) archiveName = `${fileStem}-${stamp}.zip`;
+    if (fs.existsSync(path.join(backupRoot, archiveName))) archiveName = `${fileStem}-${stamp}-${crypto.randomUUID()}.zip`;
     const archivePath = path.join(backupRoot, archiveName);
+    const temporaryArchivePath = path.join(backupRoot, `.backup-${crypto.randomUUID()}.zip`);
     const worldPath = path.join(rootPath, server.worldName || 'world');
     if (!fs.existsSync(worldPath)) fs.mkdirSync(worldPath, { recursive: true });
-    await zipFolderToArchive(rootPath, archivePath, ['backups']);
-    const backupEntry = { id: `backup-${Date.now()}`, name: archiveName, createdAt: Date.now(), size: fs.statSync(archivePath).size };
+    if (processInfo) {
+      saveModeDisabled = true;
+      await sendServerConsoleCommandAndWait(serverId, rootPath, 'save-off', /automatic saving is now disabled|saving is now disabled/i);
+      await sendServerConsoleCommandAndWait(serverId, rootPath, 'save-all flush', /saved the game/i);
+    }
+    try {
+      await zipFolderToArchive(rootPath, temporaryArchivePath, ['backups']);
+      fs.renameSync(temporaryArchivePath, archivePath);
+    } catch (error) {
+      if (fs.existsSync(temporaryArchivePath)) fs.unlinkSync(temporaryArchivePath);
+      throw error;
+    }
+    backupEntry = { id: `backup-${Date.now()}`, name: archiveName, createdAt: Date.now(), size: fs.statSync(archivePath).size };
     const retentionCount = Number(server.retentionCount) > 0 ? Number(server.retentionCount) : 10;
     const existingBackups = fs.readdirSync(backupRoot).filter(file => file.toLowerCase().endsWith('.zip')).sort();
     if (existingBackups.length > retentionCount) {
@@ -5810,11 +5946,35 @@ ipcMain.handle('server:backup', async (_event, payload) => {
       }
     }
     writeServerBackupLog(serverId, `Created backup ${backupEntry.name}`);
-    return { ok: true, backup: backupEntry };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    operationError = error;
+  } finally {
+    if (saveModeDisabled) {
+      try {
+        await sendServerConsoleCommandAndWait(serverId, ensureServerRoot(serverId), 'save-on', /automatic saving is now enabled|saving is now enabled/i);
+      } catch (error) {
+        saveRecoveryError = error;
+        emitServerConsole(serverId, 'error', `Automatic saving could not be re-enabled after the backup attempt: ${error instanceof Error ? error.message : String(error)}. Run "save-on" from the server console immediately.`);
+      }
+      if (!saveRecoveryError) {
+        try {
+          writeServerBackupLog(serverId, 'Re-enabled automatic world saving after backup snapshot.');
+        } catch (error) {
+          operationError ||= new Error(`Automatic world saving was re-enabled, but the backup log could not be written: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    }
   }
-});
+  if (operationError || saveRecoveryError) {
+    const reasons = [operationError, saveRecoveryError]
+      .filter(Boolean)
+      .map(error => error instanceof Error ? error.message : String(error));
+    return { ok: false, error: reasons.join(' Additionally, automatic saving could not be confirmed as re-enabled: '), backup: backupEntry };
+  }
+  return { ok: true, backup: backupEntry };
+}
+
+ipcMain.handle('server:backup', async (_event, payload) => createServerBackup(payload?.serverId, payload));
 
 ipcMain.handle('server:list-backups', async (_event, payload) => {
   try {
@@ -5843,7 +6003,8 @@ ipcMain.handle('launcher:delete-server', async (_event, payload) => {
     const serverId = String(payload?.serverId || '');
     const server = launcherState.servers.find(entry => entry.id === serverId);
     if (!server) return { ok: false, error: 'Server not found.' };
-    if (serverProcesses.has(serverId) || ['starting', 'running', 'stopping'].includes(server.status)) {
+    if (serverProcesses.has(serverId) || ['starting', 'running', 'stopping'].includes(server.status)
+      || ['matched', 'unverified'].includes(inspectPersistedServerProcess(server))) {
       return { ok: false, error: 'Stop the server before deleting it.' };
     }
 
@@ -5887,20 +6048,27 @@ ipcMain.handle('server:restore-backup', async (_event, payload) => {
     const serverId = payload?.serverId;
     const server = getServerById(serverId);
     if (!server) return { ok: false, error: 'Server not found' };
-    const archiveName = payload?.archiveName || payload?.backupName || payload?.name;
+    const archiveName = String(payload?.archiveName || payload?.backupName || payload?.name || '').trim();
     if (!archiveName) return { ok: false, error: 'No backup name supplied' };
-    const archivePath = resolveServerScopedPath(serverId, path.join('backups', archiveName));
-    const rootPath = ensureServerRoot(serverId);
-    const worldPath = path.join(rootPath, server.worldName || 'world');
-    const processInfo = serverProcesses.get(serverId);
-    if (processInfo) {
-      processInfo.kill('SIGTERM');
-      await new Promise(resolve => setTimeout(resolve, 1500));
+    if (serverProcesses.has(serverId) || serverStartupTasks.has(serverId)
+      || ['starting', 'running', 'stopping'].includes(server.status)
+      || ['matched', 'unverified'].includes(inspectPersistedServerProcess(server))
+      || findLiveServerProcess(server)) {
+      return { ok: false, error: 'Stop the server completely before restoring a backup. No server process was terminated.' };
     }
-    if (fs.existsSync(worldPath)) fs.rmSync(worldPath, { recursive: true, force: true });
-    fs.mkdirSync(worldPath, { recursive: true });
-    await unzipArchiveToFolder(archivePath, rootPath);
-    return { ok: true };
+    const archivePath = resolveServerScopedPath(serverId, path.join('backups', archiveName));
+    if (!archiveName.toLowerCase().endsWith('.zip') || !fs.statSync(archivePath).isFile()) {
+      return { ok: false, error: 'The selected backup is not a ZIP archive.' };
+    }
+    const rootPath = ensureServerRoot(serverId);
+    const restored = restoreWorldFromZip(
+      archivePath,
+      rootPath,
+      server.worldName || 'world',
+      candidate => inspectMinecraftWorld(candidate).valid,
+    );
+    writeServerBackupLog(serverId, `Restored world from backup ${path.basename(archivePath)}`);
+    return { ok: true, rollbackPath: restored.rollbackPath };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -6120,31 +6288,30 @@ ipcMain.handle('server:get-memory', async (_event, payload) => {
 });
 
 function applyServerSchedule(server) {
-  const serverId = server.id;
-  const scheduled = Array.isArray(server.schedules) ? server.schedules : [];
-  for (const schedule of scheduled) {
-    if (!schedule.enabled) continue;
-    if (schedule.nextRunAt && Number(schedule.nextRunAt) <= Date.now()) {
-      if (schedule.type === 'start') {
-        ipcMain.emit('launcher:start-server', { serverId });
-      } else if (schedule.type === 'stop') {
-        ipcMain.emit('launcher:stop-server', { serverId });
-      } else if (schedule.type === 'backup') {
-        ipcMain.emit('server:backup', { serverId, name: schedule.name || undefined });
-      } else if (schedule.type === 'command') {
-        const processInfo = serverProcesses.get(serverId);
-        if (processInfo && processInfo.stdin) processInfo.stdin.write(`${String(schedule.command || '').trim()}\n`);
+  return runDueSchedules([server], {
+    execute: async (scheduledServer, schedule) => {
+      if (schedule.type === 'start') return startServerById(scheduledServer.id);
+      if (schedule.type === 'stop') return stopServerById(scheduledServer.id);
+      if (schedule.type === 'backup') return createServerBackup(scheduledServer.id, { name: schedule.name || undefined });
+      const command = String(schedule.command || '').trim();
+      const processInfo = serverProcesses.get(scheduledServer.id);
+      if (!processInfo?.stdin || processInfo.stdin.destroyed || processInfo.killed) {
+        return { ok: false, error: 'Cannot run the scheduled command because the server is not running.' };
       }
-      const intervalMs = schedule.type === 'command' && Number(schedule.intervalMinutes) ? Number(schedule.intervalMinutes) * 60 * 1000 : (Number(schedule.intervalMinutes) || 60) * 60 * 1000;
-      schedule.nextRunAt = Date.now() + intervalMs;
-    }
-  }
+      processInfo.stdin.write(`${command}\n`);
+      return { ok: true };
+    },
+    persist: scheduleStateWrite,
+    onError: (scheduledServer, schedule, error) => {
+      emitServerConsole(scheduledServer.id, 'warn', `Scheduled ${schedule.type} action failed: ${error instanceof Error ? error.message : String(error)}`);
+    },
+  });
 }
 
 setInterval(() => {
-  for (const server of launcherState.servers || []) {
-    applyServerSchedule(server);
-  }
+  for (const server of launcherState.servers || []) void applyServerSchedule(server).catch(error => {
+    emitStatus(`Scheduled server action error: ${error instanceof Error ? error.message : String(error)}`);
+  });
 }, 30000);
 
 ipcMain.handle('launcher:set-active-profile', async (_event, profileId) => {
@@ -8892,12 +9059,19 @@ app.whenReady().then(async () => {
   createWindow();
   if (app.isPackaged) {
     autoUpdater.on('update-available', info => {
+      launcherUpdateStatus = { state: 'available', version: info.version };
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('launcher:update-available', { version: info.version });
     });
+    autoUpdater.on('update-not-available', info => {
+      launcherUpdateStatus = { state: 'current', version: info?.version || app.getVersion() };
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('launcher:update-not-available', launcherUpdateStatus);
+    });
     autoUpdater.on('update-downloaded', () => {
+      launcherUpdateStatus = { state: 'downloaded' };
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('launcher:update-ready');
     });
     autoUpdater.on('download-progress', info => {
+      launcherUpdateStatus = { state: 'downloading', percent: Number(info.percent || 0) };
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('launcher:update-progress', {
         percent: Number(info.percent || 0),
         transferred: Number(info.transferred || 0),
@@ -8906,11 +9080,19 @@ app.whenReady().then(async () => {
       });
     });
     autoUpdater.on('error', error => {
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('launcher:update-error', {
-        message: error instanceof Error ? error.message : String(error),
-      });
+      const message = error instanceof Error ? error.message : String(error);
+      launcherUpdateStatus = { state: 'error', message };
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('launcher:update-error', { message });
     });
-    autoUpdater.checkForUpdatesAndNotify().catch(error => console.warn('[Updater] update check failed:', error.message));
+    launcherUpdateStatus = { state: 'checking' };
+    updateCheckPromise = autoUpdater.checkForUpdatesAndNotify()
+      .catch(error => {
+        const message = error instanceof Error ? error.message : String(error);
+        launcherUpdateStatus = { state: 'error', message };
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('launcher:update-error', { message });
+        console.warn('[Updater] update check failed:', message);
+      })
+      .finally(() => { updateCheckPromise = null; });
   }
   mainWindow.webContents.once('did-finish-load', () => {
     for (const session of launcherState.sessions.filter(item => item.running && item.pid)) {
@@ -8937,10 +9119,28 @@ app.whenReady().then(async () => {
   });
 });
 
-app.on('before-quit', () => {
+let quittingAfterPlayitStop = false;
+let playitShutdownPending = false;
+
+app.on('before-quit', event => {
   launcherStateStore.clearWriteTimer();
   if (writeStatePending) flushStateWrite();
-  playitManager.stop();
+  if (quittingAfterPlayitStop || !playitManager.state().pid) return;
+  event.preventDefault();
+  if (playitShutdownPending) return;
+  playitShutdownPending = true;
+  void playitManager.stop().then(result => {
+    playitShutdownPending = false;
+    if (!result.ok) {
+      emitStatus(`Playit did not stop cleanly; the launcher remains open. ${result.error || ''}`.trim());
+      return;
+    }
+    quittingAfterPlayitStop = true;
+    app.quit();
+  }).catch(error => {
+    playitShutdownPending = false;
+    emitStatus(`Unable to stop Playit before closing: ${error instanceof Error ? error.message : String(error)}`);
+  });
 });
 
 app.on('window-all-closed', () => {

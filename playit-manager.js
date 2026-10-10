@@ -3,12 +3,13 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-function createPlayitManager({ app, shell, emit }) {
+function createPlayitManager({ app, shell, emit, pty: configuredPty, stopTimeoutMs = 2000 }) {
   let session = null;
   let status = 'stopped';
   let lastExit = null;
   let outputBuffer = '';
   let exitWaiter = null;
+  let stopPromise = null;
 
   function state() {
     return {
@@ -72,7 +73,7 @@ function createPlayitManager({ app, shell, emit }) {
     lastExit = null;
     emitState();
     try {
-      const pty = require('node-pty');
+      const pty = configuredPty || require('node-pty');
       session = pty.spawn(executablePath, [], {
         name: 'xterm-256color',
         cols: 120,
@@ -94,7 +95,7 @@ function createPlayitManager({ app, shell, emit }) {
           exitWaiter();
           exitWaiter = null;
         }
-        status = exitCode === 0 ? 'exited' : 'crashed';
+        status = status === 'stopping' ? 'stopped' : exitCode === 0 ? 'exited' : 'crashed';
         emit({ type: 'exit', ...lastExit });
         emitState();
       });
@@ -110,7 +111,7 @@ function createPlayitManager({ app, shell, emit }) {
     }
   }
 
-  async function stop() {
+  async function stopSession() {
     if (!session) {
       status = 'stopped';
       emitState();
@@ -119,22 +120,52 @@ function createPlayitManager({ app, shell, emit }) {
     status = 'stopping';
     emitState();
     const current = session;
-    const exited = new Promise(resolve => { exitWaiter = resolve; });
+    const waitForExit = timeoutMs => new Promise(resolve => {
+      if (session !== current) return resolve(true);
+      const timer = setTimeout(() => {
+        if (exitWaiter === onExit) exitWaiter = null;
+        resolve(false);
+      }, timeoutMs);
+      const onExit = () => {
+        clearTimeout(timer);
+        if (exitWaiter === onExit) exitWaiter = null;
+        resolve(true);
+      };
+      exitWaiter = onExit;
+    });
     try {
       current.write('\u0003');
-      await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 2000))]);
-    } catch (_error) {}
-    if (session === current) {
-      try { current.kill(); } catch (_error) {}
-      session = null;
-      status = 'stopped';
+      await waitForExit(stopTimeoutMs);
+    } catch (error) {
+      status = 'running';
       emitState();
+      return { ok: false, error: `Unable to request a graceful Playit shutdown: ${error instanceof Error ? error.message : String(error)}`, ...state() };
+    }
+    if (session === current) {
+      try {
+        current.kill();
+      } catch (error) {
+        status = 'running';
+        emitState();
+        return { ok: false, error: `Unable to terminate the Playit process: ${error instanceof Error ? error.message : String(error)}`, ...state() };
+      }
+      await waitForExit(stopTimeoutMs);
+    }
+    if (session === current) {
+      return { ok: false, error: 'The Playit process did not exit after the termination request.', ...state() };
     }
     return { ok: true, ...state() };
   }
 
+  function stop() {
+    if (stopPromise) return stopPromise;
+    stopPromise = stopSession().finally(() => { stopPromise = null; });
+    return stopPromise;
+  }
+
   async function restart() {
-    await stop();
+    const stopped = await stop();
+    if (!stopped.ok) return stopped;
     return start();
   }
 

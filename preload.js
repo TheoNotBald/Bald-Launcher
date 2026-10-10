@@ -122,6 +122,7 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   openExternalUrl: url => ipcRenderer.invoke('launcher:open-external-url', url),
   applyUpdate: () => ipcRenderer.invoke('launcher:apply-update'),
   retryUpdate: () => ipcRenderer.invoke('launcher:retry-update'),
+  getUpdateStatus: () => ipcRenderer.invoke('launcher:get-update-status'),
   onPlayitData: callback => {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on('server:playit-data', handler);
@@ -172,6 +173,11 @@ contextBridge.exposeInMainWorld('launcherAPI', {
     const handler = (_event, progress) => callback(progress);
     ipcRenderer.on('launcher:update-progress', handler);
     return () => ipcRenderer.removeListener('launcher:update-progress', handler);
+  },
+  onUpdateNotAvailable: callback => {
+    const handler = (_event, update) => callback(update);
+    ipcRenderer.on('launcher:update-not-available', handler);
+    return () => ipcRenderer.removeListener('launcher:update-not-available', handler);
   },
   onUpdateError: callback => {
     const handler = (_event, error) => callback(error);

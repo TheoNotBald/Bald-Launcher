@@ -932,10 +932,6 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
         <button class="sidebar-nav-item" id="nav-resource-packs" title="Resource Pack Studio" data-tooltip="Resource Pack Studio" type="button" aria-label="Resource Pack Studio" onclick="showPanel('resource-packs')">
           <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5 12 3l7 2.5v13L12 21l-7-2.5z"/><path d="M5 5.5 12 8l7-2.5M12 8v13M8.5 4.2 15.5 6.8"/></svg>
         </button>
-        <button class="sidebar-nav-item has-badge" id="nav-logs" title="Logs" data-tooltip="Logs" type="button" aria-label="Logs" onclick="showPanel('logs')">
-          <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="16" rx="2"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>
-          <span class="sidebar-notification-dot" aria-label="Unread logs"></span>
-        </button>
       </div>
       <div class="sidebar-spacer"></div>
       <div class="sidebar-group sidebar-bottom-nav" aria-label="Utilities">
@@ -4070,7 +4066,6 @@ function getCommandPaletteItems(query = ''){
   (state.servers || []).forEach(server => items.push({ label: `Open ${server.name}`, kind: 'Server', action: () => openServerDetail(server.id) }));
   items.push(
     { label: 'Open Settings', kind: 'Command', action: () => showPanel('settings') },
-    { label: 'Open Logs', kind: 'Command', action: () => showPanel('logs') },
     { label: 'Open Performance Center', kind: 'Command', action: () => showPanel('performance') },
     { label: 'Open Profiles', kind: 'Command', action: () => showPanel('home') },
     { label: 'Open Servers', kind: 'Command', action: () => showPanel('servers') },
@@ -4175,6 +4170,52 @@ async function runPerformanceBenchmark(){
 let sessionLogs=[];
 let updateReady = false;
 let updateFailed = false;
+function showUpdateFailure(message) {
+  const banner = document.getElementById('updateBanner');
+  const button = document.getElementById('updateButton');
+  const text = document.getElementById('updateBannerText');
+  const progress = document.getElementById('updateBannerProgress');
+  updateReady = false;
+  updateFailed = true;
+  if (text) text.textContent = `Update check failed: ${message || 'Could not contact the GitHub release feed.'}`;
+  if (progress) progress.textContent = '';
+  if (button) { button.disabled = false; button.textContent = 'Retry update check'; }
+  banner?.classList.add('visible');
+}
+
+function showUpdateStatus(update) {
+  if (update?.state === 'error') {
+    showUpdateFailure(update.message);
+    return;
+  }
+  if (update?.state === 'available') {
+    const banner = document.getElementById('updateBanner');
+    const text = document.getElementById('updateBannerText');
+    const button = document.getElementById('updateButton');
+    if (text) text.textContent = `Update available - v${update.version || ''}`;
+    if (button) { button.disabled = false; button.textContent = 'Update now'; }
+    banner?.classList.add('visible');
+  } else if (update?.state === 'current') {
+    const banner = document.getElementById('updateBanner');
+    const text = document.getElementById('updateBannerText');
+    const button = document.getElementById('updateButton');
+    if (text) text.textContent = 'No newer version is available from the GitHub release feed.';
+    if (button) { button.disabled = false; button.textContent = 'Check again'; }
+    banner?.classList.add('visible');
+  } else if (update?.state === 'downloading') {
+    const banner = document.getElementById('updateBanner');
+    const button = document.getElementById('updateButton');
+    if (button) { button.disabled = true; button.textContent = 'Downloading...'; }
+    banner?.classList.add('visible');
+  } else if (update?.state === 'downloaded') {
+    updateReady = true;
+    const banner = document.getElementById('updateBanner');
+    const button = document.getElementById('updateButton');
+    if (button) { button.disabled = false; button.textContent = 'Restart to update'; }
+    banner?.classList.add('visible');
+  }
+}
+
 function navigateServerFiles(serverId, pathValue) {
   const safePath = normalizeServerPath(pathValue);
   if (!serverId) return;
@@ -4387,13 +4428,12 @@ function showPanel(name){
     accounts: 'accounts',
     settings: 'settings',
     performance: 'performance',
-    logs: 'logs',
     appearance: 'appearance',
     capes: 'capes',
     'resource-packs': 'resource-packs',
     'server-detail': 'servers',
   };
-  ['home','servers','synchronizations','accounts','settings','performance','logs','appearance','capes','resource-packs'].forEach(p=>{
+  ['home','servers','synchronizations','accounts','settings','performance','appearance','capes','resource-packs'].forEach(p=>{
     const n = document.getElementById('nav-'+p);
     if (n) {
       const active = navMapping[name] === p;
@@ -6040,7 +6080,7 @@ async function boot(){
   renderAccounts();
   if (savedPage === 'profile' && recoveredProfile) openProfile(recoveredProfile);
   else if (savedPage === 'server-detail' && getServer(savedServer)) openServerDetail(savedServer);
-  else showPanel(['home','servers','accounts','settings','performance','logs','appearance','capes','resource-packs'].includes(savedPage) ? savedPage : 'home');
+  else showPanel(['home','servers','accounts','settings','performance','appearance','capes','resource-packs'].includes(savedPage) ? savedPage : 'home');
   if (savedPage !== 'capes') refreshAccountCosmetics(false);
   renderNotifications();
   if (launcherBridge?.onStatus){
@@ -6096,18 +6136,17 @@ async function boot(){
       if (button && !updateReady) button.textContent = 'Downloading...';
     });
   }
+  if (launcherBridge?.onUpdateNotAvailable){
+    launcherBridge.onUpdateNotAvailable(update => showUpdateStatus({ state: 'current', ...update }));
+  }
   if (launcherBridge?.onUpdateError){
     launcherBridge.onUpdateError(error => {
-      const button = document.getElementById('updateButton');
-      const text = document.getElementById('updateBannerText');
-      const progress = document.getElementById('updateBannerProgress');
-      updateReady = false;
-      updateFailed = true;
-      if (text) text.textContent = `Update failed: ${error?.message || 'Download could not be completed.'}`;
-      if (progress) progress.textContent = '';
-      if (button) { button.disabled = false; button.textContent = 'Retry update'; }
+      showUpdateFailure(error?.message);
     });
   }
+  void launcherBridge?.getUpdateStatus?.().then(result => {
+    if (result?.ok) showUpdateStatus(result.update);
+  }).catch(error => showUpdateFailure(error?.message));
   if (launcherBridge?.onProcessState){
     launcherBridge.onProcessState(processState => {
       if (processState?.profileId) {
@@ -6126,14 +6165,10 @@ document.getElementById('updateButton')?.addEventListener('click', async event =
   const button = event.currentTarget;
   if (updateFailed) {
     button.disabled = true;
-    button.textContent = 'Retrying...';
+    button.textContent = 'Checking...';
     const result = await launcherBridge?.retryUpdate?.();
     if (result?.ok === false) {
-      updateFailed = true;
-      button.disabled = false;
-      button.textContent = 'Retry update';
-      const text = document.getElementById('updateBannerText');
-      if (text) text.textContent = `Update failed: ${result.error || 'Could not retry the update.'}`;
+      showUpdateFailure(result.error || 'Could not retry the update.');
     }
     return;
   }
@@ -6149,7 +6184,9 @@ document.getElementById('updateButton')?.addEventListener('click', async event =
     return;
   }
   button.disabled = true;
-  button.textContent = 'Downloading...';
+  button.textContent = 'Checking...';
+  const result = await launcherBridge?.retryUpdate?.();
+  if (result?.ok === false) showUpdateFailure(result.error || 'Could not check for updates.');
 });
 bindProfileLaunchButton();
 window.addEventListener('error', event => {
