@@ -25,6 +25,7 @@ const { runDueSchedules } = require('./src/servers/schedule-runner');
 const { restoreWorldFromZip } = require('./src/servers/backup-restore');
 const { waitForLogResponse } = require('./src/servers/console-response');
 const { canAdoptDiscoveredProcess, findMatchingServerProcess, getProcessStartTime, matchesServerProcessIdentity: verifyServerProcessIdentity } = require('./src/servers/process-identity');
+const { ensureLauncherProfilesFile } = require('./src/shared/launcher-profiles');
 const { normalizeAccountCosmetics, getAccountCosmetics, setAccountSelection, pushRecentItem } = require('./src/cosmetics/account/cosmetic-state');
 const { createCosmeticLibrary } = require('./src/cosmetics/library/cosmetic-library');
 const { resolveCustomSkinLoader } = require('./src/cosmetics/custom-skin-loader/resolver');
@@ -3447,6 +3448,7 @@ async function installLoader(profile) {
     emitStatus(`Downloading ${loader} installer...`);
     await downloadToFile(installerUrl, installerPath, `${loader} installer`);
   }
+  if (loader === 'forge' || loader === 'neoforge') ensureLauncherProfilesFile(rootPath);
   emitStatus(`Installing ${loader} ${loaderVersion}...`);
   await runInstaller(javaPath, installerPath, installerArgs, rootPath);
   const versionId = findInstalledVersionId(rootPath, mcVersion, loader === 'neoforge' ? 'neoforge' : loader, before);
