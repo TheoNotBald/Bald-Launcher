@@ -6597,6 +6597,13 @@ async function installCurseForgeContent(projectId, mcVersion, loader, type, file
     side: getCurseForgeSideLabel(file),
     sha1: expectedSha1,
     fileName: path.basename(filePath),
+    requiredDependencies: (Array.isArray(file.dependencies) ? file.dependencies : [])
+      .filter(dependency => Number(dependency?.relationType) === 3 && dependency?.modId)
+      .map(dependency => ({
+        projectId: String(dependency.modId),
+        fileId: dependency.fileId ? String(dependency.fileId) : null,
+        source: 'curseforge',
+      })),
   };
 }
 

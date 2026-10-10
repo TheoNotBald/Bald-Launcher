@@ -40,7 +40,12 @@
         const normalizedId = normalizeId(projectId);
         if (!normalizedId || scheduledIds.has(normalizedId)) continue;
         scheduledIds.add(normalizedId);
-        queue.push({ projectId, versionId: requirement.versionId ? String(requirement.versionId) : null });
+        queue.push({
+          projectId,
+          source: requirement.source === 'curseforge' ? 'curseforge' : 'modrinth',
+          versionId: requirement.versionId ? String(requirement.versionId) : null,
+          fileId: requirement.fileId ? String(requirement.fileId) : null,
+        });
       }
     };
     enqueue(dependencies);
@@ -58,7 +63,7 @@
             mcVersion: String(target.mcVersion || ''),
             loader: String(target.loader || target.serverType || ''),
             serverType: scope.serverId ? target.serverType : undefined,
-            source: 'modrinth',
+            source: dependency.source,
           });
           if (!result?.ok) {
             return { dependency, error: result?.error || 'Modrinth search failed.' };
@@ -103,8 +108,9 @@
         const payload = {
           ...candidate,
           type: 'mod',
-          source: 'modrinth',
+          source: item.dependency.source,
           versionId: item.dependency.versionId || candidate.versionId || null,
+          fileId: item.dependency.fileId || candidate.fileId || null,
           ...(scope.serverId ? { serverId: scope.serverId } : { profileId: scope.profileId }),
         };
         try {

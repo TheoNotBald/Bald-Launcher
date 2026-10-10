@@ -96,6 +96,32 @@ test('server dependency installs use the server loader and update server content
   assert.deepEqual(target.installedContent.map(entry => entry.id), ['fabric-api']);
 });
 
+test('CurseForge dependencies preserve provider and pinned file IDs through the download prompt', async () => {
+  const target = { mcVersion: '1.21.1', loader: 'fabric', mods: [] };
+  let searchParameters;
+  let installPayload;
+  const result = await installRequiredDependencies({
+    dependencies: [{ projectId: '12345', fileId: '67890', source: 'curseforge' }],
+    target,
+    scope: { profileId: 'profile-cf' },
+    confirmDownload: async () => true,
+    searchContent: async params => {
+      searchParameters = params;
+      return { ok: true, hits: [{ id: '12345', name: 'Required Library', type: 'mod', source: 'curseforge' }] };
+    },
+    installContent: async payload => {
+      installPayload = payload;
+      return { ok: true, entry: { id: payload.id, name: payload.name, type: 'mod' } };
+    },
+  });
+
+  assert.equal(result.installedCount, 1);
+  assert.equal(searchParameters.source, 'curseforge');
+  assert.equal(installPayload.source, 'curseforge');
+  assert.equal(installPayload.fileId, '67890');
+  assert.equal(installPayload.profileId, 'profile-cf');
+});
+
 test('does not install fuzzy or ambiguous project matches', async () => {
   const target = { mcVersion: '1.21.1', serverType: 'fabric', installedContent: [] };
   const installs = [];
@@ -147,4 +173,7 @@ test('normal Browse installs hand required dependency metadata to the opt-in ins
   assert.match(html, /offerRequiredContentDependencies\(requiredDependencies, p/);
   assert.match(html, /window\.ContentDependencyInstaller\.installRequiredDependencies/);
   assert.match(html, /Download and install \$\{names\.length === 1 \? 'this dependency' : 'these dependencies'\} now\?/);
+  const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  assert.match(main, /Number\(dependency\?\.relationType\) === 3/);
+  assert.match(main, /source: 'curseforge'/);
 });
