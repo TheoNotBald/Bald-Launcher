@@ -4,6 +4,7 @@ class MinecraftPlayerPreview {
   constructor(canvas) {
     if (!window.skinview3d?.SkinViewer) throw new Error('Minecraft skin renderer is unavailable.');
     this.canvas = canvas;
+    this.appearanceRequest = 0;
     this.viewer = new window.skinview3d.SkinViewer({ canvas, width: 280, height: 300 });
     this.viewer.background = 0x07090b;
     this.viewer.fov = 50;
@@ -31,16 +32,20 @@ class MinecraftPlayerPreview {
 
   async setAppearance(skin, cape) {
     if (!skin?.filePath) return false;
+    const request = ++this.appearanceRequest;
     const skinSource = await window.launcherAPI.readCosmeticTexture(skin.filePath);
+    if (request !== this.appearanceRequest) return false;
     if (!skinSource?.ok) throw new Error(skinSource?.error || 'Skin texture unavailable.');
     await this.viewer.loadSkin(skinSource.dataUrl, { model: skin.model === 'slim' ? 'slim' : 'default', makeVisible: true });
+    if (request !== this.appearanceRequest) return false;
     this.viewer.playerObject.visible = true;
     this.viewer.playerObject.skin.visible = true;
     this.viewer.playerWrapper.visible = true;
     if (cape?.filePath) {
       const capeSource = await window.launcherAPI.readCosmeticTexture(cape.filePath);
-      if (capeSource?.ok) await this.viewer.loadCape(capeSource.dataUrl);
-      else this.viewer.loadCape(null);
+      if (request !== this.appearanceRequest) return false;
+      if (!capeSource?.ok) throw new Error(capeSource?.error || 'Cape texture unavailable.');
+      await this.viewer.loadCape(capeSource.dataUrl);
     } else {
       this.viewer.loadCape(null);
     }
@@ -49,11 +54,14 @@ class MinecraftPlayerPreview {
   }
 
   async setStudioDataUrl(dataUrl, model, kind) {
+    const request = ++this.appearanceRequest;
     if (kind === 'cape') {
       await this.viewer.loadCape(dataUrl);
+      if (request !== this.appearanceRequest) return false;
       return true;
     }
     await this.viewer.loadSkin(dataUrl, { model: model === 'slim' ? 'slim' : 'default', makeVisible: true });
+    if (request !== this.appearanceRequest) return false;
     this.viewer.playerObject.visible = true;
     this.viewer.playerObject.skin.visible = true;
     this.viewer.playerWrapper.visible = true;
@@ -72,6 +80,7 @@ class MinecraftPlayerPreview {
   }
 
   dispose() {
+    this.appearanceRequest += 1;
     window.removeEventListener('resize', this.resize);
     this.viewer.dispose();
   }

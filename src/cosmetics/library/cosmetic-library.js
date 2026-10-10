@@ -130,7 +130,9 @@ function createCosmeticLibrary({ appDataDir, baseDir = 'cosmetics' } = {}) {
     const width = buffer.readUInt32BE(16);
     const height = buffer.readUInt32BE(20);
     const supportedSkin = width === 64 && height === 64;
-    const supportedCape = width === 64 && height === 32;
+    const supportedCape = (width === 64 && height === 32)
+      || (width === 128 && height === 64)
+      || (width === 256 && height === 128);
     if (kind === 'skin' && !supportedSkin) throw new Error('Created Minecraft skins must be 64x64 PNG files.');
     if (kind === 'cape' && !supportedCape) throw new Error('Created Minecraft capes must be 64x32 PNG files.');
     const targetDir = getKindDir(kind);

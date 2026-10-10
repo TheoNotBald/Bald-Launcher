@@ -37,7 +37,7 @@
       <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:0.5px solid var(--border);flex-wrap:wrap;">
         <strong style="color:var(--text-primary);font-size:13px;">${skin ? 'Skin Studio' : 'Cape Studio'}</strong>
         <input id="studioName" class="modal-input" value="${escapeHtml(state.name)}" style="width:170px;" />
-        ${skin ? '<select id="studioModel" class="modal-select"><option value="classic">Classic / Steve</option><option value="slim">Slim / Alex</option></select>' : `<select id="capeResolution" class="modal-select" title="Cape pixel resolution"><option value="64x32" ${state.width === 64 ? 'selected' : ''}>64 × 32</option><option value="128x64" ${state.width === 128 ? 'selected' : ''}>128 × 64</option><option value="256x128" ${state.width === 256 ? 'selected' : ''}>256 × 128</option></select>`}
+        ${skin ? '<select id="studioModel" class="modal-select"><option value="classic">Classic / Steve</option><option value="slim">Slim / Alex</option></select>' : `<select id="capeResolution" class="modal-select" title="Cape pixel resolution"><option value="64x32" ${state.width === 64 && state.height === 32 ? 'selected' : ''}>64 × 32</option><option value="128x64" ${state.width === 128 && state.height === 64 ? 'selected' : ''}>128 × 64</option><option value="256x128" ${state.width === 256 && state.height === 128 ? 'selected' : ''}>256 × 128</option></select>`}
         <span id="studioSaveState" style="font-size:10px;color:var(--text-secondary);margin-left:auto;">Unsaved changes</span>
         ${skin ? '<button class="modal-btn" type="button" data-studio-action="freeze">Freeze motion</button>' : '<button class="modal-btn" type="button" data-studio-action="toggle-player">Hide 3D player</button>'}<button class="modal-btn" type="button" data-studio-action="undo">Undo</button><button class="modal-btn" type="button" data-studio-action="redo">Redo</button><button class="modal-btn" type="button" data-studio-action="import">Import</button><button class="modal-btn" type="button" data-studio-action="export">${skin ? 'Export PNG' : 'Export project'}</button><button class="modal-btn primary" type="button" data-studio-action="save">Save ${skin ? 'skin' : 'cape'}</button><button class="modal-btn" type="button" data-studio-action="close">Close</button>
       </div>
@@ -67,9 +67,15 @@
             ${skin ? '<button class="modal-btn" type="button" data-pose="arms-out" style="padding:4px 6px;font-size:9px;">Arms out</button><button class="modal-btn" type="button" data-pose="arms-up" style="padding:4px 6px;font-size:9px;">Arms up</button><button class="modal-btn" type="button" data-pose="legs-separated" style="padding:4px 6px;font-size:9px;">Legs separated</button><button class="modal-btn" type="button" data-pose="reset" style="padding:4px 6px;font-size:9px;">Reset pose</button>' : '<button class="modal-btn" type="button" data-preview-action="rotate" style="padding:4px 6px;font-size:9px;">Rotate preview</button><span style="font-size:9px;color:var(--text-secondary);padding:5px 0;">Left drag paints · right drag orbits · wheel zooms</span>'}
           </div>
         </section>
-        </section>
         <aside style="border:0.5px solid var(--border);border-radius:9px;padding:10px;display:flex;flex-direction:column;gap:8px;min-height:0;overflow:auto;">
-          ${skin ? '<div style="display:flex;flex-direction:column;gap:8px;height:100%;justify-content:center;"><strong style="font-size:11px;color:var(--text-primary);">Skin texture</strong><canvas id="studioCanvas" width="64" height="64" aria-label="Skin texture, 64 by 64 pixels" tabindex="-1" style="display:block;width:100%;height:auto;image-rendering:pixelated;touch-action:none;background:#171a1c;border:1px solid var(--border);border-radius:7px;cursor:crosshair;"></canvas><span style="font-size:9px;color:var(--text-secondary);">64 × 64 Minecraft skin texture</span></div>' : ''}
+          <div id="capeSheetFrame" style="position:relative;display:flex;flex-direction:column;gap:8px;align-items:stretch;">
+            <strong style="font-size:11px;color:var(--text-primary);">${skin ? 'Skin texture' : 'Cape texture'}</strong>
+            <div style="position:relative;width:100%;background:#171a1c;border:1px solid var(--border);border-radius:7px;overflow:hidden;">
+              <canvas id="studioCanvas" width="${state.width}" height="${state.height}" aria-label="${skin ? 'Skin' : 'Cape'} texture, ${state.width} by ${state.height} pixels" tabindex="-1" style="display:block;width:100%;height:auto;image-rendering:pixelated;touch-action:none;position:relative;z-index:1;cursor:crosshair;"></canvas>
+              <div id="capeGridOverlay" aria-hidden="true" style="display:${skin ? 'none' : 'block'};position:absolute;inset:0;z-index:2;pointer-events:none;background-image:linear-gradient(to right,rgba(255,255,255,.2) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.2) 1px,transparent 1px);"></div>
+            </div>
+            <span id="capeSheetLegend" style="font-size:9px;color:var(--text-secondary);">${skin ? '64 × 64 Minecraft skin texture' : `${state.width} × ${state.height} Minecraft cape texture`}</span>
+          </div>
           ${skin ? '' : `<div style="padding:9px;border:0.5px solid var(--border);border-radius:7px;background:var(--bg-surface-2);">
             <div style="font-size:10px;font-weight:600;color:var(--text-primary);margin-bottom:5px;">Cape creator</div>
             <div style="font-size:10px;line-height:1.45;color:var(--text-secondary);">Author a custom 64 × 32 cape for CustomSkinLoader. Vanilla Minecraft capes cannot be created or added to an account.</div>
@@ -143,11 +149,15 @@
       ensurePlayerVisible(state.viewer);
       if (window.attachStudio3DPainter && state.viewer) {
         state.detachPainter = window.attachStudio3DPainter(state.viewer, state.kind, (x, y, event, textureBounds) => {
-          if (event.type === 'pointerdown') pushHistory(state);
+          if (event.type === 'pointerdown' && !state.paintGestureActive) {
+            pushHistory(state);
+            state.paintGestureActive = true;
+          }
           applyTool(state, x, y, x, y, textureBounds);
           draw(state);
           updateStudioPreview(state);
-        }, () => { state.pointer = null; }, () => state.paintLayer, { width: state.width, height: state.height });
+        }, () => { state.pointer = null; state.paintGestureActive = false; }, () => state.paintLayer, { width: state.width, height: state.height });
+        if (state.kind === 'skin') toggleLayer(state, overlay.querySelector('[data-layer="inner"]'));
         state.detachPainter.refreshGrid?.();
       }
     }, 350);
@@ -193,14 +203,25 @@
       overlay.querySelector('[data-cape-action="previous-frame"]').addEventListener('click', () => loadCapeFrame(state, state.frameIndex - 1));
       overlay.querySelector('[data-cape-action="next-frame"]').addEventListener('click', () => loadCapeFrame(state, state.frameIndex + 1));
       overlay.querySelector('#capeFrameDelay').addEventListener('change', event => updateCapeDelay(state, event.target.value));
-      overlay.querySelector('#capeLoop').addEventListener('change', event => { state.project.loop = event.target.checked; state.dirty = true; updateSaveState(state); autosave(state); });
+      overlay.querySelector('#capeLoop').addEventListener('change', event => { pushHistory(state); state.project.loop = event.target.checked; state.dirty = true; updateSaveState(state); autosave(state); });
       overlay.querySelector('#capePlayback').addEventListener('change', event => toggleCapePlayback(state, event.target.checked));
       renderCapeTimeline(state);
     }
     if (!canvas) return;
     canvas.addEventListener('pointerdown', event => { state.pointer = { x: pixelAt(state, canvas, event).x, y: pixelAt(state, canvas, event).y }; pushHistory(state); applyTool(state, state.pointer.x, state.pointer.y, state.pointer.x, state.pointer.y); canvas.setPointerCapture(event.pointerId); });
     canvas.addEventListener('pointermove', event => { if (!state.pointer) return; const point = pixelAt(state, canvas, event); if (state.tool === 'pencil' || state.tool === 'eraser') applyTool(state, point.x, point.y, point.x, point.y); draw(state); });
-    canvas.addEventListener('pointerup', event => { if (!state.pointer) return; const point = pixelAt(state, canvas, event); if (state.tool === 'line' || state.tool === 'rectangle') applyTool(state, state.pointer.x, state.pointer.y, point.x, point.y); state.pointer = null; draw(state); });
+    const endPointer = event => {
+      if (!state.pointer) return;
+      const point = pixelAt(state, canvas, event);
+      if (state.tool === 'line' || state.tool === 'rectangle') applyTool(state, state.pointer.x, state.pointer.y, point.x, point.y);
+      state.pointer = null;
+      state.paintGestureActive = false;
+      if (event.pointerId !== undefined && canvas.hasPointerCapture?.(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+      draw(state);
+    };
+    canvas.addEventListener('pointerup', endPointer);
+    canvas.addEventListener('pointercancel', endPointer);
+    canvas.addEventListener('lostpointercapture', () => { state.pointer = null; state.paintGestureActive = false; });
     canvas.addEventListener('wheel', event => { event.preventDefault(); state.zoom = Math.max(4, Math.min(20, state.zoom + (event.deltaY < 0 ? 1 : -1))); draw(state); }, { passive: false });
   }
 
@@ -248,7 +269,8 @@
   }
 
   function addCapeFrame(state, duplicate) {
-    syncCapeFrame(state);
+  pushHistory(state);
+  syncCapeFrame(state);
     try {
       const pixels = duplicate ? new Uint8ClampedArray(state.pixels) : undefined;
       state.project = window.CapeProjectModel.addFrame(state.project, pixels, state.project.frames[state.frameIndex]?.delayMs);
@@ -267,6 +289,7 @@
   }
 
   function deleteCapeFrame(state) {
+    pushHistory(state);
     syncCapeFrame(state);
     if (state.project.frames.length <= 1) {
       alert('A cape project must keep at least one frame.');
@@ -282,6 +305,7 @@
   }
 
   function updateCapeDelay(state, value) {
+    pushHistory(state);
     syncCapeFrame(state);
     state.project = window.CapeProjectModel.updateFrame(state.project, state.frameIndex, { delayMs: value });
     state.dirty = true;
@@ -306,6 +330,21 @@
       state.playbackTimer = window.setTimeout(playNext, state.project.frames[state.frameIndex].delayMs);
     };
     state.playbackTimer = window.setTimeout(playNext, state.project.frames[state.frameIndex].delayMs);
+  }
+
+  function resizeCapePixels(pixels, sourceWidth, sourceHeight, width, height) {
+    const source = new Uint8ClampedArray(pixels || []);
+    const result = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y += 1) {
+      const sourceY = Math.min(sourceHeight - 1, Math.floor(y * sourceHeight / height));
+      for (let x = 0; x < width; x += 1) {
+        const sourceX = Math.min(sourceWidth - 1, Math.floor(x * sourceWidth / width));
+        const sourceIndex = (sourceY * sourceWidth + sourceX) * 4;
+        const targetIndex = (y * width + x) * 4;
+        result.set(source.slice(sourceIndex, sourceIndex + 4), targetIndex);
+      }
+    }
+    return result;
   }
 
   function applyPose(state, pose) {
@@ -372,21 +411,24 @@
     if (state.kind !== 'cape' || !window.CapeProjectModel?.RESOLUTIONS?.[value]) return;
     const [width, height] = window.CapeProjectModel.RESOLUTIONS[value];
     if (width === state.width && height === state.height) return;
+    pushHistory(state);
     syncCapeFrame(state);
     state.resolutionProjects[`${state.width}x${state.height}`] = state.project;
     state.project = state.resolutionProjects[value] || window.CapeProjectModel.createProject({
       name: state.name,
       loop: state.project.loop,
       width,
-      height
+      height,
+      frames: state.project.frames.map(frame => ({
+        delayMs: frame.delayMs,
+        pixels: resizeCapePixels(frame.pixels, state.project.width, state.project.height, width, height)
+      }))
     });
     state.resolutionProjects[value] = state.project;
     state.width = width;
     state.height = height;
     state.frameIndex = 0;
     state.pixels = state.project.frames[state.frameIndex].pixels;
-    state.undo = [];
-    state.redo = [];
     state.detachPainter?.setDimensions?.(width, height);
     state.previewReady = false;
     state.viewer?.resetCape?.();
@@ -553,8 +595,55 @@
     }
     state.dirty = true; updateSaveState(state); autosave(state); draw(state);
   }
-  function pushHistory(state) { state.undo.push(new Uint8ClampedArray(state.pixels)); if (state.undo.length > MAX_HISTORY) state.undo.shift(); state.redo = []; }
+  function createHistorySnapshot(state) {
+    if (state.kind === 'cape') syncCapeFrame(state);
+    return {
+      frameIndex: state.kind === 'cape' ? state.frameIndex : null,
+      width: state.width,
+      height: state.height,
+      pixels: new Uint8ClampedArray(state.pixels),
+      project: state.kind === 'cape' && state.project
+        ? {
+          loop: state.project.loop,
+          width: state.project.width,
+          height: state.project.height,
+          frames: state.project.frames.map(frame => ({
+            delayMs: frame.delayMs,
+            pixels: new Uint8ClampedArray(frame.pixels)
+          }))
+        }
+        : null
+    };
+  }
+  function pushHistory(state) {
+    state.undo.push(createHistorySnapshot(state));
+    if (state.undo.length > MAX_HISTORY) state.undo.shift();
+    state.redo = [];
+  }
   function restorePixels(state, pixels) {
+    const snapshot = pixels && pixels.pixels ? pixels : null;
+    if (snapshot?.project && state.kind === 'cape' && window.CapeProjectModel) {
+      const current = state.project;
+      state.project = window.CapeProjectModel.createProject({
+        name: state.name,
+        loop: snapshot.project.loop,
+        width: snapshot.project.width,
+        height: snapshot.project.height,
+        frames: snapshot.project.frames
+      });
+      state.resolutionProjects = { [`${state.project.width}x${state.project.height}`]: state.project };
+      state.width = state.project.width;
+      state.height = state.project.height;
+      state.frameIndex = Math.max(0, Math.min(state.project.frames.length - 1, snapshot.frameIndex || 0));
+      state.pixels = state.project.frames[state.frameIndex].pixels;
+      const resolution = document.getElementById('capeResolution');
+      if (resolution) resolution.value = `${state.width}x${state.height}`;
+      state.detachPainter?.setDimensions?.(state.width, state.height);
+      renderCapeSheetOrientation(state);
+      renderCapeTimeline(state);
+      return;
+    }
+    if (snapshot) pixels = snapshot.pixels;
     if (state.kind === 'cape') {
       const frame = state.project?.frames[state.frameIndex];
       if (!frame) return;
@@ -564,8 +653,32 @@
     }
     state.pixels = new Uint8ClampedArray(pixels);
   }
-  function undo(state) { if (!state.undo.length) return; state.redo.push(new Uint8ClampedArray(state.pixels)); restorePixels(state, state.undo.pop()); state.dirty = true; updateSaveState(state); draw(state); autosave(state); }
-  function redo(state) { if (!state.redo.length) return; state.undo.push(new Uint8ClampedArray(state.pixels)); restorePixels(state, state.redo.pop()); state.dirty = true; updateSaveState(state); draw(state); autosave(state); }
+  function undo(state) {
+    if (!state.undo.length) return;
+    state.redo.push(createHistorySnapshot(state));
+    const snapshot = state.undo.pop();
+    if (state.kind === 'cape' && Number.isInteger(snapshot.frameIndex) && snapshot.frameIndex !== state.frameIndex) {
+      loadCapeFrame(state, snapshot.frameIndex);
+    }
+    restorePixels(state, snapshot);
+    state.dirty = true;
+    updateSaveState(state);
+    draw(state);
+    autosave(state);
+  }
+  function redo(state) {
+    if (!state.redo.length) return;
+    state.undo.push(createHistorySnapshot(state));
+    const snapshot = state.redo.pop();
+    if (state.kind === 'cape' && Number.isInteger(snapshot.frameIndex) && snapshot.frameIndex !== state.frameIndex) {
+      loadCapeFrame(state, snapshot.frameIndex);
+    }
+    restorePixels(state, snapshot);
+    state.dirty = true;
+    updateSaveState(state);
+    draw(state);
+    autosave(state);
+  }
   function clearPixels(state) {
     pushHistory(state);
     state.pixels.fill(0);
@@ -577,8 +690,17 @@
   }
   function applyTemplate(state, template) { pushHistory(state); state.pixels.fill(0); const set = (x, y, w, h, color) => { for (let py = y; py < y + h; py++) for (let px = x; px < x + w; px++) setPixel(state, px, py, colorBytes(color, 1)); }; if (state.kind === 'skin') { if (template === 'blank') { for (let y = 0; y < state.height; y++) for (let x = 0; x < state.width; x++) setPixel(state, x, y, colorBytes('#68727d', 1)); } else { [[0, 0, 32, 16], [0, 16, 40, 16], [40, 16, 16, 16], [32, 48, 20, 16]].forEach(([x, y, w, h]) => set(x, y, w, h, '#68727d')); set(8, 8, 8, 8, '#e0a37b'); set(20, 20, 8, 12, template === 'hoodie' ? '#375a9e' : '#6c9d45'); set(4, 20, 4, 12, '#6c9d45'); set(20, 52, 4, 12, '#29304f'); set(4, 52, 4, 12, '#29304f'); if (template === 'hoodie') set(20, 16, 8, 4, '#253c73'); } } else { for (let y = 0; y < state.height; y++) for (let x = 0; x < state.width; x++) if (template === 'checker' ? ((x + y) % 2 === 0) : template === 'stripes' ? x % 8 < 4 : false) setPixel(state, x, y, colorBytes(y < state.height / 2 ? '#72e64b' : '#245d36', 1)); } state.dirty = true; draw(state); autosave(state); }
   async function loadAssetImage(state, filePath) {
-    const result = await window.launcherAPI.readCosmeticTexture(filePath);
-    if (!result?.ok || state.restoredDraft) return;
+    let result;
+    try {
+      result = await window.launcherAPI.readCosmeticTexture(filePath);
+    } catch (error) {
+      alert(`Could not load this ${state.kind}: ${error?.message || 'texture read failed.'}`);
+      return;
+    }
+    if (!result?.ok || state.restoredDraft) {
+      if (!result?.ok && !state.restoredDraft) alert(`Could not load this ${state.kind}: ${result?.error || 'texture unavailable.'}`);
+      return;
+    }
     const image = new Image();
     image.onload = () => {
       if (state.restoredDraft) return;
@@ -598,6 +720,7 @@
       }
       draw(state);
     };
+    image.onerror = () => alert(`Could not decode this ${state.kind} PNG.`);
     image.src = result.dataUrl;
   }
   function getCleanDataUrl(state) {
@@ -719,6 +842,8 @@
       if (!file) return;
       if (state.kind === 'cape' && /\.baldcape$|application\/json/i.test(`${file.name} ${file.type}`)) {
         try {
+          pushHistory(state);
+          toggleCapePlayback(state, false);
           const project = window.CapeProjectModel.createProject(JSON.parse(await file.text()));
           state.project = project;
           state.resolutionProjects = { [`${project.width}x${project.height}`]: project };
@@ -727,6 +852,10 @@
           state.name = project.name;
           state.frameIndex = 0;
           state.pixels = state.project.frames[0].pixels;
+          const playback = document.getElementById('capePlayback');
+          const loop = document.getElementById('capeLoop');
+          if (playback) playback.checked = false;
+          if (loop) loop.checked = project.loop;
           document.getElementById('studioName').value = state.name;
           const resolution = document.getElementById('capeResolution');
           if (resolution) resolution.value = `${project.width}x${project.height}`;
@@ -745,6 +874,7 @@
       image.onload = () => {
         if (image.width !== state.width || image.height !== state.height) {
           alert(`Expected a ${state.width}x${state.height} PNG.`);
+          URL.revokeObjectURL(image.src);
           return;
         }
         const source = document.createElement('canvas');
@@ -755,6 +885,7 @@
         context.clearRect(0, 0, source.width, source.height);
         context.drawImage(image, 0, 0, state.width, state.height);
         const importedPixels = context.getImageData(0, 0, state.width, state.height).data;
+        pushHistory(state);
         if (state.kind === 'cape') restorePixels(state, importedPixels);
         else state.pixels = new Uint8ClampedArray(importedPixels);
         state.dirty = true;
@@ -763,6 +894,7 @@
         updateStudioPreview(state);
         URL.revokeObjectURL(image.src);
       };
+      image.onerror = () => alert(`Could not decode the imported ${state.kind} PNG.`);
       image.src = URL.createObjectURL(file);
     };
     input.click();
@@ -823,9 +955,17 @@
   function restoreDraft(state) {
     try {
       const draft = JSON.parse(localStorage.getItem(`${DRAFT_PREFIX}${state.kind}`) || 'null');
-      if (!draft || !Array.isArray(draft.pixels) || draft.width !== state.width || draft.height !== state.height) return false;
+      if (!draft) return false;
+      const draftProject = state.kind === 'cape' && draft.project && window.CapeProjectModel
+        ? window.CapeProjectModel.createProject(draft.project)
+        : null;
+      if (state.kind === 'cape' && draftProject) {
+        if (!window.CapeProjectModel.RESOLUTIONS[`${draftProject.width}x${draftProject.height}`]) return false;
+      } else if (!Array.isArray(draft.pixels) || draft.width !== state.width || draft.height !== state.height) {
+        return false;
+      }
       if (!confirm(`Restore autosaved ${state.kind} draft from ${new Date(draft.savedAt).toLocaleString()}?`)) return false;
-      state.pixels = new Uint8ClampedArray(draft.pixels);
+      state.pixels = new Uint8ClampedArray(draft.pixels || state.pixels);
       if (state.kind === 'skin' && !state.pixels.some((value, index) => index % 4 === 3 && value > 0)) {
         for (let index = 0; index < state.pixels.length; index += 4) {
           state.pixels[index] = 104;
@@ -836,8 +976,8 @@
       }
       state.name = draft.name || state.name;
       state.model = draft.model || state.model;
-      if (state.kind === 'cape' && draft.project && window.CapeProjectModel) {
-        state.project = window.CapeProjectModel.createProject(draft.project);
+      if (state.kind === 'cape' && draftProject) {
+        state.project = draftProject;
         state.width = state.project.width;
         state.height = state.project.height;
         state.resolutionProjects = { [`${state.project.width}x${state.project.height}`]: state.project };
@@ -846,6 +986,10 @@
       }
       state.dirty = true;
       state.restoredDraft = true;
+      if (state.kind === 'cape') {
+        const loop = document.getElementById('capeLoop');
+        if (loop) loop.checked = state.project.loop;
+      }
       return true;
     } catch (_error) {
       return false;

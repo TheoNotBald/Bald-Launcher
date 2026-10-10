@@ -45,15 +45,27 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   setActiveProfile: profileId => ipcRenderer.invoke('launcher:set-active-profile', profileId),
   previewBundle: params => ipcRenderer.invoke('launcher:preview-bundle', params),
   applyBundle: payload => ipcRenderer.invoke('launcher:apply-bundle', payload),
+  previewProfileSync: payload => ipcRenderer.invoke('launcher:preview-profile-sync', payload),
+  applyProfileSync: payload => ipcRenderer.invoke('launcher:apply-profile-sync', payload),
+  configureProfileSync: payload => ipcRenderer.invoke('launcher:configure-profile-sync', payload),
+  runProfileSync: () => ipcRenderer.invoke('launcher:run-profile-sync'),
 
   // content
   searchContent: params => ipcRenderer.invoke('launcher:search-content', params),
+  getInstalledMods: params => ipcRenderer.invoke('launcher:get-installed-mods', params),
+  getContentVersions: params => ipcRenderer.invoke('launcher:get-content-versions', params),
   installContent: payload => ipcRenderer.invoke('launcher:install-content', payload),
+  cancelDependencyInstall: installId => ipcRenderer.invoke('launcher:cancel-dependency-install', installId),
+  updateContent: payload => ipcRenderer.invoke('launcher:update-content', payload),
+  syncProfileContent: profileId => ipcRenderer.invoke('launcher:sync-profile-content', profileId),
+  syncServerContent: serverId => ipcRenderer.invoke('launcher:sync-server-content', serverId),
   exportResourcePack: payload => ipcRenderer.invoke('launcher:export-resource-pack', payload),
   importResourcePack: () => ipcRenderer.invoke('launcher:import-resource-pack'),
   getResourcePackCatalog: version => ipcRenderer.invoke('launcher:get-resource-pack-catalog', version),
   getResourcePackAsset: (version, assetPath) => ipcRenderer.invoke('launcher:get-resource-pack-asset', version, assetPath),
   getResourcePackModel: (version, modelName) => ipcRenderer.invoke('launcher:get-resource-pack-model', version, modelName),
+  getResourcePackItemDefinition: (version, itemName) => ipcRenderer.invoke('launcher:get-resource-pack-item-definition', version, itemName),
+  getResourcePackBlockstate: (version, blockName) => ipcRenderer.invoke('launcher:get-resource-pack-blockstate', version, blockName),
   removeContent: payload => ipcRenderer.invoke('launcher:remove-content', payload),
   toggleContent: payload => ipcRenderer.invoke('launcher:toggle-content', payload),
   openFolder: folderType => ipcRenderer.invoke('launcher:open-folder', folderType),
@@ -63,12 +75,21 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   stop: profileId => ipcRenderer.invoke('launcher:stop', { profileId }),
   getDiagnostics: () => ipcRenderer.invoke('launcher:get-diagnostics'),
   analyzeCrash: profileId => ipcRenderer.invoke('launcher:analyze-crash', profileId),
+  analyzeServerCrash: serverId => ipcRenderer.invoke('server:analyze-crash', { serverId }),
+  openCrashEvidence: payload => ipcRenderer.invoke('launcher:open-crash-evidence', payload),
   getPerformance: profileId => ipcRenderer.invoke('launcher:get-performance', profileId),
   runBenchmark: payload => ipcRenderer.invoke('launcher:run-benchmark', payload),
 
   createServer: server => ipcRenderer.invoke('launcher:create-server', server),
+  searchModpacks: params => ipcRenderer.invoke('launcher:search-modpacks', params),
+  installModpackToServer: payload => ipcRenderer.invoke('launcher:install-modpack-to-server', payload),
+  installModpackToProfile: payload => ipcRenderer.invoke('launcher:install-modpack-to-profile', payload),
+  renameServer: payload => ipcRenderer.invoke('launcher:rename-server', payload),
+  deleteServer: serverId => ipcRenderer.invoke('launcher:delete-server', { serverId }),
   startServer: serverId => ipcRenderer.invoke('launcher:start-server', { serverId }),
   stopServer: serverId => ipcRenderer.invoke('launcher:stop-server', { serverId }),
+  chooseServerFolder: serverId => ipcRenderer.invoke('server:choose-folder', { serverId }),
+  getServerConsoleHistory: serverId => ipcRenderer.invoke('server:get-console-history', { serverId, limit: 2000 }),
   listServerFiles: params => ipcRenderer.invoke('server:list-files', typeof params === 'string' ? { serverId: params } : params),
   readServerFile: params => ipcRenderer.invoke('server:read-file', params),
   writeServerFile: params => ipcRenderer.invoke('server:write-file', params),
@@ -100,6 +121,7 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   openPlayitLink: url => ipcRenderer.invoke('server:playit-open-link', url),
   openExternalUrl: url => ipcRenderer.invoke('launcher:open-external-url', url),
   applyUpdate: () => ipcRenderer.invoke('launcher:apply-update'),
+  retryUpdate: () => ipcRenderer.invoke('launcher:retry-update'),
   onPlayitData: callback => {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on('server:playit-data', handler);
@@ -145,6 +167,21 @@ contextBridge.exposeInMainWorld('launcherAPI', {
     const handler = () => callback();
     ipcRenderer.on('launcher:update-ready', handler);
     return () => ipcRenderer.removeListener('launcher:update-ready', handler);
+  },
+  onUpdateProgress: callback => {
+    const handler = (_event, progress) => callback(progress);
+    ipcRenderer.on('launcher:update-progress', handler);
+    return () => ipcRenderer.removeListener('launcher:update-progress', handler);
+  },
+  onUpdateError: callback => {
+    const handler = (_event, error) => callback(error);
+    ipcRenderer.on('launcher:update-error', handler);
+    return () => ipcRenderer.removeListener('launcher:update-error', handler);
+  },
+  onStateChanged: callback => {
+    const handler = (_event, state) => callback(state);
+    ipcRenderer.on('launcher:state-changed', handler);
+    return () => ipcRenderer.removeListener('launcher:state-changed', handler);
   },
   onServerState: callback => {
     const handler = (_event, state) => callback(state);
