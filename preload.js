@@ -1,4 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
+const { generateThemeCss } = require('./src/shared/theme-css');
 
 contextBridge.exposeInMainWorld('launcherAPI', {
   // state
@@ -201,6 +202,7 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   },
 
   // themes
+  generateThemeCss: theme => generateThemeCss(theme),
   getThemes: () => ipcRenderer.invoke('launcher:get-themes'),
   setActiveTheme: themeId => ipcRenderer.invoke('launcher:set-active-theme', themeId),
   updateTheme: (themeId, updates) => ipcRenderer.invoke('launcher:update-theme', { themeId, updates }),
