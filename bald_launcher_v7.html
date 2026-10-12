@@ -28,7 +28,7 @@ html,body{height:100%;overflow:hidden;}
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:var(--font-sans);}
 .app{background:var(--bg-void);border-radius:12px;overflow:hidden;height:100%;min-height:620px;display:flex;flex-direction:column;}
-.titlebar{height:38px;background:var(--bg-void);border-bottom:0.5px solid var(--bg-surface-2);display:flex;align-items:center;padding:0 14px;gap:9px;flex-shrink:0;}
+.titlebar{-webkit-app-region:drag;height:38px;background:var(--bg-void);border-bottom:0.5px solid var(--bg-surface-2);display:flex;align-items:center;padding:0 14px;gap:9px;flex-shrink:0;}
 .titlebar-logo{width:28px;height:28px;border-radius:7px;background:linear-gradient(180deg,#3b8d20,#245912);display:flex;align-items:center;justify-content:center;font-size:var(--text-base);font-weight:800;color:#eef9e9;flex-shrink:0;letter-spacing:-0.03em;}
 .titlebar-name{font-size:var(--text-md);color:#bbb;font-weight:500;flex:1;}
 .update-banner{display:none;align-items:center;gap:10px;padding:7px 14px;background:var(--bg-surface-2);border-bottom:0.5px solid var(--border-strong);color:var(--text-primary);font-size:var(--text-sm);}
@@ -36,7 +36,12 @@ body{font-family:var(--font-sans);}
 .update-banner span{flex:1;}
 .update-banner-progress{min-width:180px;color:var(--text-secondary);font-variant-numeric:tabular-nums;}
 .update-banner button{border:0.5px solid var(--accent-green);border-radius:6px;background:var(--accent-green-bg);color:var(--accent-green-text-on-dark);padding:5px 10px;font:inherit;cursor:pointer;}
-.titlebar-acc{display:flex;align-items:center;gap:6px;background:var(--bg-surface-2);border:0.5px solid var(--border-strong);border-radius:12px;padding:3px 10px 3px 4px;cursor:pointer;}
+.titlebar-acc{-webkit-app-region:no-drag;display:flex;align-items:center;gap:6px;background:var(--bg-surface-2);border:0.5px solid var(--border-strong);border-radius:12px;padding:3px 10px 3px 4px;cursor:pointer;}
+.window-controls{-webkit-app-region:no-drag;display:flex;align-items:center;gap:4px;margin-left:6px;}
+.window-control{appearance:none;width:34px;height:30px;display:flex;align-items:center;justify-content:center;border:0;border-radius:7px;background:transparent;color:var(--text-secondary);cursor:pointer;transition:background .12s,color .12s;}
+.window-control:hover{background:var(--bg-surface-2);color:var(--text-primary);}
+.window-control svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;}
+.window-control-close:hover{background:#c42b35;color:#fff;}
 .acc-av{width:22px;height:22px;border-radius:50%;background:#3c3489;display:flex;align-items:center;justify-content:center;font-size:var(--text-xs);color:#ceecf6;font-weight:500;}
 .acc-name{font-size:var(--text-sm);color:#888;}
 .body{flex:1;display:flex;overflow:hidden;min-height:0;}
@@ -551,6 +556,8 @@ body{background:var(--ui-bg);color:var(--ui-text);font-size:13px;}
 .titlebar-name{font-size:14px;color:var(--ui-text);font-weight:650;letter-spacing:.01em;}
 .titlebar-acc{background:var(--ui-surface);border:1px solid var(--ui-border);border-radius:var(--ui-radius-pill);padding:4px 12px 4px 5px;transition:background var(--ui-transition-fast),border-color var(--ui-transition-fast);}
 .titlebar-acc:hover{background:var(--ui-surface-hover);border-color:var(--ui-border-strong);}
+.window-control:hover{background:var(--ui-surface-hover);color:var(--ui-text);}
+.window-control-close:hover{background:#c42b35;color:#fff;}
 .acc-name{color:var(--ui-text-secondary);}
 .body{background:var(--ui-bg);}
 .sidebar{width:64px;background:var(--ui-bg-secondary);border-right:1px solid var(--ui-border);padding:var(--ui-space-md) 0;gap:var(--ui-space-xs);}
@@ -886,7 +893,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
 </style>
 
 <div class="app" style="position:relative;">
-  <div class="update-banner" id="updateBanner"><span id="updateBannerText"></span><span class="update-banner-progress" id="updateBannerProgress"></span><button id="updateButton" type="button">Update now</button></div>
+  <div class="update-banner" id="updateBanner"><span id="updateBannerText"></span><span class="update-banner-progress" id="updateBannerProgress"></span><button id="updateButton" type="button">Check for updates</button></div>
   <div class="titlebar">
     <div class="titlebar-logo">B</div>
     <span class="titlebar-name">Bald Launcher</span>
@@ -894,6 +901,17 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
       <div class="acc-av" id="titlebarAv">YO</div>
       <span class="acc-name" id="titlebarName">YourName</span>
       <i class="ti ti-chevron-down" style="font-size:10px;color:#444;" aria-hidden="true"></i>
+    </div>
+    <div class="window-controls" aria-label="Window controls">
+      <button class="window-control" type="button" data-window-control="minimize" aria-label="Minimize window" title="Minimize">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10"/></svg>
+      </button>
+      <button class="window-control" type="button" data-window-control="toggle-maximize" aria-label="Maximize or restore window" title="Maximize or restore">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx=".5"/></svg>
+      </button>
+      <button class="window-control window-control-close" type="button" data-window-control="close" aria-label="Close window" title="Close">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg>
+      </button>
     </div>
   </div>
   <div class="body">
@@ -6200,6 +6218,11 @@ document.getElementById('updateButton')?.addEventListener('click', async event =
   button.textContent = 'Checking...';
   const result = await launcherBridge?.retryUpdate?.();
   if (result?.ok === false) showUpdateFailure(result.error || 'Could not check for updates.');
+});
+document.querySelectorAll('[data-window-control]').forEach(button => {
+  button.addEventListener('click', () => {
+    void launcherBridge?.controlWindow?.(button.dataset.windowControl);
+  });
 });
 bindProfileLaunchButton();
 window.addEventListener('error', event => {

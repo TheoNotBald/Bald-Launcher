@@ -3466,6 +3466,7 @@ function createWindow() {
     height: 900,
     minWidth: 1280,
     minHeight: 720,
+    frame: false,
     icon: path.join(__dirname, 'build', 'icon.ico'),
     backgroundColor: '#0d0d0d',
     title: 'Bald Launcher',
@@ -3534,6 +3535,23 @@ function watchLauncherFile() {
 // ---------------------------------------------------------------------------
 ipcMain.handle('launcher:get-state', async () => launcherState);
 ipcMain.handle('launcher:get-update-status', async () => ({ ok: true, update: launcherUpdateStatus }));
+ipcMain.handle('launcher:window-control', async (_event, action) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: 'Launcher window is unavailable.' };
+  if (action === 'minimize') {
+    mainWindow.minimize();
+    return { ok: true };
+  }
+  if (action === 'toggle-maximize') {
+    if (mainWindow.isMaximized()) mainWindow.unmaximize();
+    else mainWindow.maximize();
+    return { ok: true, maximized: mainWindow.isMaximized() };
+  }
+  if (action === 'close') {
+    mainWindow.close();
+    return { ok: true };
+  }
+  return { ok: false, error: 'Unknown launcher window action.' };
+});
 
 ipcMain.handle('server:playit-status', async () => ({ ok: true, playit: playitManager.state() }));
 
@@ -3592,7 +3610,7 @@ ipcMain.handle('launcher:apply-update', async () => {
     return { ok: false, error: `Playit could not be stopped safely. The update was not started. ${playitStop.error || ''}`.trim() };
   }
   quittingAfterPlayitStop = true;
-  autoUpdater.quitAndInstall();
+  autoUpdater.quitAndInstall(true, true);
   return { ok: true };
 });
 

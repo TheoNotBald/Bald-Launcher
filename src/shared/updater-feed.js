@@ -12,6 +12,7 @@ const GITHUB_UPDATER_FEED = Object.freeze({
 function configureUpdaterFeed(updater, { isPackaged, resourcesPath }) {
   if (!isPackaged) return false;
   updater.autoDownload = true;
+  updater.autoInstallOnAppQuit = false;
   if (fs.existsSync(path.join(resourcesPath, 'app-update.yml'))) return false;
   updater.setFeedURL(GITHUB_UPDATER_FEED);
   return true;

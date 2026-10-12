@@ -124,6 +124,7 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   applyUpdate: () => ipcRenderer.invoke('launcher:apply-update'),
   retryUpdate: () => ipcRenderer.invoke('launcher:retry-update'),
   getUpdateStatus: () => ipcRenderer.invoke('launcher:get-update-status'),
+  controlWindow: action => ipcRenderer.invoke('launcher:window-control', action),
   onPlayitData: callback => {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on('server:playit-data', handler);

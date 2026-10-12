@@ -13,11 +13,13 @@ test('uses the GitHub feed when packaged build metadata is missing', t => {
   const calls = [];
   const updater = {
     autoDownload: false,
+    autoInstallOnAppQuit: true,
     setFeedURL: options => calls.push(options),
   };
 
   assert.equal(configureUpdaterFeed(updater, { isPackaged: true, resourcesPath }), true);
   assert.equal(updater.autoDownload, true);
+  assert.equal(updater.autoInstallOnAppQuit, false);
   assert.deepEqual(calls, [{
     provider: 'github',
     owner: 'TheoNotBald',
@@ -31,6 +33,7 @@ test('keeps electron-builder feed metadata when it is present', t => {
   fs.writeFileSync(path.join(resourcesPath, 'app-update.yml'), 'provider: github\n');
   const updater = {
     autoDownload: false,
+    autoInstallOnAppQuit: true,
     setFeedURL: () => assert.fail('existing electron-builder feed should be preserved'),
   };
 
@@ -39,6 +42,7 @@ test('keeps electron-builder feed metadata when it is present', t => {
     resourcesPath,
   }), false);
   assert.equal(updater.autoDownload, true);
+  assert.equal(updater.autoInstallOnAppQuit, false);
 });
 
 test('does not configure updates for an unpackaged development run', t => {
@@ -46,6 +50,7 @@ test('does not configure updates for an unpackaged development run', t => {
   t.after(() => fs.rmSync(resourcesPath, { recursive: true, force: true }));
   const updater = {
     autoDownload: false,
+    autoInstallOnAppQuit: true,
     setFeedURL: () => assert.fail('development runs must not configure updates'),
   };
 
@@ -54,4 +59,5 @@ test('does not configure updates for an unpackaged development run', t => {
     resourcesPath,
   }), false);
   assert.equal(updater.autoDownload, false);
+  assert.equal(updater.autoInstallOnAppQuit, true);
 });
