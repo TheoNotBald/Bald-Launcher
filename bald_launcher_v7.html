@@ -4190,10 +4190,13 @@ function showUpdateStatus(update) {
   }
   if (update?.state === 'available') {
     const banner = document.getElementById('updateBanner');
+    const progress = document.getElementById('updateBannerProgress');
     const text = document.getElementById('updateBannerText');
     const button = document.getElementById('updateButton');
-    if (text) text.textContent = `Update available - v${update.version || ''}`;
-    if (button) { button.disabled = false; button.textContent = 'Update now'; }
+    const version = update.version ? ` v${update.version}` : '';
+    if (text) text.textContent = `Downloading the latest version${version} automatically...`;
+    if (progress) progress.textContent = 'Starting download...';
+    if (button) { button.disabled = true; button.textContent = `Downloading${version}...`; }
     banner?.classList.add('visible');
   } else if (update?.state === 'current') {
     const banner = document.getElementById('updateBanner');
@@ -4205,13 +4208,19 @@ function showUpdateStatus(update) {
   } else if (update?.state === 'downloading') {
     const banner = document.getElementById('updateBanner');
     const button = document.getElementById('updateButton');
-    if (button) { button.disabled = true; button.textContent = 'Downloading...'; }
+    const version = update.version ? ` v${update.version}` : '';
+    if (button) { button.disabled = true; button.textContent = `Downloading${version}...`; }
     banner?.classList.add('visible');
   } else if (update?.state === 'downloaded') {
     updateReady = true;
     const banner = document.getElementById('updateBanner');
+    const text = document.getElementById('updateBannerText');
+    const progress = document.getElementById('updateBannerProgress');
     const button = document.getElementById('updateButton');
-    if (button) { button.disabled = false; button.textContent = 'Restart to update'; }
+    const version = update.version ? ` v${update.version}` : '';
+    if (text) text.textContent = `Version${version} downloaded and ready to install.`;
+    if (progress) progress.textContent = 'Download complete.';
+    if (button) { button.disabled = false; button.textContent = `Restart to install${version}`; }
     banner?.classList.add('visible');
   }
 }
@@ -6108,23 +6117,23 @@ async function boot(){
   }
   if (launcherBridge?.onUpdateAvailable){
     launcherBridge.onUpdateAvailable(update => {
-      const banner = document.getElementById('updateBanner');
-      const text = document.getElementById('updateBannerText');
-      const button = document.getElementById('updateButton');
-      if (!banner || !text || !button) return;
-      text.textContent = `Update available - v${update?.version || ''}`;
-      addNotification('Launcher update available', `Version ${update?.version || 'new'} is ready to install.`, 'info');
-      button.textContent = 'Update now';
+      const version = update?.version ? ` v${update.version}` : '';
+      addNotification('Launcher update downloading', `Downloading the latest release${version} automatically.`, 'info');
       updateFailed = false;
-      banner.classList.add('visible');
+      showUpdateStatus({ state: 'available', ...update });
     });
   }
   if (launcherBridge?.onUpdateReady){
-    launcherBridge.onUpdateReady(() => {
+    launcherBridge.onUpdateReady(update => {
       const button = document.getElementById('updateButton');
       updateReady = true;
       updateFailed = false;
-      if (button) { button.disabled = false; button.textContent = 'Restart to update'; }
+      const version = update?.version ? ` v${update.version}` : '';
+      const text = document.getElementById('updateBannerText');
+      const progress = document.getElementById('updateBannerProgress');
+      if (text) text.textContent = `Version${version} downloaded and ready to install.`;
+      if (progress) progress.textContent = 'Download complete.';
+      if (button) { button.disabled = false; button.textContent = `Restart to install${version}`; }
     });
   }
   if (launcherBridge?.onUpdateProgress){
@@ -6133,7 +6142,11 @@ async function boot(){
       const button = document.getElementById('updateButton');
       const percent = Math.max(0, Math.min(100, Number(progress?.percent || 0)));
       if (label) label.textContent = `${percent.toFixed(0)}% downloaded`;
-      if (button && !updateReady) button.textContent = 'Downloading...';
+      if (button && !updateReady) {
+        const version = progress?.version ? ` v${progress.version}` : '';
+        button.disabled = true;
+        button.textContent = `Downloading${version}...`;
+      }
     });
   }
   if (launcherBridge?.onUpdateNotAvailable){

@@ -336,6 +336,21 @@ test('Windows launcher window and executable use the shipped branded icon', () =
   }
 });
 
+test('launcher update UI downloads the latest release before offering installation', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'bald_launcher_v7.html'), 'utf8');
+
+  assert.match(main, /autoUpdater\.checkForUpdatesAndNotify\(\)/);
+  assert.match(main, /state:\s*'downloaded',\s*\.\.\.\(version\s*\?\s*\{\s*version\s*\}\s*:\s*\{\}\)/);
+  assert.match(main, /send\('launcher:update-ready',\s*\{\s*version\s*\}\)/);
+  assert.match(preload, /const handler = \(_event, update\) => callback\(update\);\s*ipcRenderer\.on\('launcher:update-ready'/);
+  assert.match(html, /Downloading the latest version\$\{version\} automatically/);
+  assert.match(html, /button\.disabled = true;\s*button\.textContent = `Downloading\$\{version\}\.\.\.`/);
+  assert.match(html, /Restart to install\$\{version\}/);
+  assert.doesNotMatch(html, /button\.textContent = 'Update now'/);
+});
+
 test('resource pack cards recover pack icons from imported archives', () => {
   const studio = fs.readFileSync(path.join(__dirname, '..', 'src', 'resource-packs', 'resource-pack-studio.js'), 'utf8');
   assert.match(studio, /function getPackIconDataUrl\(entry\)/);

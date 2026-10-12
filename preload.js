@@ -166,7 +166,7 @@ contextBridge.exposeInMainWorld('launcherAPI', {
     return () => ipcRenderer.removeListener('launcher:update-available', handler);
   },
   onUpdateReady: callback => {
-    const handler = () => callback();
+    const handler = (_event, update) => callback(update);
     ipcRenderer.on('launcher:update-ready', handler);
     return () => ipcRenderer.removeListener('launcher:update-ready', handler);
   },

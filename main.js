@@ -27,6 +27,7 @@ const { waitForLogResponse } = require('./src/servers/console-response');
 const { canAdoptDiscoveredProcess, findMatchingServerProcess, getProcessStartTime, matchesServerProcessIdentity: verifyServerProcessIdentity } = require('./src/servers/process-identity');
 const { ensureLauncherProfilesFile } = require('./src/shared/launcher-profiles');
 const { getLoaderJvmArguments } = require('./src/shared/loader-jvm-arguments');
+const { configureUpdaterFeed } = require('./src/shared/updater-feed');
 const { normalizeAccountCosmetics, getAccountCosmetics, setAccountSelection, pushRecentItem } = require('./src/cosmetics/account/cosmetic-state');
 const { createCosmeticLibrary } = require('./src/cosmetics/library/cosmetic-library');
 const { resolveCustomSkinLoader } = require('./src/cosmetics/custom-skin-loader/resolver');
@@ -9071,6 +9072,9 @@ app.whenReady().then(async () => {
   watchProfileFolders();
   createWindow();
   if (app.isPackaged) {
+    if (configureUpdaterFeed(autoUpdater, { isPackaged: true, resourcesPath: process.resourcesPath })) {
+      console.warn('[Updater] app-update.yml is missing; using the configured GitHub release feed.');
+    }
     autoUpdater.on('update-available', info => {
       launcherUpdateStatus = { state: 'available', version: info.version };
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('launcher:update-available', { version: info.version });
@@ -9079,17 +9083,24 @@ app.whenReady().then(async () => {
       launcherUpdateStatus = { state: 'current', version: info?.version || app.getVersion() };
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('launcher:update-not-available', launcherUpdateStatus);
     });
-    autoUpdater.on('update-downloaded', () => {
-      launcherUpdateStatus = { state: 'downloaded' };
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('launcher:update-ready');
+    autoUpdater.on('update-downloaded', info => {
+      const version = info?.version || launcherUpdateStatus.version;
+      launcherUpdateStatus = { state: 'downloaded', ...(version ? { version } : {}) };
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('launcher:update-ready', { version });
     });
     autoUpdater.on('download-progress', info => {
-      launcherUpdateStatus = { state: 'downloading', percent: Number(info.percent || 0) };
+      const version = info?.version || launcherUpdateStatus.version;
+      launcherUpdateStatus = {
+        state: 'downloading',
+        percent: Number(info.percent || 0),
+        ...(version ? { version } : {}),
+      };
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('launcher:update-progress', {
         percent: Number(info.percent || 0),
         transferred: Number(info.transferred || 0),
         total: Number(info.total || 0),
         bytesPerSecond: Number(info.bytesPerSecond || 0),
+        version,
       });
     });
     autoUpdater.on('error', error => {
