@@ -22,6 +22,9 @@ The tag must match `package.json`. GitHub Actions uses its short-lived
 Actions run and the GitHub Releases page to confirm the installer and
 `latest.yml` were uploaded.
 
+To publish the current `package.json` version without pushing a tag, open
+**Actions → Publish Windows release → Run workflow** on the `main` branch.
+
 Install the published NSIS installer to test updating. The `win-unpacked`
 development folder is not the supported installation target for applying
 updates.

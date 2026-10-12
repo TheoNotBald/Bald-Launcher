@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -24,10 +25,12 @@ jobs:
       - name: Verify tag matches package version
         shell: pwsh
         run: |
-          $tagVersion = $env:GITHUB_REF_NAME -replace '^v', ''
-          $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          if ($tagVersion -ne $packageVersion) {
-            throw "Release tag v$tagVersion does not match package.json version $packageVersion."
+          if ($env:GITHUB_EVENT_NAME -eq 'push') {
+            $tagVersion = $env:GITHUB_REF_NAME -replace '^v', ''
+            $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+            if ($tagVersion -ne $packageVersion) {
+              throw "Release tag v$tagVersion does not match package.json version $packageVersion."
+            }
           }
 
       - name: Install dependencies
