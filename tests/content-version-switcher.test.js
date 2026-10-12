@@ -302,6 +302,18 @@ test('cosmetic studio audit covers layer visibility and cape structural history'
   assert.match(studio, /if \(!canvas\) return;/);
 });
 
+test('cosmetic studio exposes a persistent color control for the 3D preview background', () => {
+  const studio = fs.readFileSync(path.join(__dirname, '..', 'src', 'cosmetics', 'studio', 'cosmetic-studio.js'), 'utf8');
+  assert.match(studio, /id="studioPreviewBackground" type="color"/);
+  assert.match(studio, /const PREVIEW_BACKGROUND_KEY = 'bald:cosmetic-studio:preview-background'/);
+  assert.match(studio, /function getPreviewBackground\(\)/);
+  assert.match(studio, /state\.previewBackground = color/);
+  assert.match(studio, /state\.viewer\.background = color/);
+  assert.match(studio, /state\.viewer\.render\(\)/);
+  assert.match(studio, /localStorage\.setItem\(PREVIEW_BACKGROUND_KEY, color\)/);
+  assert.match(studio, /state\.viewer\.background = state\.previewBackground/);
+});
+
 test('resource pack cards recover pack icons from imported archives', () => {
   const studio = fs.readFileSync(path.join(__dirname, '..', 'src', 'resource-packs', 'resource-pack-studio.js'), 'utf8');
   assert.match(studio, /function getPackIconDataUrl\(entry\)/);

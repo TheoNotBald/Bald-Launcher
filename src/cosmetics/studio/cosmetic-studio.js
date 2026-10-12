@@ -3,14 +3,26 @@
 (function () {
   const MAX_HISTORY = 50;
   const DRAFT_PREFIX = 'bald:cosmetic-studio:';
+  const PREVIEW_BACKGROUND_KEY = 'bald:cosmetic-studio:preview-background';
+  const DEFAULT_PREVIEW_BACKGROUND = '#07090b';
   let active = null;
+
+  function getPreviewBackground() {
+    try {
+      const saved = localStorage.getItem(PREVIEW_BACKGROUND_KEY);
+      return /^#[0-9a-f]{6}$/i.test(saved || '') ? saved : DEFAULT_PREVIEW_BACKGROUND;
+    } catch (error) {
+      console.warn('[Cosmetic studio] Could not load the 3D preview background preference:', error);
+      return DEFAULT_PREVIEW_BACKGROUND;
+    }
+  }
 
   function createStudio(kind, asset = null) {
     const isSkin = kind === 'skin';
     const width = isSkin ? 64 : 64;
     const height = isSkin ? 64 : 32;
     const project = !isSkin && window.CapeProjectModel ? window.CapeProjectModel.createProject({ name: asset?.name, width: asset?.width, height: asset?.height }) : null;
-    const state = { kind, width: isSkin ? 64 : project.width, height: isSkin ? 64 : project.height, model: asset?.model || 'classic', name: asset?.name || (isSkin ? 'My Skin' : 'My Cape'), asset, project, resolutionProjects: !isSkin ? { [`${project.width}x${project.height}`]: project } : null, frameIndex: 0, playbackTimer: null, sheetRotation: 0, presentation: isSkin ? null : 'portrait', tool: 'pencil', color: '#72e64b', opacity: 1, brush: 1, zoom: isSkin ? 8 : 12, grid: true, paintLayer: 'inner', symmetryX: false, symmetryY: false, pixels: new Uint8ClampedArray((isSkin ? 64 : project.width) * (isSkin ? 64 : project.height) * 4), undo: [], redo: [], dirty: false, pointer: null, previewVersion: 0, playerHidden: false };
+    const state = { kind, width: isSkin ? 64 : project.width, height: isSkin ? 64 : project.height, model: asset?.model || 'classic', name: asset?.name || (isSkin ? 'My Skin' : 'My Cape'), asset, project, resolutionProjects: !isSkin ? { [`${project.width}x${project.height}`]: project } : null, frameIndex: 0, playbackTimer: null, sheetRotation: 0, presentation: isSkin ? null : 'portrait', tool: 'pencil', color: '#72e64b', opacity: 1, brush: 1, zoom: isSkin ? 8 : 12, grid: true, paintLayer: 'inner', symmetryX: false, symmetryY: false, pixels: new Uint8ClampedArray((isSkin ? 64 : project.width) * (isSkin ? 64 : project.height) * 4), undo: [], redo: [], dirty: false, pointer: null, previewVersion: 0, playerHidden: false, previewBackground: getPreviewBackground() };
     // A cape frame owns its pixels.  `state.pixels` is only an alias kept for
     // the shared skin/cape editor helpers; it must never become a second buffer.
     if (!isSkin && state.project) state.pixels = state.project.frames[0].pixels;
@@ -60,7 +72,8 @@
           <div style="display:flex;align-items:center;gap:6px;padding:8px;border-bottom:0.5px solid var(--border);">
             <strong style="font-size:11px;color:var(--text-primary);">${skin ? '3D Player Paint' : '3D Cape Paint'}</strong>
             <span style="font-size:10px;color:var(--text-secondary);">${skin ? 'Click the player to paint pixels' : 'Click the cape surface to paint exact UV pixels'}</span>
-            <label style="margin-left:auto;font-size:10px;color:var(--text-secondary);"><input id="studioModelGrid" type="checkbox" checked /> 3D grid</label>
+            <label style="margin-left:auto;font-size:10px;color:var(--text-secondary);display:flex;align-items:center;gap:5px;">Background <input id="studioPreviewBackground" type="color" value="${state.previewBackground}" title="3D preview background color" aria-label="3D preview background color" style="width:28px;height:22px;padding:1px;border:1px solid var(--border);border-radius:4px;background:transparent;cursor:pointer;" /></label>
+            <label style="font-size:10px;color:var(--text-secondary);"><input id="studioModelGrid" type="checkbox" checked /> 3D grid</label>
           </div>
           <div style="flex:1;min-height:320px;display:flex;align-items:stretch;justify-content:stretch;overflow:hidden;min-width:0;"><canvas id="studioPreviewCanvas" width="640" height="640" style="display:block;flex:1 1 auto;min-width:0;min-height:0;width:100%;height:100%;touch-action:none;"></canvas></div>
           <div style="display:flex;gap:5px;flex-wrap:wrap;padding:8px;border-top:0.5px solid var(--border);">
@@ -122,7 +135,7 @@
     if (!window.skinview3d?.SkinViewer) return;
     const canvas = overlay.querySelector('#studioPreviewCanvas');
     state.viewer = new window.skinview3d.SkinViewer({ canvas, width: 280, height: 320 });
-    state.viewer.background = 0x07090b;
+    state.viewer.background = state.previewBackground;
     state.viewer.fov = 42;
     state.viewer.zoom = 0.65;
     state.viewer.controls.enableRotate = true;
@@ -174,6 +187,20 @@
     overlay.querySelector('#studioColor').addEventListener('input', event => { state.color = event.target.value; overlay.querySelector('#studioHex').value = event.target.value; });
     overlay.querySelector('#studioHex').addEventListener('change', event => { if (/^#[0-9a-f]{6}$/i.test(event.target.value)) { state.color = event.target.value; overlay.querySelector('#studioColor').value = state.color; } });
     overlay.querySelector('#studioGrid').addEventListener('change', event => { state.grid = event.target.checked; updateCapeGrid(state); });
+    overlay.querySelector('#studioPreviewBackground').addEventListener('input', event => {
+      const color = event.target.value;
+      if (!/^#[0-9a-f]{6}$/i.test(color)) return;
+      state.previewBackground = color;
+      if (state.viewer) {
+        state.viewer.background = color;
+        state.viewer.render();
+      }
+      try {
+        localStorage.setItem(PREVIEW_BACKGROUND_KEY, color);
+      } catch (error) {
+        console.warn('[Cosmetic studio] Could not save the 3D preview background preference:', error);
+      }
+    });
     overlay.querySelector('#studioModelGrid')?.addEventListener('change', event => { state.detachPainter?.setGrid?.(event.target.checked); });
     overlay.querySelector('[data-preview-action="rotate"]')?.addEventListener('click', () => rotatePreview(state));
     overlay.querySelectorAll('[data-cape-orientation]').forEach(button => button.addEventListener('click', () => setCapeOrientation(state, button.dataset.capeOrientation)));
