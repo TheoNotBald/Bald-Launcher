@@ -19,6 +19,7 @@ files:
   - TERMS.md
   - LICENSE.md
   - build/icon.ico
+  - build/bald-launcher-mark.svg
   - node_modules/**/*
   - patches/**/*
   - src/**/*

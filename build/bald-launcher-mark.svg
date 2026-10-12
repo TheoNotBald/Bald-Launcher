@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="tile" x1="20" y1="12" x2="108" y2="116" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1C292D"/>
+      <stop offset="1" stop-color="#0C1418"/>
+    </linearGradient>
+    <linearGradient id="top" x1="34" y1="22" x2="91" y2="63" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D3FF89"/>
+      <stop offset="1" stop-color="#76E65E"/>
+    </linearGradient>
+    <linearGradient id="left" x1="30" y1="45" x2="61" y2="107" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#48CC75"/>
+      <stop offset="1" stop-color="#198D63"/>
+    </linearGradient>
+    <linearGradient id="right" x1="68" y1="64" x2="101" y2="106" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2EAA6C"/>
+      <stop offset="1" stop-color="#146651"/>
+    </linearGradient>
+    <linearGradient id="play" x1="56" y1="74" x2="78" y2="96" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#D9F8CF"/>
+    </linearGradient>
+    <filter id="shadow" x="13" y="16" width="102" height="102" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000000" flood-opacity=".34"/>
+    </filter>
+    <clipPath id="tile-clip">
+      <rect x="5" y="5" width="118" height="118" rx="31"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#tile-clip)">
+    <rect x="5" y="5" width="118" height="118" rx="31" fill="url(#tile)"/>
+    <path d="M5 89.5C27 77 45 71 64 71s39 7 59 19v33H5v-33.5Z" fill="#17231F" fill-opacity=".52"/>
+    <rect x="5.75" y="5.75" width="116.5" height="116.5" rx="30.25" stroke="#B8F488" stroke-opacity=".26" stroke-width="1.5"/>
+  </g>
+  <g filter="url(#shadow)">
+    <path d="m64 20 40 22.5L64 65 24 42.5 64 20Z" fill="url(#top)" stroke="#DCFFB5" stroke-opacity=".7" stroke-width="1.4" stroke-linejoin="round"/>
+    <path d="M24 42.5 64 65v45L24 87.5v-45Z" fill="url(#left)" stroke="#9DF0AE" stroke-opacity=".35" stroke-width="1.4" stroke-linejoin="round"/>
+    <path d="M104 42.5 64 65v45l40-22.5v-45Z" fill="url(#right)" stroke="#8EDB9E" stroke-opacity=".28" stroke-width="1.4" stroke-linejoin="round"/>
+    <path d="m39.5 41.7 9-5.1 9 5.1-9 5.1-9-5.1Z" fill="#F1FFD7" fill-opacity=".72"/>
+    <path d="m62 29 8.5 4.8-8.5 4.8-8.5-4.8L62 29Z" fill="#E5FFC1" fill-opacity=".55"/>
+    <path d="m79.5 39.1 7.5-4.2 7.5 4.2-7.5 4.2-7.5-4.2Z" fill="#EAFFD0" fill-opacity=".6"/>
+    <path d="m56 75 23 13.2L56 101V75Z" fill="url(#play)" stroke="#F3FFF0" stroke-opacity=".65" stroke-width="1.1" stroke-linejoin="round"/>
+  </g>
+</svg>

@@ -29,7 +29,7 @@ html,body{height:100%;overflow:hidden;}
 body{font-family:var(--font-sans);}
 .app{background:var(--bg-void);border-radius:12px;overflow:hidden;height:100%;min-height:620px;display:flex;flex-direction:column;}
 .titlebar{-webkit-app-region:drag;height:38px;background:var(--bg-void);border-bottom:0.5px solid var(--bg-surface-2);display:flex;align-items:center;padding:0 14px;gap:9px;flex-shrink:0;}
-.titlebar-logo{width:28px;height:28px;border-radius:7px;background:linear-gradient(180deg,#3b8d20,#245912);display:flex;align-items:center;justify-content:center;font-size:var(--text-base);font-weight:800;color:#eef9e9;flex-shrink:0;letter-spacing:-0.03em;}
+.titlebar-logo{width:32px;height:32px;display:block;object-fit:contain;flex-shrink:0;user-select:none;-webkit-user-drag:none;}
 .titlebar-name{font-size:var(--text-md);color:#bbb;font-weight:500;flex:1;}
 .update-banner{display:none;align-items:center;gap:10px;padding:7px 14px;background:var(--bg-surface-2);border-bottom:0.5px solid var(--border-strong);color:var(--text-primary);font-size:var(--text-sm);}
 .update-banner.visible{display:flex;}
@@ -552,7 +552,7 @@ div[onclick]:focus-visible,span[onclick]:focus-visible{box-shadow:0 0 0 2px var(
 body{background:var(--ui-bg);color:var(--ui-text);font-size:13px;}
 .app{background:var(--ui-bg);border-radius:0;}
 .titlebar{height:46px;background:linear-gradient(180deg,#10151a,var(--ui-bg));border-bottom:1px solid var(--ui-border);padding:0 var(--ui-space-lg);gap:var(--ui-space-md);}
-.titlebar-logo{width:30px;height:30px;border-radius:var(--ui-radius-medium);background:linear-gradient(145deg,#3c9b25,#1b5412);box-shadow:var(--ui-shadow-small);}
+.titlebar-logo{width:34px;height:34px;background:none;box-shadow:none;border-radius:0;}
 .titlebar-name{font-size:14px;color:var(--ui-text);font-weight:650;letter-spacing:.01em;}
 .titlebar-acc{background:var(--ui-surface);border:1px solid var(--ui-border);border-radius:var(--ui-radius-pill);padding:4px 12px 4px 5px;transition:background var(--ui-transition-fast),border-color var(--ui-transition-fast);}
 .titlebar-acc:hover{background:var(--ui-surface-hover);border-color:var(--ui-border-strong);}
@@ -656,9 +656,6 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
   --sidebar-radius:10px;
 }
 .sidebar{width:var(--sidebar-width);padding:14px 0 12px;gap:0;background:linear-gradient(180deg,#0d1216 0%,#0b1014 100%);border-right:1px solid var(--ui-border);align-items:center;}
-.sidebar-brand{height:58px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:12px;flex-shrink:0;}
-.sidebar-brand-mark{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:linear-gradient(145deg,#3d9d26,#1c5413);border:1px solid #4aae35;color:#efffea;font-size:16px;font-weight:800;box-shadow:0 4px 14px rgba(57,151,36,.18);}
-.sidebar-brand-line{width:28px;height:1px;background:var(--ui-border-strong);}
 .sidebar-group{width:100%;display:flex;flex-direction:column;align-items:center;gap:var(--sidebar-gap);}
 .sidebar-main-nav{padding-top:8px;}
 .sidebar-utility-nav{margin-top:16px;padding-top:14px;border-top:1px solid var(--ui-border);}
@@ -735,8 +732,6 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
 @media (max-width:680px){
   :root{--sidebar-width:64px;--sidebar-item-size:40px;--sidebar-icon-size:19px;}
   .sidebar{padding-top:10px;}
-  .sidebar-brand{height:52px;}
-  .sidebar-brand-mark{width:29px;height:29px;border-radius:9px;font-size:14px;}
   .sidebar-nav-item[data-tooltip]::after,.sidebar-nav-item[data-tooltip]::before{display:none;}
   .appearance-header{padding:18px 16px 12px;}
   .appearance-workspace{display:block;overflow:auto;}
@@ -895,7 +890,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
 <div class="app" style="position:relative;">
   <div class="update-banner" id="updateBanner"><span id="updateBannerText"></span><span class="update-banner-progress" id="updateBannerProgress"></span><button id="updateButton" type="button">Check for updates</button></div>
   <div class="titlebar">
-    <div class="titlebar-logo">B</div>
+    <img class="titlebar-logo" src="build/bald-launcher-mark.svg" alt="Bald Launcher" draggable="false">
     <span class="titlebar-name">Bald Launcher</span>
     <div class="titlebar-acc">
       <div class="acc-av" id="titlebarAv">YO</div>
@@ -916,10 +911,6 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
   </div>
   <div class="body">
     <nav class="sidebar" aria-label="Launcher navigation">
-      <div class="sidebar-brand" aria-label="Bald Launcher home">
-        <span class="sidebar-brand-mark" aria-hidden="true">B</span>
-        <span class="sidebar-brand-line" aria-hidden="true"></span>
-      </div>
       <div class="sidebar-group sidebar-main-nav" aria-label="Main navigation">
         <button class="sidebar-nav-item on" id="nav-home" title="Profiles" data-tooltip="Profiles" type="button" aria-label="Profiles" aria-current="page" onclick="showPanel('home')">
           <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5v8a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z"/></svg>

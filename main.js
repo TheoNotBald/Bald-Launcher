@@ -3610,6 +3610,7 @@ ipcMain.handle('launcher:apply-update', async () => {
     return { ok: false, error: `Playit could not be stopped safely. The update was not started. ${playitStop.error || ''}`.trim() };
   }
   quittingAfterPlayitStop = true;
+  console.info('[Updater] Installing the downloaded release into:', autoUpdater.installDirectory);
   autoUpdater.quitAndInstall(true, true);
   return { ok: true };
 });
@@ -9090,9 +9091,16 @@ app.whenReady().then(async () => {
   watchProfileFolders();
   createWindow();
   if (app.isPackaged) {
-    if (configureUpdaterFeed(autoUpdater, { isPackaged: true, resourcesPath: process.resourcesPath })) {
+    const installDirectory = path.dirname(app.getPath('exe'));
+    autoUpdater.disableDifferentialDownload = true;
+    if (configureUpdaterFeed(autoUpdater, {
+      isPackaged: true,
+      resourcesPath: process.resourcesPath,
+      installDirectory,
+    })) {
       console.warn('[Updater] app-update.yml is missing; using the configured GitHub release feed.');
     }
+    console.info('[Updater] Update installer will replace the running installation at:', autoUpdater.installDirectory);
     autoUpdater.on('update-available', info => {
       launcherUpdateStatus = { state: 'available', version: info.version };
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('launcher:update-available', { version: info.version });

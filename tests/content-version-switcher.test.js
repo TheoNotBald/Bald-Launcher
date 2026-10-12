@@ -343,8 +343,11 @@ test('launcher update UI downloads the latest release before offering installati
   const updaterFeed = fs.readFileSync(path.join(__dirname, '..', 'src', 'shared', 'updater-feed.js'), 'utf8');
 
   assert.match(main, /autoUpdater\.checkForUpdatesAndNotify\(\)/);
+  assert.match(main, /const installDirectory = path\.dirname\(app\.getPath\('exe'\)\)/);
+  assert.match(main, /autoUpdater\.disableDifferentialDownload = true/);
   assert.match(updaterFeed, /updater\.autoDownload = true/);
   assert.match(updaterFeed, /updater\.autoInstallOnAppQuit = false/);
+  assert.match(updaterFeed, /updater\.installDirectory = installDirectory/);
   assert.match(main, /autoUpdater\.quitAndInstall\(true,\s*true\)/);
   assert.match(main, /state:\s*'downloaded',\s*\.\.\.\(version\s*\?\s*\{\s*version\s*\}\s*:\s*\{\}\)/);
   assert.match(main, /send\('launcher:update-ready',\s*\{\s*version\s*\}\)/);
@@ -359,17 +362,21 @@ test('launcher uses its dark draggable titlebar instead of the Windows white tit
   const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
   const preload = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
   const html = fs.readFileSync(path.join(__dirname, '..', 'bald_launcher_v7.html'), 'utf8');
+  const builder = fs.readFileSync(path.join(__dirname, '..', 'electron-builder.yml'), 'utf8');
 
   assert.match(main, /minHeight:\s*720,\s*frame:\s*false/);
   assert.match(main, /ipcMain\.handle\('launcher:window-control'/);
   assert.match(preload, /controlWindow:\s*action\s*=>\s*ipcRenderer\.invoke\('launcher:window-control',\s*action\)/);
   assert.match(html, /\.titlebar\{[^}]*-webkit-app-region:drag/);
+  assert.match(html, /class="titlebar-logo" src="build\/bald-launcher-mark\.svg"/);
+  assert.match(builder, /- build\/bald-launcher-mark\.svg/);
   assert.match(html, /class="window-controls"/);
   assert.match(html, /data-window-control="minimize"/);
   assert.match(html, /data-window-control="toggle-maximize"/);
   assert.match(html, /data-window-control="close"/);
   assert.match(html, /querySelectorAll\('\[data-window-control\]'\)/);
   assert.match(html, /id="updateButton" type="button">Check for updates<\/button>/);
+  assert.doesNotMatch(html, /class="sidebar-brand-mark"/);
 });
 
 test('resource pack cards recover pack icons from imported archives', () => {
