@@ -53,6 +53,7 @@ const {
 } = require('./src/content/content-provider-utils');
 
 app.commandLine.appendSwitch('disable-features', 'DIPS');
+if (process.platform === 'win32') app.setAppUserModelId('com.baldlauncher.app');
 
 const htmlPath = path.join(__dirname, 'bald_launcher_v7.html');
 let hasSingleInstanceLock = true;
@@ -3464,6 +3465,7 @@ function createWindow() {
     height: 900,
     minWidth: 1280,
     minHeight: 720,
+    icon: path.join(__dirname, 'build', 'icon.ico'),
     backgroundColor: '#0d0d0d',
     title: 'Bald Launcher',
     show: false,

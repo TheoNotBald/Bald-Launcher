@@ -314,6 +314,28 @@ test('cosmetic studio exposes a persistent color control for the 3D preview back
   assert.match(studio, /state\.viewer\.background = state\.previewBackground/);
 });
 
+test('Windows launcher window and executable use the shipped branded icon', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  assert.match(main, /app\.setAppUserModelId\('com\.baldlauncher\.app'\)/);
+  assert.match(main, /icon:\s*path\.join\(__dirname,\s*'build',\s*'icon\.ico'\)/);
+
+  const icon = fs.readFileSync(path.join(__dirname, '..', 'build', 'icon.ico'));
+  assert.equal(icon.readUInt16LE(0), 0, 'ICO reserved field');
+  assert.equal(icon.readUInt16LE(2), 1, 'ICO image type');
+  const count = icon.readUInt16LE(4);
+  assert.ok(count >= 5, 'provide multiple icon sizes for Windows surfaces');
+  for (let index = 0; index < count; index += 1) {
+    const entryOffset = 6 + index * 16;
+    const width = icon[entryOffset] || 256;
+    const height = icon[entryOffset + 1] || 256;
+    const byteLength = icon.readUInt32LE(entryOffset + 8);
+    const imageOffset = icon.readUInt32LE(entryOffset + 12);
+    assert.ok(width >= 16 && height >= 16, 'icon frames should be at least 16px');
+    assert.ok(byteLength > 8 && imageOffset + byteLength <= icon.length, 'icon frame must be complete');
+    assert.deepEqual([...icon.subarray(imageOffset, imageOffset + 8)], [137, 80, 78, 71, 13, 10, 26, 10], 'icon frame should be a PNG');
+  }
+});
+
 test('resource pack cards recover pack icons from imported archives', () => {
   const studio = fs.readFileSync(path.join(__dirname, '..', 'src', 'resource-packs', 'resource-pack-studio.js'), 'utf8');
   assert.match(studio, /function getPackIconDataUrl\(entry\)/);
