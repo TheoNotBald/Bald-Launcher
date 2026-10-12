@@ -36,7 +36,57 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build and publish Windows installer
-        run: npm run dist:publish
+      - name: Build Windows installer without publishing
+        shell: pwsh
+        run: |
+          npx electron-builder --win --publish never
+
+      - name: Publish installer and updater metadata
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tag = if ($env:GITHUB_EVENT_NAME -eq 'push') { $env:GITHUB_REF_NAME } else { "v$version" }
+          $output = Join-Path $PWD 'build-release-validation'
+          $installer = Join-Path $output "Bald Launcher Setup $version.exe"
+          $blockmap = "$installer.blockmap"
+          $latest = Join-Path $output 'latest.yml'
+
+          foreach ($file in @($installer, $blockmap, $latest)) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) {
+              throw "Expected release asset was not generated: $file"
+            }
+          }
+
+          $metadata = Get-Content -LiteralPath $latest -Raw
+          $expectedInstallerName = "Bald-Launcher-Setup-$version.exe"
+          if ($metadata -notmatch "(?m)^version: $([regex]::Escape($version))$" -or
+              $metadata -notmatch "(?m)^path: $([regex]::Escape($expectedInstallerName))$") {
+            throw "Generated latest.yml does not describe version $version and $expectedInstallerName."
+          }
+
+          $publishedInstaller = Join-Path $output $expectedInstallerName
+          $publishedBlockmap = "$publishedInstaller.blockmap"
+          Move-Item -LiteralPath $installer -Destination $publishedInstaller
+          Move-Item -LiteralPath $blockmap -Destination $publishedBlockmap
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $publishedInstaller $publishedBlockmap $latest --clobber
+          } elseif ($env:GITHUB_EVENT_NAME -eq 'push') {
+            gh release create $tag $publishedInstaller $publishedBlockmap $latest --title "Bald Launcher $version" --notes "Windows release $version" --verify-tag
+          } else {
+            gh release create $tag $publishedInstaller $publishedBlockmap $latest --title "Bald Launcher $version" --notes "Windows release $version" --target $env:GITHUB_SHA
+          }
+          if ($LASTEXITCODE -ne 0) {
+            throw "GitHub release upload failed for $tag."
+          }
+
+          $release = gh release view $tag --json assets | ConvertFrom-Json
+          $assetNames = @($release.assets | ForEach-Object name)
+          foreach ($requiredAsset in @($expectedInstallerName, "$expectedInstallerName.blockmap", 'latest.yml')) {
+            if ($requiredAsset -notin $assetNames) {
+              throw "Published release $tag is missing required asset $requiredAsset."
+            }
+          }

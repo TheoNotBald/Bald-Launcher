@@ -2,8 +2,9 @@
 
 Windows releases are built and published to the public GitHub Releases page by
 the `Publish Windows release` workflow. The workflow runs when a version tag is
-pushed, builds the NSIS installer, and uploads the installer and
-`latest.yml` metadata required by the in-app updater.
+pushed, builds the NSIS installer without invoking electron-builder's
+multi-publisher, then uploads the installer, blockmap, and `latest.yml`
+metadata together to one public GitHub release.
 
 To publish a release:
 
@@ -22,8 +23,9 @@ The tag must match `package.json`. GitHub Actions uses its short-lived
 Actions run and the GitHub Releases page to confirm the installer and
 `latest.yml` were uploaded.
 
-The workflow publishes a public, non-draft release so the in-app updater can
-discover it.
+The workflow verifies that the generated `latest.yml` matches the package
+version and that all three assets are present on the published release. The
+single-release upload avoids creating duplicate GitHub releases for one tag.
 
 To publish the current `package.json` version without pushing a tag, open
 **Actions → Publish Windows release → Run workflow** on the `main` branch.
