@@ -1,5 +1,6 @@
 appId: com.baldlauncher.app
 productName: Bald Launcher
+artifactName: Bald-Launcher-Setup-${version}.${ext}
 npmRebuild: false
 directories:
   output: build-release-validation

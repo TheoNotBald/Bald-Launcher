@@ -549,6 +549,17 @@ div[onclick]:focus-visible,span[onclick]:focus-visible{box-shadow:0 0 0 2px var(
   --font-mono:"Cascadia Code", Consolas, monospace;
 }
 
+function appendProfileLog(entry){
+  const profile = getProfile(currentProfileId);
+  const box = document.getElementById('pd-log-live');
+  const logsView = document.getElementById('pd-logs-view');
+  if (!profile || !box || logsView?.style.display !== 'flex' || box.style.display === 'none') return;
+  if (entry.profileId !== profile.id && (entry.profileId || entry.profileName !== profile.name)) return;
+  appendLogLine(box, entry, 2000);
+  const status = document.getElementById('pd-log-status-text');
+  if (status) status.textContent = entry.line;
+}
+
 body{background:var(--ui-bg);color:var(--ui-text);font-size:13px;}
 .app{background:var(--ui-bg);border-radius:0;}
 .titlebar{height:46px;background:linear-gradient(180deg,#10151a,var(--ui-bg));border-bottom:1px solid var(--ui-border);padding:0 var(--ui-space-lg);gap:var(--ui-space-md);}
@@ -1245,8 +1256,10 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
           <div class="setting-row"><span class="setting-label">Keep open after game closes</span><select class="setting-select"><option>Yes</option><option>No</option></select></div>
         </div>
         <div class="settings-section"><div class="ss-title">PvP performance</div>
-          <div class="setting-row"><span class="setting-label">Video preset</span><select class="setting-select" id="performancePreset" onchange="syncSettings()"><option value="max-fps-pvp">Max FPS PvP</option><option value="balanced-pvp" selected>Balanced PvP</option><option value="quality">Quality</option></select></div>
-          <div class="setting-row"><span class="setting-label">Simulation distance</span><input type="range" class="setting-slider" min="4" max="16" value="8" step="1" id="simSlider" oninput="updateSim(this.value)"/><span class="setting-val" id="simVal">8 ch</span></div>
+          <div class="setting-row"><span class="setting-label">Video preset</span><select class="setting-select" id="performancePreset" onchange="syncSettings()"><option value="max-fps-pvp" selected>Max FPS PvP</option><option value="balanced-pvp">Balanced PvP</option><option value="quality">Quality</option></select></div>
+          <div class="setting-row"><span class="setting-label">Render distance</span><input type="range" class="setting-slider" min="2" max="32" value="8" step="1" id="rdSlider" oninput="updateRd(this.value)"/><span class="setting-val" id="rdVal">8 ch</span></div>
+          <div class="setting-row"><span class="setting-label">Simulation distance</span><input type="range" class="setting-slider" min="5" max="32" value="5" step="1" id="simSlider" oninput="updateSim(this.value)"/><span class="setting-val" id="simVal">5 ch</span></div>
+          <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">Max FPS creates or uses a separate Optimized Fabric profile only when Sodium is verified for this exact Minecraft version. Your current profile, mods, settings and saves stay untouched; you can copy a world into the isolated profile. Use the profile menu to create or launch true Vanilla. Balanced and Quality change video settings only; installed renderer mods remain clearly labeled on their profiles. Render and simulation distances are preserved.</div>
           <div class="setting-row"><span class="setting-label">JVM profile</span><select class="setting-select" id="jvmProfile" onchange="toggleJvmArgs();syncSettings()"><option value="default">Tuned G1GC</option><option value="zgc">Ultra low-stutter (ZGC)</option><option value="custom">Custom</option></select></div>
           <div class="setting-row"><span class="setting-label">Custom JVM arguments</span><input class="setting-input" id="customJvmArgs" value="" placeholder="Only when Custom is selected" style="width:260px;" onchange="syncSettings()"/></div>
           <div class="setting-row"><span class="setting-label">Minecraft priority</span><select class="setting-select" id="processPriority" onchange="syncSettings()"><option value="normal">Normal</option><option value="above-normal">Above Normal</option></select></div>
@@ -2118,6 +2131,12 @@ async function renderersFor(mcVersion, loader) {
 }
 function badgeClass(m){ return m==='vulkan'?'badge-vulkan':m==='sodium-native-vulkan'?'badge-sodium':m==='sodium'?'badge-sodium':m==='embeddium'?'badge-sodium':'badge-vanilla'; }
 function badgeLabel(m){ return m==='vulkan'?'Vulkan':m==='sodium-native-vulkan'?'Sodium + Vulkan':m==='sodium'?'Sodium':m==='embeddium'?'Embeddium':'Vanilla'; }
+function profileModeLabel(profile){
+  if(profile?.optimizationKind==='sodium') return 'Optimized Fabric · Sodium';
+  if(profile?.optimizationKind==='vanilla-fallback') return 'True Vanilla';
+  if(profile?.rendererMode==='vanilla') return profile.loader==='vanilla' ? 'True Vanilla' : `${capitalize(profile.loader)} · No renderer mod`;
+  return badgeLabel(profile?.rendererMode);
+}
 function capitalize(s){ return String(s||'').charAt(0).toUpperCase()+String(s||'').slice(1); }
 function formatDownloads(n){ if(!n) return '0'; if(n>1e6) return (n/1e6).toFixed(1)+'M'; if(n>1e3) return (n/1e3).toFixed(1)+'K'; return String(n); }
 
@@ -2131,7 +2150,7 @@ function renderProfileGrid(){
   const query = String(document.getElementById('profileSearch')?.value || '').trim().toLowerCase();
   const sort = document.getElementById('profileSort')?.value || 'recent';
   const profiles = (state.profiles || []).filter(profile => !query
-    || `${profile.name} ${profile.mcVersion} ${profile.loader}`.toLowerCase().includes(query));
+    || `${profile.name} ${profile.mcVersion} ${profile.loader} ${profileModeLabel(profile)}`.toLowerCase().includes(query));
   const timestamp = profile => Number(profile?.lastUsedAt || profile?.updatedAt || profile?.createdAt || 0);
   const visible = [...profiles].sort((a, b) => {
     if (sort === 'name') return String(a.name).localeCompare(String(b.name));
@@ -2150,7 +2169,7 @@ function renderProfileGrid(){
       <div class="profile-card-icon">${escapeHtml(p.icon || p.name.slice(0,1).toUpperCase())}</div>
       <div class="profile-card-footer"><div class="profile-card-name">${escapeHtml(p.name)}</div><button class="profile-card-menu-btn" type="button" title="Profile actions" aria-label="Profile actions" onclick="event.stopPropagation();openProfileActionMenu(event,'${escapeHtml(escapeJsString(p.id))}')"><i class="ti ti-dots-vertical" aria-hidden="true"></i></button></div>
       <div class="profile-card-sub">${escapeHtml(p.mcVersion)} · ${escapeHtml(capitalize(p.loader))}</div>
-      <span class="profile-card-badge ${escapeHtml(badgeClass(p.rendererMode))}">${escapeHtml(badgeLabel(p.rendererMode))}</span>
+      <span class="profile-card-badge ${escapeHtml(badgeClass(p.optimizationKind==='sodium'?'sodium':p.rendererMode))}">${escapeHtml(profileModeLabel(p))}</span>
     </div>`).join('');
 }
 
@@ -2170,6 +2189,7 @@ function populateVersionLoaderSelects(versionSelId, loaderSelId, version, loader
 function openNewProfileModal(){
   document.getElementById('npName').value = 'My profile';
   populateVersionLoaderSelects('npVersion','npLoader', VERSIONS.includes('1.21.1') ? '1.21.1' : VERSIONS[0], 'fabric');
+  npSelectedRenderer = 'vanilla';
   refreshNewProfileRenderers();
   document.getElementById('newProfileModal').style.display='flex';
 }
@@ -2181,7 +2201,11 @@ async function refreshNewProfileRenderers(){
   const loader = document.getElementById('npLoader').value;
   document.getElementById('npRendererOptions').innerHTML = '<div style="color:#444;font-size:11px;">Checking availability...</div>';
   const opts = await renderersFor(version, loader);
-  if (!opts.some(o=>o.id===npSelectedRenderer)) npSelectedRenderer = opts[0].id;
+  if (!opts.some(o=>o.id===npSelectedRenderer)) {
+    npSelectedRenderer = opts.find(o => ['sodium-native-vulkan', 'sodium'].includes(o.id))?.id
+      || opts.find(o => o.id === 'vanilla')?.id
+      || opts[0].id;
+  }
   renderRendererOptions('npRendererOptions', opts, npSelectedRenderer, id => { npSelectedRenderer = id; refreshNewProfileRenderers(); });
 }
 function renderRendererOptions(containerId, opts, selectedId, onSelect){
@@ -2201,7 +2225,7 @@ async function submitNewProfile(){
   const rendererChoices = await renderersFor(mcVersion, loader);
   const rendererMode = npSelectedRenderer && rendererChoices.some(o => o.id === npSelectedRenderer)
     ? npSelectedRenderer
-    : (rendererChoices[0]?.id || 'vanilla');
+    : (rendererChoices.find(o => o.id === 'vanilla')?.id || rendererChoices[0]?.id || 'vanilla');
   npSelectedRenderer = rendererMode;
   const payload = { name, mcVersion, loader, rendererMode, icon: name.slice(0,1).toUpperCase() };
   if (launcherBridge?.createProfile) state = await launcherBridge.createProfile(payload);
@@ -2308,7 +2332,7 @@ function openProfile(profileId){
   const vulkanWarning = document.getElementById('vulkanWarning');
   if (pdIcon) pdIcon.textContent = p.icon || p.name.slice(0,1).toUpperCase();
   if (pdName) pdName.textContent = p.name;
-  if (pdSub) pdSub.textContent = `${p.mcVersion} · ${capitalize(p.loader)} · ${badgeLabel(p.rendererMode)}`;
+  if (pdSub) pdSub.textContent = `${p.mcVersion} · ${capitalize(p.loader)} · ${profileModeLabel(p)}`;
   if (vulkanWarning) vulkanWarning.style.display = p.rendererMode==='vulkan' ? 'flex' : 'none';
   renderTypeChips();
   setPdTab('content');
@@ -2412,7 +2436,7 @@ function renderProfileLogs(forceBottom = false){
   const box = document.getElementById('pd-log-live');
   if (!profile || !box) return;
   const wasAtBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
-  const entries = sessionLogs.filter(entry => entry.profileId === profile.id || (!entry.profileId && entry.profileName === profile.name));
+  const entries = sessionLogs.filter(entry => entry.profileId === profile.id || (!entry.profileId && entry.profileName === profile.name)).slice(-2000);
   box.innerHTML = entries.length
     ? entries.map(entry => `<span class="log-line ${entry.type||'normal'}">${escapeHtml(entry.line)}</span>`).join('')
     : '<span class="log-line normal">No session activity for this profile yet.</span>';
@@ -3458,6 +3482,14 @@ function populatePdSettingsForm(p){
   document.getElementById('pdJvmProfile').value = p.jvmProfile || 'default';
   document.getElementById('pdCustomJvmArgs').value = p.customJvmArgs || '';
   populateVersionLoaderSelects('pdVersionSel','pdLoaderSel', p.mcVersion, p.loader);
+  document.getElementById('pdVersionSel').disabled = p.optimizationManaged === true;
+  document.getElementById('pdLoaderSel').disabled = p.optimizationManaged === true;
+  const rendererOptions = document.getElementById('pdRendererOptions');
+  if (rendererOptions) {
+    rendererOptions.style.pointerEvents = p.optimizationManaged ? 'none' : '';
+    rendererOptions.style.opacity = p.optimizationManaged ? '0.55' : '';
+    rendererOptions.setAttribute('aria-disabled', p.optimizationManaged ? 'true' : 'false');
+  }
   onPdConfigChange(p.rendererMode);
   refreshCustomSkinLoaderStatus(p.id);
 }
@@ -3547,6 +3579,10 @@ async function savePdSettings(){
   let newRendererMode = null;
   if (launcherBridge?.updateProfile){
     const result = await launcherBridge.updateProfile(payload);
+    if (result?.ok === false) {
+      alert(result.error || 'Could not update this profile.');
+      return;
+    }
     state = result.state || result; // tolerate older shape
     rendererChanged = result.rendererChanged;
     newRendererMode = result.newRendererMode;
@@ -3568,7 +3604,12 @@ function openProfileActionMenu(event, profileId){
   const profile = getProfile(profileId);
   const menu = document.getElementById('profileActionMenu');
   if (!profile || !menu) return;
-  menu.innerHTML = `<button onclick="runProfileAction('play')"><i class="ti ti-player-play"></i> Play</button><button onclick="runProfileAction('open')"><i class="ti ti-folder"></i> Open Profile</button><button onclick="runProfileAction('edit')"><i class="ti ti-settings"></i> Edit Profile</button><button onclick="runProfileAction('duplicate')"><i class="ti ti-copy"></i> Duplicate Profile</button><button onclick="runProfileAction('export')"><i class="ti ti-download"></i> Export Profile</button><button onclick="runProfileAction('modpack')"><i class="ti ti-file-archive"></i> Export Modpack</button><button onclick="runProfileAction('backup')"><i class="ti ti-database-export"></i> Create Backup</button><button onclick="runProfileAction('reveal')"><i class="ti ti-folder-open"></i> Reveal in File Explorer</button><button class="danger" onclick="runProfileAction('delete')"><i class="ti ti-trash"></i> Delete Profile</button>`;
+  const launchVanillaText = profile.loader==='vanilla'&&profile.rendererMode==='vanilla'
+    ? 'Play true Vanilla'
+    : 'Create / launch true Vanilla profile';
+  const launchVanillaLabel = `<button onclick="runProfileAction('play-vanilla')"><i class="ti ti-player-play"></i> ${launchVanillaText}</button>`;
+  const importWorldAction = profile.optimizationManaged ? `<button onclick="runProfileAction('import-world')"><i class="ti ti-world-upload"></i> Import another world...</button>` : '';
+  menu.innerHTML = `<button onclick="runProfileAction('play')"><i class="ti ti-player-play"></i> Play</button>${launchVanillaLabel}${importWorldAction}<button onclick="runProfileAction('open')"><i class="ti ti-folder"></i> Open Profile</button><button onclick="runProfileAction('edit')"><i class="ti ti-settings"></i> Edit Profile</button><button onclick="runProfileAction('duplicate')"><i class="ti ti-copy"></i> Duplicate Profile</button><button onclick="runProfileAction('export')"><i class="ti ti-download"></i> Export Profile</button><button onclick="runProfileAction('modpack')"><i class="ti ti-file-archive"></i> Export Modpack</button><button onclick="runProfileAction('backup')"><i class="ti ti-database-export"></i> Create Backup</button><button onclick="runProfileAction('reveal')"><i class="ti ti-folder-open"></i> Reveal in File Explorer</button><button class="danger" onclick="runProfileAction('delete')"><i class="ti ti-trash"></i> Delete Profile</button>`;
   const x = Math.min((event?.clientX || 0), window.innerWidth - 230);
   const y = Math.min((event?.clientY || 0), window.innerHeight - 360);
   menu.style.left = `${Math.max(8, x)}px`; menu.style.top = `${Math.max(8, y)}px`; menu.style.display='block';
@@ -3577,6 +3618,43 @@ document.addEventListener('click', event => { if (!event.target.closest?.('#prof
 async function runProfileAction(action){
   const profileId = profileActionTargetId; const profile = getProfile(profileId); closeProfileActionMenu(); if (!profile) return;
   if (action === 'play'){ currentProfileId = profileId; openProfile(profileId); launchClick(); return; }
+  if (action === 'play-vanilla'){
+    if (!launcherBridge?.ensureVanillaProfile) {
+      alert('True Vanilla profile management is unavailable.');
+      return;
+    }
+    let result;
+    try {
+      result = await launcherBridge.ensureVanillaProfile(profileId);
+    } catch (error) {
+      alert(`Could not create a true Vanilla profile: ${error?.message || error}`);
+      return;
+    }
+    if (result?.ok === false) {
+      if (!result.canceled) alert(result.error || 'Could not create a true Vanilla profile.');
+      if (result.state) state = result.state;
+      renderProfileGrid();
+      return;
+    }
+    if (result?.state) state = result.state;
+    currentProfileId = result?.profile?.id || profileId;
+    renderProfileGrid();
+    openProfile(currentProfileId);
+    launchClick({skipAutoOptimization:true});
+    return;
+  }
+  if (action === 'import-world'){
+    if (launcherBridge?.importWorld) {
+      try {
+        const result = await launcherBridge.importWorld(profileId);
+        if (result?.ok === false && !result.canceled) alert(result.error || 'Could not import the world.');
+        else if (result?.ok) alert(`World "${result.worldName}" was copied into this isolated profile.`);
+      } catch (error) {
+        alert(`Could not import the world: ${error?.message || error}`);
+      }
+    }
+    return;
+  }
   if (action === 'open' || action === 'edit'){ openProfile(profileId); setPdTab('settings'); return; }
   if (action === 'duplicate'){ openDuplicateProfileModal(profileId); return; }
   if (action === 'export'){ if (launcherBridge?.exportProfile) { const result = await launcherBridge.exportProfile(profileId); if (result?.ok === false && !result.canceled) alert(result.error || 'Could not export profile.'); } return; }
@@ -4001,9 +4079,9 @@ function syncSettings(){
     memoryMax: Number(valueOf('ramSlider', 6)),
     resolution: valueOf('resSel', '1920×1080'),
     fpsCap: valueOf('fpsCap', 'Unlimited'),
-    renderDistance: Number(valueOf('rdSlider', 12)),
-    simulationDistance: Number(valueOf('simSlider', 8)),
-    performancePreset: valueOf('performancePreset', 'balanced-pvp'),
+    renderDistance: Number(valueOf('rdSlider', 8)),
+    simulationDistance: Number(valueOf('simSlider', 5)),
+    performancePreset: valueOf('performancePreset', 'max-fps-pvp'),
     jvmProfile: valueOf('jvmProfile', 'default'),
     customJvmArgs: valueOf('customJvmArgs', ''),
     processPriority: valueOf('processPriority', 'normal'),
@@ -4303,12 +4381,24 @@ function showServerFileContextMenu(event, serverId, filePath, isDirectory) {
 
 function escapeHtml(value){ return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function escapeInlineHandlerArg(value){ return escapeHtml(escapeJsString(value)); }
+function appendLogLine(box, entry, maxLines){
+  if (box.childElementCount === 1 && /^(No Minecraft session logs yet\.|No session activity for this profile yet\.)$/.test(box.firstElementChild?.textContent || '')) {
+    box.replaceChildren();
+  }
+  const wasAtBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+  const line = document.createElement('span');
+  line.className = `log-line ${entry.type || 'normal'}`;
+  line.textContent = entry.line;
+  box.appendChild(line);
+  while (box.childElementCount > maxLines) box.firstElementChild?.remove();
+  if (wasAtBottom) box.scrollTop = box.scrollHeight;
+}
 function buildRaw(forceBottom = false){
   const box=document.getElementById('rawLogBox');
   if (!box) return;
   const wasAtBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
   if(!sessionLogs.length){ box.innerHTML='<span class="log-line normal">No Minecraft session logs yet.</span>'; return; }
-  box.innerHTML=sessionLogs.map(r=>`<span class="log-line ${r.type||'normal'}">${escapeHtml(r.line)}</span>`).join('');
+  box.innerHTML=sessionLogs.slice(-2000).map(r=>`<span class="log-line ${r.type||'normal'}">${escapeHtml(r.line)}</span>`).join('');
   if (forceBottom || wasAtBottom) box.scrollTop=box.scrollHeight;
 }
 function switchLog(tab){
@@ -4321,6 +4411,7 @@ function switchLog(tab){
 
 // ---------------- Nav / launch ----------------
 const runningProfileIds = new Set();
+const processStateByProfile = new Map();
 let launchPreparingProfileId = null;
 
 function renderPlayButton(){
@@ -4510,6 +4601,7 @@ const SERVER_STATS_WINDOW_MS = 2 * 60 * 1000;
 const serverMetricsState = {};
 const serverMetricsRequests = new Set();
 const serverTpsRequests = new Set();
+const serverTpsRequestLastAt = new Map();
 const serverTpsConfigOverrides = {};
 const serverTpsPollStatus = {};
 let currentServerId = null;
@@ -5205,6 +5297,7 @@ function renderServerStats(){
   const metrics = serverMetricsState[server.id] || {};
   const stats = [
     ...(tpsConfig.kind === 'proxy' ? [] : [['TPS', running && latestTps != null && Date.now() - ((serverStatsState[server.id]?.tps || []).slice(-1)[0]?.time || 0) <= 30000 ? Number(latestTps).toFixed(2) : '--', tpsConfig.kind === 'missing-mod' ? 'Needs a compatible TPS provider' : serverTpsPollStatus[server.id] === 'command-failed' ? 'TPS command failed · retrying' : 'Target 20.0']]),
+    ['Java process', running ? `java.exe · PID ${Number(server.runtime?.pid) || 'starting'}` : '--', escapeHtml(server.name)],
     [tpsConfig.kind === 'proxy' ? 'Connections' : 'Players', running ? formatServerPlayerCount(metrics) : '--', metrics.playerCount != null ? 'Online / maximum players' : 'Status ping unavailable'],
     ['RAM', running && latestRam != null ? `${latestRam.toFixed(1)} MB` : '--', `${server.memoryMax || 4}GB allocated`],
     ['CPU', running && metrics.cpuPercent != null ? `${metrics.cpuPercent}%` : '--', 'Server process · % of total CPU'],
@@ -5903,8 +5996,9 @@ setInterval(() => {
       }).finally(() => serverMetricsRequests.delete(server.id));
     }
     const tpsConfig = getServerTpsConfig(server);
-    if (launcherBridge?.getServerTps && !serverTpsRequests.has(server.id) && tpsConfig.kind !== 'proxy') {
+    if (launcherBridge?.getServerTps && !serverTpsRequests.has(server.id) && tpsConfig.kind !== 'proxy' && Date.now() - (serverTpsRequestLastAt.get(server.id) || 0) >= 10000) {
       serverTpsRequests.add(server.id);
+      serverTpsRequestLastAt.set(server.id, Date.now());
       launcherBridge.getServerTps(server.id).then(result => {
         if (result?.checked && result.available) {
           const command = String(result.command || '').toLowerCase();
@@ -5941,7 +6035,7 @@ setInterval(() => {
       refreshServerStats();
     }
   }
-}, 2000);
+}, 5000);
 
 function renderServerDetail(){
   if (!currentServerId) return;
@@ -5960,11 +6054,11 @@ function renderServerDetail(){
   void loadServerConsoleHistory(currentServerId);
 }
 
-async function launchClick(){
+async function launchClick(launchOptions={}){
   const status = document.getElementById('sbStatus');
-  const profileId = currentProfileId || state.activeProfileId || state.profiles?.[0]?.id;
+  let profileId = currentProfileId || state.activeProfileId || state.profiles?.[0]?.id;
   currentProfileId = profileId || null;
-  const profile = getProfile(profileId);
+  let profile = getProfile(profileId);
   if (!profile || !profileId) {
     if (status) status.textContent = 'Select a profile first';
     return;
@@ -5986,15 +6080,38 @@ async function launchClick(){
   renderProfileLogs();
   try {
     if (launcherBridge?.launch){
-      const result = await launcherBridge.launch({ profileId, accountId: state.activeAccountId });
+      const result = await launcherBridge.launch({ profileId, accountId: state.activeAccountId, ...launchOptions });
+      if (result?.profileId && result.profileId !== profileId) {
+        const previousProfileId = profileId;
+        const nextState = await launcherBridge.getState();
+        if (nextState) state = nextState;
+        profileId = result.profileId;
+        profile = getProfile(profileId) || profile;
+        currentProfileId = profileId;
+        try { localStorage.setItem('bald:last-profile', profileId); } catch (_error) {}
+        renderProfileGrid();
+        openProfile(profileId);
+        runningProfileIds.delete(previousProfileId);
+      }
       if (result?.ok) {
-        runningProfileIds.add(profileId);
+        const exitedBeforeConfirmation = processStateByProfile.get(profileId) === false;
+        if (!exitedBeforeConfirmation) runningProfileIds.add(profileId);
         launchPreparingProfileId = null;
-        if (status) status.textContent = `Running · ${result.profileName} · ${result.accountName}`;
-        sessionLogs.push({ profileId, profileName: profile.name, type: 'info', line: `[${profile.name}] Minecraft started (PID ${result.pid || 'unknown'})` });
+        if (status) status.textContent = exitedBeforeConfirmation
+          ? `Minecraft exited while starting · ${result.profileName}`
+          : `Running · ${result.profileName} · ${result.accountName}`;
+        sessionLogs.push({
+          profileId,
+          profileName: profile.name,
+          type: exitedBeforeConfirmation ? 'warn' : 'info',
+          line: exitedBeforeConfirmation
+            ? `[${profile.name}] Minecraft exited before launch confirmation`
+            : `[${profile.name}] Minecraft started (PID ${result.pid || 'unknown'})`,
+        });
       } else {
-        if (status) status.textContent = `Launch failed · ${result?.error||'Unknown error'}`;
-        sessionLogs.push({ profileId, profileName: profile.name, type: 'err', line: `[${profile.name}] Launch failed: ${result?.error || 'Unknown error'}` });
+        if (status) status.textContent = result?.canceled ? 'Launch canceled' : `Launch failed · ${result?.error||'Unknown error'}`;
+        sessionLogs.push({ profileId, profileName: profile.name, type: result?.canceled ? 'info' : 'err', line: `[${profile.name}] ${result?.canceled ? 'Launch canceled' : `Launch failed: ${result?.error || 'Unknown error'}`}` });
+        if (!result?.canceled) void offerManagedProfileFallback(profileId, result?.error || 'The optimized launch could not start.');
       }
     } else {
       if (status) status.textContent = 'Running (preview mode)';
@@ -6009,6 +6126,37 @@ async function launchClick(){
       renderPlayButton();
     }
   }
+
+}
+
+async function offerManagedProfileFallback(profileId, reason){
+  const managed = getProfile(profileId);
+  if (!managed?.optimizationManaged || !managed.optimizationSourceProfileId) return;
+  let source = getProfile(managed.optimizationSourceProfileId);
+  if (!source) return;
+  const rollbackCount = Array.isArray(managed.optimizationRollbackFiles) ? managed.optimizationRollbackFiles.length : 0;
+  const prompt = rollbackCount
+    ? `${managed.name} could not launch.\n\n${reason}\n\nRestore ${rollbackCount} previous optimization mod version${rollbackCount===1?'':'s'} and launch the original profile "${source.name}"? The original profile and saves will remain untouched.`
+    : `${managed.name} could not launch.\n\n${reason}\n\nLaunch the original profile "${source.name}" instead? The optimized profile and its files will be kept for troubleshooting.`;
+  if (!window.confirm(prompt)) return;
+  if (rollbackCount && launcherBridge?.rollbackOptimization) {
+    let rollback;
+    try {
+      rollback = await launcherBridge.rollbackOptimization(managed.id);
+    } catch (error) {
+      alert(`Could not restore the previous optimization mods: ${error?.message || error}`);
+      return;
+    }
+    if (rollback?.ok === false) {
+      alert(rollback.error || 'Could not restore the previous optimization mods.');
+      return;
+    }
+    if (rollback?.state) state = rollback.state;
+    source = getProfile(managed.optimizationSourceProfileId) || source;
+  }
+  currentProfileId = source.id;
+  openProfile(source.id);
+  void launchClick({skipAutoOptimization:true});
 }
 function handleLaunchButtonClick(){
   const status = document.getElementById('sbStatus');
@@ -6061,7 +6209,7 @@ async function boot(){
   }
   if (launcherBridge?.getState){
     state = await launcherBridge.getState();
-    sessionLogs = (state.sessions || []).flatMap(session => (session.logs || []).map(entry => ({ ...entry, profileName: entry.profileName || session.profileName })));
+    sessionLogs = (state.sessions || []).flatMap(session => (session.logs || []).map(entry => ({ ...entry, profileName: entry.profileName || session.profileName }))).slice(-10000);
     (state.sessions || []).filter(session => session.running && session.pid).forEach(session => runningProfileIds.add(session.profileId));
   } else {
     state = {
@@ -6072,7 +6220,7 @@ async function boot(){
       activeAccountId:'ms-main',
       profiles:[{id:'default',name:'Default profile',mcVersion:'1.21.1',loader:'fabric',rendererMode:'vulkan',icon:'B',mods:[]}],
       activeProfileId:'default',
-      settings:{ memoryMax:6, resolution:'1920×1080', fpsCap:'Unlimited', renderDistance:12 },
+      settings:{ memoryMax:6, resolution:'1920×1080', fpsCap:'Unlimited', renderDistance:8, simulationDistance:5, performancePreset:'max-fps-pvp' },
       servers: [],
     };
   }
@@ -6081,9 +6229,11 @@ async function boot(){
   renderAccounts();
   bindProfileLaunchButton();
   const settings = state.settings || {};
-  document.getElementById('simSlider').value = settings.simulationDistance || 8;
+  document.getElementById('rdSlider').value = settings.renderDistance || 8;
+  document.getElementById('rdVal').textContent = `${document.getElementById('rdSlider').value} ch`;
+  document.getElementById('simSlider').value = settings.simulationDistance || 5;
   document.getElementById('simVal').textContent = `${document.getElementById('simSlider').value} ch`;
-  document.getElementById('performancePreset').value = settings.performancePreset || 'balanced-pvp';
+  document.getElementById('performancePreset').value = settings.performancePreset || 'max-fps-pvp';
   document.getElementById('jvmProfile').value = settings.jvmProfile || 'default';
   document.getElementById('customJvmArgs').value = settings.customJvmArgs || '';
   document.getElementById('processPriority').value = settings.processPriority || 'normal';
@@ -6172,15 +6322,34 @@ async function boot(){
   if (launcherBridge?.onProcessState){
     launcherBridge.onProcessState(processState => {
       if (processState?.profileId) {
+        processStateByProfile.set(processState.profileId, processState.running === true);
         if (processState.running) runningProfileIds.add(processState.profileId);
         else runningProfileIds.delete(processState.profileId);
         if (launchPreparingProfileId === processState.profileId) launchPreparingProfileId = null;
       }
       renderPlayButton();
+      if (!processState?.running && processState?.launchFailed
+        && processState.optimizationManaged && processState.optimizationSourceProfileId) {
+        const failedProfileId = processState.profileId;
+        void launcherBridge.getState().then(nextState => {
+          if (nextState) state = nextState;
+          renderProfileGrid();
+          const failure = processState.exitCode === null
+            ? `Minecraft exited after signal ${processState.exitSignal || 'unknown'}.`
+            : `Minecraft exited with code ${processState.exitCode}.`;
+          void offerManagedProfileFallback(failedProfileId, failure);
+        }).catch(error => console.error('Could not load profile state after optimized launch failure:', error));
+      }
     });
   }
   if (launcherBridge?.onLog){
-    launcherBridge.onLog(entry => { sessionLogs.push(entry); if(document.getElementById('lc-raw').style.display==='flex') buildRaw(); renderProfileLogs(); });
+    launcherBridge.onLog(entry => {
+      sessionLogs.push(entry);
+      if (sessionLogs.length > 10000) sessionLogs.splice(0, sessionLogs.length - 10000);
+      const rawPane = document.getElementById('lc-raw');
+      if (rawPane?.style.display === 'flex') appendLogLine(document.getElementById('rawLogBox'), entry, 2000);
+      appendProfileLog(entry);
+    });
   }
 }
 document.getElementById('updateButton')?.addEventListener('click', async event => {

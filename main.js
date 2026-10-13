@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require('electron');
 const { execFile, execFileSync, spawn, spawnSync } = require('child_process');
 const net = require('net');
 const zlib = require('zlib');
@@ -20,6 +20,9 @@ const MCLC = require('minecraft-launcher-core');
 const { autoUpdater } = require('electron-updater');
 const { createPlayitManager } = require('./playit-manager');
 const { createStateStore } = require('./src/shared/state-store');
+const { createSecureStateCodec } = require('./src/shared/secure-state-codec');
+const { redactLaunchArguments } = require('./src/shared/launch-arguments');
+const { findSha256Asset, parseSha256Checksum, verifySha256 } = require('./src/shared/sha256-checksum');
 const ServerStats = require('./src/servers/server-stats');
 const { runDueSchedules } = require('./src/servers/schedule-runner');
 const { restoreWorldFromZip } = require('./src/servers/backup-restore');
@@ -27,6 +30,7 @@ const { waitForLogResponse } = require('./src/servers/console-response');
 const { canAdoptDiscoveredProcess, findMatchingServerProcess, getProcessStartTime, matchesServerProcessIdentity: verifyServerProcessIdentity } = require('./src/servers/process-identity');
 const { ensureLauncherProfilesFile } = require('./src/shared/launcher-profiles');
 const { getLoaderJvmArguments } = require('./src/shared/loader-jvm-arguments');
+const { applyMinecraftVideoPreset } = require('./src/shared/minecraft-options');
 const { configureUpdaterFeed } = require('./src/shared/updater-feed');
 const { normalizeAccountCosmetics, getAccountCosmetics, setAccountSelection, pushRecentItem } = require('./src/cosmetics/account/cosmetic-state');
 const { createCosmeticLibrary } = require('./src/cosmetics/library/cosmetic-library');
@@ -307,7 +311,7 @@ function getRendererOptions(mcVersion, loader) {
     options.push({ id: 'sodium-native-vulkan', label: 'Sodium + Vulkan', note: 'Native Vulkan backend; standalone VulkanMod is not used on 26.2+' });
   } else {
     if (RENDERER_PROJECTS.sodium.loaders.includes(l)) {
-      options.push({ id: 'sodium', label: 'Sodium', note: 'Wide mod/shader compatibility' });
+      options.push({ id: 'sodium', label: 'Sodium', note: 'Exact Minecraft and loader compatibility is checked before installation' });
     }
     if (getVulkanDatabaseEntry(mcVersion, l)?.status === 'supported') {
       options.push({ id: 'vulkan', label: 'Vulkan (VulkanMod)', note: 'Verified Vulkan-specific profile for this version + loader' });
@@ -340,8 +344,8 @@ const LOADERS = ['fabric', 'forge', 'neoforge', 'quilt', 'vanilla'];
 // ---------------------------------------------------------------------------
 const RENDERER_BUNDLES = {
   vulkan: ['VulkanMod', 'Not Enough Vulkan', 'Lithium', 'FerriteCore', 'C2ME', 'Krypton', 'BadOptimizations', 'ThreadTweak', 'ScalableLux'],
-  sodium: ['Sodium', 'Lithium', 'FerriteCore', 'ImmediatelyFast', 'ModernFix', 'EntityCulling', 'MoreCulling'],
-  'sodium-native-vulkan': ['Sodium', 'Lithium', 'FerriteCore', 'ImmediatelyFast', 'ModernFix', 'EntityCulling', 'MoreCulling'],
+  sodium: ['Sodium', 'Lithium', 'FerriteCore', 'ImmediatelyFast', 'ModernFix', 'EntityCulling', 'BadOptimizations', 'MoreCulling'],
+  'sodium-native-vulkan': ['Sodium', 'Lithium', 'FerriteCore', 'ImmediatelyFast', 'ModernFix', 'EntityCulling', 'BadOptimizations', 'MoreCulling'],
   embeddium: ['Embeddium', 'FerriteCore', 'ModernFix'],
 };
 
@@ -359,11 +363,12 @@ const OPTIMIZATION_PROJECT_SLUGS = {
   ModernFix: 'modernfix',
   EntityCulling: 'entityculling',
   MoreCulling: 'moreculling',
+  BadOptimizations: 'badoptimizations',
   Sodium: 'sodium',
   Embeddium: 'embeddium',
 };
 
-const OPTIONAL_RENDERER_RECOMMENDATIONS = new Set(['EntityCulling', 'MoreCulling']);
+const OPTIONAL_RENDERER_RECOMMENDATIONS = new Set(['MoreCulling']);
 
 
 const DEFAULT_THEME = {
@@ -536,9 +541,9 @@ const DEFAULT_STATE = {
     memoryMax: 6,
     resolution: '1920×1080',
     fpsCap: 'Unlimited',
-    renderDistance: 12,
-    simulationDistance: 8,
-    performancePreset: 'balanced-pvp',
+    renderDistance: 8,
+    simulationDistance: 5,
+    performancePreset: 'max-fps-pvp',
     jvmProfile: 'default',
     customJvmArgs: '',
     processPriority: 'normal',
@@ -579,9 +584,15 @@ function normalizeProfileSync(value) {
 }
 
 let launcherState = cloneDefaultState();
+const secureStateCodec = createSecureStateCodec(safeStorage, {
+  onDecryptError: (error, accountId) => console.error(`[Auth] Could not decrypt stored credentials for account ${accountId}:`, error),
+});
 const launcherStateStore = createStateStore({
   getStateFilePath: () => getStateFilePath(),
   initialState: launcherState,
+  serializeState: secureStateCodec.serializeState,
+  deserializeState: secureStateCodec.deserializeState,
+  onPersisted: secureStateCodec.markPersisted,
   normalizeState: rawState => {
     if (!rawState || typeof rawState !== 'object') return cloneDefaultState();
     if (rawState && Array.isArray(rawState.profiles) && rawState.profiles.length) {
@@ -2417,6 +2428,7 @@ function readStateFromDisk() {
     account.cosmetics = cosmetics;
   }
   if (changed) launcherStateStore.setState(launcherState);
+  if (changed || secureStateCodec.isMigrationPending()) scheduleStateWrite();
   return launcherState;
 }
 
@@ -2442,13 +2454,14 @@ function emitStatus(message) {
   }
 }
 
-function emitProcessState(running, profile = null, pid = null) {
+function emitProcessState(running, profile = null, pid = null, details = {}) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('launcher:process-state', {
       running,
       profileId: profile?.id || null,
       profileName: profile?.name || null,
       pid,
+      ...details,
     });
   }
 }
@@ -2538,6 +2551,25 @@ function normalizeProfile(profile) {
     // Content tab can render a real installed-library list (name/type/enabled)
     // without needing a live Modrinth lookup every time the profile opens.
     mods: Array.isArray(profile?.mods) ? profile.mods.map(normalizeInstalledContent) : [],
+    optimizationManaged: profile?.optimizationManaged === true,
+    optimizationKind: ['sodium', 'vanilla-fallback'].includes(profile?.optimizationKind) ? profile.optimizationKind : null,
+    optimizationSourceProfileId: String(profile?.optimizationSourceProfileId || '').slice(0, 120) || null,
+    optimizationSourceProfileName: String(profile?.optimizationSourceProfileName || '').slice(0, 80) || null,
+    optimizationWorldSetupComplete: profile?.optimizationWorldSetupComplete === true,
+    optimizationSkippedMods: Array.isArray(profile?.optimizationSkippedMods)
+      ? profile.optimizationSkippedMods.map(value => String(value).slice(0, 120)).slice(0, 30)
+      : [],
+    optimizationReady: profile?.optimizationReady === true,
+    optimizationRollbackFiles: Array.isArray(profile?.optimizationRollbackFiles)
+      ? profile.optimizationRollbackFiles.slice(0, 100).map(record => ({
+          targetFileName: path.basename(String(record?.targetFileName || '')).slice(0, 240),
+          disabled: record?.disabled === true,
+          backupName: path.basename(String(record?.backupName || '')).slice(0, 160),
+          previousEntry: record?.previousEntry && typeof record.previousEntry === 'object'
+            ? normalizeInstalledContent(record.previousEntry)
+            : null,
+        })).filter(record => record.targetFileName && record.backupName && record.previousEntry)
+      : [],
   };
 }
 
@@ -2750,13 +2782,18 @@ function readInstalledModInventory(modsFolder) {
 }
 
 function normalizeSettings(settings) {
+  const performancePreset = ['max-fps-pvp', 'balanced-pvp', 'quality'].includes(settings?.performancePreset)
+    ? settings.performancePreset
+    : 'max-fps-pvp';
+  const renderDistance = Math.min(32, Math.max(2, Number(settings?.renderDistance) || DEFAULT_STATE.settings.renderDistance));
+  const simulationDistance = Math.min(32, Math.max(5, Number(settings?.simulationDistance) || DEFAULT_STATE.settings.simulationDistance));
   return {
     memoryMax: Math.min(32, Math.max(1, Number(settings?.memoryMax) || DEFAULT_STATE.settings.memoryMax)),
     resolution: String(settings?.resolution || DEFAULT_STATE.settings.resolution),
     fpsCap: String(settings?.fpsCap || DEFAULT_STATE.settings.fpsCap),
-    renderDistance: Number(settings?.renderDistance || DEFAULT_STATE.settings.renderDistance),
-    simulationDistance: Number(settings?.simulationDistance || DEFAULT_STATE.settings.simulationDistance),
-    performancePreset: ['max-fps-pvp', 'balanced-pvp', 'quality'].includes(settings?.performancePreset) ? settings.performancePreset : 'balanced-pvp',
+    renderDistance,
+    simulationDistance,
+    performancePreset,
     jvmProfile: ['default', 'zgc', 'custom'].includes(settings?.jvmProfile) ? settings.jvmProfile : 'default',
     customJvmArgs: String(settings?.customJvmArgs || ''),
     processPriority: settings?.processPriority === 'above-normal' ? 'above-normal' : 'normal',
@@ -3256,10 +3293,18 @@ async function getModrinthVersions(projectId, mcVersion, loader, type = 'mod', i
 }
 
 async function resolveModrinthFile(projectId, mcVersion, loader, type = 'mod', versionId = null, signal = null) {
-  const versions = await getModrinthVersions(projectId, mcVersion, normalizeContentLoader(loader), type, Boolean(versionId), signal);
+  const normalizedLoader = normalizeContentLoader(loader);
+  const versions = await getModrinthVersions(projectId, mcVersion, normalizedLoader, type, Boolean(versionId), signal);
   const selected = selectModrinthVersion(versions, versionId);
   if (!selected || !selected.file.hashes?.sha1) {
     throw new Error(`No compatible downloadable Modrinth file found for ${projectId} on Minecraft ${mcVersion}.`);
+  }
+  if (type === 'mod' && !selected.version.game_versions?.includes(mcVersion)) {
+    throw new Error(`Modrinth did not verify ${projectId} for Minecraft ${mcVersion}.`);
+  }
+  if (type === 'mod' && normalizedLoader && normalizedLoader !== 'vanilla'
+    && !selected.version.loaders?.includes(normalizedLoader)) {
+    throw new Error(`Modrinth did not verify ${projectId} for the ${normalizedLoader} loader.`);
   }
   return { ...selected.file, version: selected.version };
 }
@@ -3292,6 +3337,315 @@ function getRequiredModrinthDependencies(version) {
       projectId: String(dependency.project_id),
       versionId: dependency.version_id ? String(dependency.version_id) : null,
     }));
+}
+
+const AUTOMATIC_SODIUM_PROJECTS = [
+  { id: 'sodium', name: 'Sodium', required: true },
+  { id: 'lithium', name: 'Lithium' },
+  { id: 'ferrite-core', name: 'FerriteCore' },
+  { id: 'immediatelyfast', name: 'ImmediatelyFast' },
+  { id: 'modernfix', name: 'ModernFix' },
+  { id: 'entityculling', name: 'EntityCulling' },
+  { id: 'badoptimizations', name: 'BadOptimizations' },
+  { id: 'moreculling', name: 'MoreCulling' },
+  { id: 'c2me-fabric', name: 'C2ME' },
+  { id: 'fabric-api', name: 'Fabric API' },
+];
+
+async function resolveAutomaticSodiumPlan(mcVersion) {
+  const resolvedFiles = new Map();
+  const resolveFile = (projectId, versionId) => {
+    const key = `${projectId}:${versionId || ''}`;
+    if (!resolvedFiles.has(key)) {
+      resolvedFiles.set(key, resolveModrinthFile(projectId, mcVersion, 'fabric', 'mod', versionId));
+    }
+    return resolvedFiles.get(key);
+  };
+  const resolveTree = async (projectId, localPlan = new Map(), versionId = null) => {
+    if (localPlan.has(projectId)) {
+      const existing = localPlan.get(projectId);
+      if (versionId && existing.version.id !== versionId) {
+        throw new Error(`Conflicting required versions for ${projectId}.`);
+      }
+      return localPlan;
+    }
+
+    const file = await resolveFile(projectId, versionId);
+    const gameVersions = Array.isArray(file.version.game_versions) ? file.version.game_versions : [];
+    const loaders = Array.isArray(file.version.loaders) ? file.version.loaders : [];
+    if (!gameVersions.includes(mcVersion) || !loaders.includes('fabric')) {
+      throw new Error(`${projectId} did not return a file verified for Minecraft ${mcVersion} on Fabric.`);
+    }
+    localPlan.set(projectId, file);
+    for (const dependency of getRequiredModrinthDependencies(file.version)) {
+      await resolveTree(dependency.projectId, localPlan, dependency.versionId);
+    }
+    return localPlan;
+  };
+
+  const trees = await Promise.all(AUTOMATIC_SODIUM_PROJECTS.map(async project => {
+    try {
+      return { project, tree: await resolveTree(project.id), error: null };
+    } catch (error) {
+      if (project.required) throw error;
+      return { project, tree: null, error };
+    }
+  }));
+  const files = new Map();
+  const skipped = [];
+  for (const { project, tree, error } of trees) {
+    if (error || !tree) {
+      skipped.push(project.name);
+      continue;
+    }
+    const conflict = [...tree].some(([projectId, file]) => {
+      const existing = files.get(projectId);
+      return existing && existing.version.id !== file.version.id;
+    });
+    if (conflict) {
+      if (project.required) throw new Error(`The verified mod set requires conflicting versions of ${project.id}.`);
+      skipped.push(project.name);
+      continue;
+    }
+    for (const [projectId, file] of tree) files.set(projectId, file);
+  }
+
+  return { files, skipped };
+}
+
+function findManagedOptimizationProfile(sourceProfile, kind) {
+  return launcherState.profiles.find(profile => profile.optimizationManaged
+    && profile.optimizationKind === kind
+    && profile.optimizationSourceProfileId === sourceProfile.id
+    && profile.mcVersion === sourceProfile.mcVersion) || null;
+}
+
+function createManagedOptimizationProfile(sourceProfile, kind) {
+  const now = Date.now();
+  const id = createProfileId();
+  const name = `${sourceProfile.name.slice(0, 24)} ${kind === 'sodium' ? 'Optimized' : 'Vanilla Fallback'}`.slice(0, 40);
+  return normalizeProfile({
+    id,
+    name,
+    folderName: `${getProfileFolderName(name, id)}-${id.slice(-8)}`,
+    mcVersion: sourceProfile.mcVersion,
+    loader: kind === 'sodium' ? 'fabric' : 'vanilla',
+    rendererMode: kind === 'sodium' ? 'sodium' : 'vanilla',
+    icon: kind === 'sodium' ? 'OF' : 'V',
+    memoryMax: sourceProfile.memoryMax,
+    javaPath: sourceProfile.javaPath,
+    jvmProfile: sourceProfile.jvmProfile,
+    customJvmArgs: sourceProfile.customJvmArgs,
+    optimizationManaged: true,
+    optimizationKind: kind,
+    optimizationSourceProfileId: sourceProfile.id,
+    optimizationSourceProfileName: sourceProfile.name,
+    optimizationWorldSetupComplete: false,
+    optimizationReady: false,
+    createdAt: now,
+    updatedAt: now,
+    lastUsedAt: now,
+    mods: [],
+  });
+}
+
+async function createManagedSodiumProfile(sourceProfile) {
+  const existing = findManagedOptimizationProfile(sourceProfile, 'sodium');
+  if (existing) {
+    const sodiumEntry = existing.mods.find(entry => entry.id === 'sodium' && entry.enabled !== false);
+    const sodiumPath = sodiumEntry ? resolveInstalledContentPath(existing, sodiumEntry, false) : null;
+    if (existing.optimizationReady && fs.existsSync(getMinecraftRootFor(existing.id)) && sodiumPath && fs.existsSync(sodiumPath)) {
+      return existing;
+    }
+    throw new Error(`The existing optimized profile "${existing.name}" is incomplete. Your original profile was not changed.`);
+  }
+
+  await getLoaderManifest(sourceProfile.mcVersion, 'fabric');
+  const plan = await resolveAutomaticSodiumPlan(sourceProfile.mcVersion);
+  if (!plan.files.has('sodium')) {
+    throw new Error(`No compatible Sodium release was verified for Minecraft ${sourceProfile.mcVersion}.`);
+  }
+
+  const profile = createManagedOptimizationProfile(sourceProfile, 'sodium');
+  profile.optimizationSkippedMods = plan.skipped;
+  launcherState.profiles.push(profile);
+  const root = getMinecraftRootFor(profile.id);
+  try {
+    ensureLauncherGameFolders(root);
+    await installLoader(profile);
+    const displayNames = new Map(AUTOMATIC_SODIUM_PROJECTS.map(project => [project.id, project.name]));
+    for (const [projectId, file] of plan.files) {
+      const name = displayNames.get(projectId) || projectId;
+      const entry = normalizeInstalledContent({
+        id: projectId,
+        name,
+        slug: projectId,
+        type: 'mod',
+        enabled: true,
+        source: 'modrinth',
+        minecraftVersion: sourceProfile.mcVersion,
+        loader: 'fabric',
+        versionId: file.version.id,
+        installedVersion: file.version.version_number,
+        versionType: file.version.version_type,
+        publishedAt: file.version.date_published || '',
+        sha1: file.hashes.sha1,
+        fileName: `${sanitizeFileName(name)}.jar`,
+        projectUrl: `https://modrinth.com/mod/${encodeURIComponent(projectId)}`,
+      });
+      const filePath = getInstalledFilePath(profile, 'mod', entry.name, false);
+      emitStatus(`Installing verified ${entry.name} for Minecraft ${profile.mcVersion}...`);
+      const actualHash = await downloadToFile(file.url, filePath, entry.name);
+      if (actualHash.toLowerCase() !== file.hashes.sha1.toLowerCase()) {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        throw new Error(`SHA-1 verification failed for ${entry.name}.`);
+      }
+      profile.mods.push(entry);
+    }
+    profile.optimizationReady = true;
+    profile.updatedAt = Date.now();
+    launcherState.activeProfileId = profile.id;
+    scheduleStateWrite();
+    return profile;
+  } catch (error) {
+    launcherState.profiles = launcherState.profiles.filter(item => item.id !== profile.id);
+    if (launcherState.activeProfileId === profile.id) launcherState.activeProfileId = sourceProfile.id;
+    try {
+      fs.rmSync(root, { recursive: true, force: true });
+    } catch (cleanupError) {
+      console.error(`Could not remove incomplete optimized profile ${profile.id}:`, cleanupError);
+    }
+    scheduleStateWrite();
+    throw error;
+  }
+}
+
+function createManagedVanillaFallback(sourceProfile) {
+  const existing = findManagedOptimizationProfile(sourceProfile, 'vanilla-fallback');
+  if (existing && fs.existsSync(getMinecraftRootFor(existing.id))) return existing;
+  const profile = createManagedOptimizationProfile(sourceProfile, 'vanilla-fallback');
+  profile.optimizationReady = true;
+  launcherState.profiles.push(profile);
+  ensureLauncherGameFolders(getMinecraftRootFor(profile.id));
+  launcherState.activeProfileId = profile.id;
+  scheduleStateWrite();
+  return profile;
+}
+
+function isDirectChildPath(parentPath, childPath) {
+  const relative = path.relative(path.resolve(parentPath), path.resolve(childPath));
+  return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relative);
+}
+
+async function assertWorldHasNoSymlinks(folderPath) {
+  for (const entry of await fs.promises.readdir(folderPath, { withFileTypes: true })) {
+    const entryPath = path.join(folderPath, entry.name);
+    if (entry.isSymbolicLink()) throw new Error(`World copy stopped because "${entry.name}" is a symbolic link.`);
+    if (entry.isDirectory()) await assertWorldHasNoSymlinks(entryPath);
+  }
+}
+
+async function copyMinecraftWorld(sourceWorldPath, destinationProfile) {
+  const sourcePath = fs.realpathSync(sourceWorldPath);
+  if (!fs.statSync(sourcePath).isDirectory()) throw new Error('The selected world is not a directory.');
+  const sourceLevelPath = path.join(sourcePath, 'level.dat');
+  const sourceLevel = fs.lstatSync(sourceLevelPath);
+  if (!sourceLevel.isFile() || sourceLevel.isSymbolicLink() || sourceLevel.size <= 0) {
+    throw new Error('The selected folder does not contain a readable Minecraft level.dat file.');
+  }
+  fs.accessSync(sourceLevelPath, fs.constants.R_OK);
+
+  const savesPath = path.join(getMinecraftRootFor(destinationProfile.id), 'saves');
+  fs.mkdirSync(savesPath, { recursive: true });
+  const baseName = sanitizeFileName(path.basename(sourcePath)).replace(/\.+$/g, '') || 'Imported World';
+  let destinationPath = path.join(savesPath, baseName);
+  for (let suffix = 2; fs.existsSync(destinationPath); suffix += 1) {
+    destinationPath = path.join(savesPath, `${baseName} (${suffix})`);
+  }
+
+  const stagingPath = path.join(savesPath, `.bald-world-copy-${crypto.randomUUID()}`);
+  try {
+    emitStatus(`Copying world "${baseName}" into ${destinationProfile.name}...`);
+    await fs.promises.cp(sourcePath, stagingPath, { recursive: true, errorOnExist: true, force: false });
+    await assertWorldHasNoSymlinks(stagingPath);
+    const copiedLevelPath = path.join(stagingPath, 'level.dat');
+    const copiedLevel = await fs.promises.lstat(copiedLevelPath);
+    if (!copiedLevel.isFile() || copiedLevel.size !== sourceLevel.size) {
+      throw new Error('The copied world did not pass its level.dat verification.');
+    }
+    await fs.promises.access(copiedLevelPath, fs.constants.R_OK);
+    if (fs.existsSync(destinationPath)) throw new Error('A world with that name appeared in the destination profile.');
+    await fs.promises.rename(stagingPath, destinationPath);
+    return { name: path.basename(destinationPath), sourcePath, destinationPath };
+  } catch (error) {
+    if (fs.existsSync(stagingPath)) await fs.promises.rm(stagingPath, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+async function prepareManagedWorlds(profile, sourceProfile) {
+  if (profile.optimizationWorldSetupComplete) return;
+  const sourceRunning = runningProcesses.has(sourceProfile.id);
+  const sourceSaves = path.join(getMinecraftRootFor(sourceProfile.id), 'saves');
+  const availableWorlds = !sourceRunning && fs.existsSync(sourceSaves)
+    ? fs.readdirSync(sourceSaves, { withFileTypes: true }).filter(entry => {
+        if (!entry.isDirectory()) return false;
+        try {
+          const level = fs.lstatSync(path.join(sourceSaves, entry.name, 'level.dat'));
+          return level.isFile() && !level.isSymbolicLink() && level.size > 0;
+        } catch (_error) {
+          return false;
+        }
+      })
+    : [];
+  const buttons = availableWorlds.length
+    ? ['Copy an existing world', 'Start with an empty world list', 'Cancel']
+    : ['Start with an empty world list', 'Cancel'];
+  const decision = await dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    title: `Set up ${profile.name}`,
+    message: 'This profile has its own saves folder.',
+    detail: sourceRunning
+      ? `Stop "${sourceProfile.name}" before copying one of its worlds. You can start with an empty world list now and import a copy later.`
+      : availableWorlds.length
+      ? `Choose a world from "${sourceProfile.name}" to copy. The original world will remain untouched.`
+      : 'No readable worlds were found in the original profile. You can start with an empty world list.',
+    buttons,
+    cancelId: buttons.length - 1,
+    defaultId: 0,
+  });
+  if (decision.response === buttons.length - 1) {
+    throw Object.assign(new Error('World setup was canceled; no profile or world was changed.'), { code: 'WORLD_SETUP_CANCELED' });
+  }
+
+  const choseCopy = availableWorlds.length > 0 && decision.response === 0;
+  if (choseCopy) {
+    const selected = await dialog.showOpenDialog(mainWindow, {
+      title: `Choose a world to copy from ${sourceProfile.name}`,
+      defaultPath: sourceSaves,
+      properties: ['openDirectory'],
+    });
+    if (selected.canceled || !selected.filePaths[0]) {
+      throw Object.assign(new Error('World selection was canceled; no world was changed.'), { code: 'WORLD_SETUP_CANCELED' });
+    }
+    const sourceRoot = fs.realpathSync(sourceSaves);
+    const selectedPath = fs.realpathSync(selected.filePaths[0]);
+    if (!isDirectChildPath(sourceRoot, selectedPath)) {
+      throw new Error('Choose a world folder directly inside the original profile saves folder.');
+    }
+    const copied = await copyMinecraftWorld(selectedPath, profile);
+    await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'World copied',
+      message: 'The world copy was verified and is ready to use.',
+      detail: `Source: ${copied.sourcePath}\nDestination: ${copied.destinationPath}\nThe original world was not modified.`,
+      buttons: ['Continue'],
+    });
+  }
+
+  profile.optimizationWorldSetupComplete = true;
+  scheduleStateWrite();
 }
 
 async function installServerModrinthContent(server, entry, filePath, versionId = null, signal = null) {
@@ -3477,7 +3831,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      backgroundThrottling: false,
+      backgroundThrottling: true,
     },
   });
 
@@ -3567,8 +3921,26 @@ ipcMain.handle('server:playit-install', async (_event, payload) => {
       ? assets.find(item => /windows/i.test(item.name) && /x86_64|amd64/i.test(item.name) && item.name.toLowerCase().endsWith('.exe'))
       : assets.find(item => /linux/i.test(item.name) && /x86_64|amd64/i.test(item.name) && !item.name.endsWith('.sha256'));
     if (!asset?.browser_download_url) throw new Error('Could not find a compatible Playit agent build in the latest release');
-    await downloadToFile(asset.browser_download_url, agentPath, 'Playit agent');
-    if (process.platform !== 'win32') fs.chmodSync(agentPath, 0o755);
+    const checksumAsset = findSha256Asset(assets, asset.name);
+    if (!checksumAsset?.browser_download_url) {
+      throw new Error(`The latest Playit release does not publish a SHA-256 checksum for ${asset.name}; installation was blocked.`);
+    }
+    const checksumResponse = await axios.get(checksumAsset.browser_download_url, {
+      responseType: 'text',
+      timeout: 15000,
+      maxContentLength: 4096,
+      headers: { 'User-Agent': 'BaldLauncher/0.1.8', Accept: 'text/plain' },
+    });
+    const expectedChecksum = parseSha256Checksum(checksumResponse.data, asset.name);
+    const stagedAgentPath = `${agentPath}.${crypto.randomUUID()}.verified-download`;
+    try {
+      await downloadToFile(asset.browser_download_url, stagedAgentPath, 'Playit agent');
+      verifySha256(fs.readFileSync(stagedAgentPath), expectedChecksum);
+      if (process.platform !== 'win32') fs.chmodSync(stagedAgentPath, 0o755);
+      fs.renameSync(stagedAgentPath, agentPath);
+    } finally {
+      if (fs.existsSync(stagedAgentPath)) fs.rmSync(stagedAgentPath, { force: true });
+    }
     return { ok: true, playit: playitManager.state() };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -4385,6 +4757,7 @@ ipcMain.handle('launcher:apply-bundle', async (_event, payload = {}) => {
     ensureLauncherGameFolders(getMinecraftRootFor(profile));
 
     const idx = launcherState.profiles.findIndex(p => p.id === profile.id);
+    await ensureFabricApi(profile);
     const installPlan = [];
     for (const item of items || []) {
       const itemId = String(item?.id || '');
@@ -4420,7 +4793,6 @@ ipcMain.handle('launcher:create-profile', async (_event, payload) => {
     updatedAt: now,
     lastUsedAt: now,
   });
-  await ensureFabricApi(profile);
   launcherState.profiles.push(profile);
   launcherState.activeProfileId = profile.id;
   ensureLauncherGameFolders(getMinecraftRootFor(profile.id));
@@ -4444,6 +4816,13 @@ ipcMain.handle('launcher:duplicate-profile', async (_event, payload) => {
       id: duplicateId,
       name: duplicateName,
       folderName: getProfileFolderName(duplicateName, duplicateId),
+      optimizationManaged: false,
+      optimizationKind: null,
+      optimizationSourceProfileId: null,
+      optimizationSourceProfileName: null,
+      optimizationWorldSetupComplete: false,
+      optimizationSkippedMods: [],
+      optimizationReady: false,
     });
     const sourceRoot = getMinecraftRootFor(source.id);
     duplicateRoot = getMinecraftRootFor(duplicate);
@@ -5002,6 +5381,16 @@ ipcMain.handle('launcher:update-profile', async (_event, payload) => {
   if (idx === -1) return { state: launcherState, rendererChanged: false, newRendererMode: null };
 
   const previous = launcherState.profiles[idx];
+  if (previous.optimizationManaged
+    && (String(payload?.mcVersion || previous.mcVersion) !== previous.mcVersion
+      || String(payload?.loader || previous.loader).toLowerCase() !== previous.loader
+      || String(payload?.rendererMode || previous.rendererMode) !== previous.rendererMode)) {
+    return {
+      ok: false,
+      error: 'The Minecraft version and loader of an isolated optimization profile are locked to its verified mod set. Duplicate the profile to customize it.',
+      state: launcherState,
+    };
+  }
   const updated = normalizeProfile({ ...previous, ...payload, updatedAt: Date.now(), lastUsedAt: previous.lastUsedAt });
   const rendererChanged = updated.rendererMode !== previous.rendererMode;
 
@@ -5021,7 +5410,6 @@ ipcMain.handle('launcher:update-profile', async (_event, payload) => {
   }
 
   launcherState.profiles[idx] = updated;
-  await ensureFabricApi(updated);
   scheduleStateWrite();
   return { state: launcherState, rendererChanged, newRendererMode: rendererChanged ? updated.rendererMode : null };
 });
@@ -5040,6 +5428,151 @@ ipcMain.handle('launcher:delete-profile', async (_event, payload) => {
   if (deleteFiles) fs.rmSync(profileRoot, { recursive: true, force: true });
   scheduleStateWrite();
   return { ok: true, state: launcherState };
+});
+
+ipcMain.handle('launcher:import-world', async (_event, profileId) => {
+  const profile = launcherState.profiles.find(item => item.id === String(profileId || ''));
+  if (!profile?.optimizationManaged) {
+    return { ok: false, error: 'World import is available for isolated optimization profiles.' };
+  }
+  if (runningProcesses.has(profile.id)) {
+    return { ok: false, error: 'Close Minecraft with this profile before importing a world.' };
+  }
+  const selected = await dialog.showOpenDialog(mainWindow, {
+    title: `Choose a world to copy into ${profile.name}`,
+    properties: ['openDirectory'],
+  });
+  if (selected.canceled || !selected.filePaths[0]) return { ok: false, canceled: true };
+
+  try {
+    const copied = await copyMinecraftWorld(selected.filePaths[0], profile);
+    profile.optimizationWorldSetupComplete = true;
+    scheduleStateWrite();
+    await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'World imported',
+      message: 'The world copy was verified and is ready to use.',
+      detail: `Source: ${copied.sourcePath}\nDestination: ${copied.destinationPath}\nThe original world was not modified.`,
+      buttons: ['Continue'],
+    });
+    return { ok: true, worldName: copied.name };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await dialog.showMessageBox(mainWindow, {
+      type: 'error',
+      title: 'World import failed',
+      message: 'The world could not be copied.',
+      detail: message,
+      buttons: ['OK'],
+    });
+    return { ok: false, error: message };
+  }
+});
+
+ipcMain.handle('launcher:rollback-optimization', async (_event, profileId) => {
+  const profile = launcherState.profiles.find(item => item.id === String(profileId || ''));
+  if (!profile?.optimizationManaged || profile.optimizationKind !== 'sodium') {
+    return { ok: false, error: 'This profile has no managed Sodium optimization rollback.' };
+  }
+  if (runningProcesses.has(profile.id)) {
+    return { ok: false, error: 'Close Minecraft before rolling back optimization updates.' };
+  }
+  const records = profile.optimizationRollbackFiles || [];
+  if (!records.length) return { ok: false, error: 'No previous optimization mod versions are available to restore.' };
+
+  const root = getMinecraftRootFor(profile.id);
+  const rollbackRoot = path.join(root, 'optimization-rollback');
+  const staged = [];
+  const swapped = [];
+  try {
+    for (const record of records) {
+      if (path.basename(record.targetFileName) !== record.targetFileName
+        || !record.targetFileName.toLowerCase().endsWith('.jar')
+        || path.basename(record.backupName) !== record.backupName
+        || ['.', '..'].includes(record.backupName)) {
+        throw new Error('The saved rollback manifest contains an invalid file path.');
+      }
+      const backupPath = path.join(rollbackRoot, record.backupName);
+      if (!fs.existsSync(backupPath)) throw new Error(`The previous version of ${record.previousEntry.name} is missing.`);
+      const destination = path.join(root, 'mods', `${record.targetFileName}${record.disabled ? '.disabled' : ''}`);
+      const stagedPath = `${destination}.${crypto.randomUUID()}.rollback`;
+      fs.copyFileSync(backupPath, stagedPath);
+      staged.push({ record, destination, stagedPath });
+    }
+
+    for (const item of staged) {
+      const displacedPath = `${item.destination}.${crypto.randomUUID()}.rollback-old`;
+      const hadDestination = fs.existsSync(item.destination);
+      if (hadDestination) fs.renameSync(item.destination, displacedPath);
+      try {
+        fs.renameSync(item.stagedPath, item.destination);
+        swapped.push({ ...item, displacedPath: hadDestination ? displacedPath : null });
+      } catch (error) {
+        if (hadDestination && fs.existsSync(displacedPath)) fs.renameSync(displacedPath, item.destination);
+        throw error;
+      }
+    }
+
+    const restoredEntries = new Map(records.map(record => [record.previousEntry.id, record.previousEntry]));
+    profile.mods = [
+      ...profile.mods.filter(entry => !restoredEntries.has(entry.id)),
+      ...restoredEntries.values(),
+    ];
+    profile.optimizationRollbackFiles = [];
+    profile.updatedAt = Date.now();
+    scheduleStateWrite();
+    for (const item of swapped) {
+      try {
+        if (item.displacedPath && fs.existsSync(item.displacedPath)) fs.unlinkSync(item.displacedPath);
+      } catch (error) {
+        console.warn(`Could not remove replaced optimization file ${path.basename(item.displacedPath || '')}:`, error);
+      }
+    }
+    try {
+      fs.rmSync(rollbackRoot, { recursive: true, force: true });
+    } catch (error) {
+      console.warn(`Could not remove completed optimization rollback files for ${profile.id}:`, error);
+    }
+    return { ok: true, state: launcherState };
+  } catch (error) {
+    for (const item of [...swapped].reverse()) {
+      try {
+        if (fs.existsSync(item.destination)) fs.unlinkSync(item.destination);
+        if (item.displacedPath && fs.existsSync(item.displacedPath)) fs.renameSync(item.displacedPath, item.destination);
+      } catch (restoreError) {
+        console.error(`Could not restore ${path.basename(item.destination)} after a failed optimization rollback:`, restoreError);
+      }
+    }
+    for (const item of staged) {
+      try {
+        if (fs.existsSync(item.stagedPath)) fs.unlinkSync(item.stagedPath);
+      } catch (cleanupError) {
+        console.error(`Could not remove staged rollback file ${path.basename(item.stagedPath)}:`, cleanupError);
+      }
+    }
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:ensure-vanilla-profile', async (_event, sourceProfileId) => {
+  const source = launcherState.profiles.find(item => item.id === String(sourceProfileId || ''));
+  if (!source) return { ok: false, error: 'Source profile not found.' };
+  if (source.optimizationManaged && source.optimizationKind === 'vanilla-fallback') {
+    return { ok: true, profile: source, state: launcherState };
+  }
+  const profile = createManagedVanillaFallback(source);
+  try {
+    await prepareManagedWorlds(profile, source);
+    return { ok: true, profile, state: launcherState };
+  } catch (error) {
+    return {
+      ok: false,
+      canceled: error?.code === 'WORLD_SETUP_CANCELED',
+      error: error instanceof Error ? error.message : String(error),
+      profile,
+      state: launcherState,
+    };
+  }
 });
 
 function getServerById(serverId) {
@@ -8535,6 +9068,7 @@ ipcMain.handle('launcher:cancel-dependency-install', async (_event, dependencyIn
 ipcMain.handle('launcher:update-content', async (_event, payload = {}) => {
   let stagingPath = '';
   let backupPath = '';
+  let pendingOptimizationBackupPath = '';
   let currentPath = '';
   try {
     const server = payload.serverId ? getServerById(payload.serverId) : null;
@@ -8586,6 +9120,16 @@ ipcMain.handle('launcher:update-content', async (_event, payload = {}) => {
     } else {
       installedVersion = await installModrinthContent(profile, { ...entry, type }, stagingPath, payload.versionId || entry.latestVersionId || null);
     }
+    const managedSodiumProfile = !server && profile.optimizationManaged && profile.optimizationKind === 'sodium';
+    const existingRollback = managedSodiumProfile
+      ? (profile.optimizationRollbackFiles || []).find(record => record.targetFileName === oldName)
+      : null;
+    if (managedSodiumProfile && !existingRollback) {
+      const rollbackRoot = path.join(root, 'optimization-rollback');
+      fs.mkdirSync(rollbackRoot, { recursive: true });
+      pendingOptimizationBackupPath = path.join(rollbackRoot, `${crypto.randomUUID()}.jar`);
+      fs.copyFileSync(currentPath, pendingOptimizationBackupPath);
+    }
     if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath);
     fs.renameSync(currentPath, backupPath);
     try {
@@ -8595,6 +9139,15 @@ ipcMain.handle('launcher:update-content', async (_event, payload = {}) => {
       if (fs.existsSync(currentPath.replace(/\.disabled$/i, ''))) fs.unlinkSync(currentPath.replace(/\.disabled$/i, ''));
       fs.renameSync(backupPath, currentPath);
       throw error;
+    }
+    if (managedSodiumProfile && !existingRollback && pendingOptimizationBackupPath) {
+      profile.optimizationRollbackFiles.push({
+        targetFileName: oldName,
+        disabled: wasDisabled,
+        backupName: path.basename(pendingOptimizationBackupPath),
+        previousEntry: normalizeInstalledContent(entry),
+      });
+      pendingOptimizationBackupPath = '';
     }
     try {
       fs.unlinkSync(backupPath);
@@ -8625,6 +9178,9 @@ ipcMain.handle('launcher:update-content', async (_event, payload = {}) => {
   } catch (error) {
     if (stagingPath && fs.existsSync(stagingPath)) fs.unlinkSync(stagingPath);
     if (backupPath && fs.existsSync(backupPath) && currentPath && !fs.existsSync(currentPath)) fs.renameSync(backupPath, currentPath);
+    if (pendingOptimizationBackupPath && fs.existsSync(pendingOptimizationBackupPath)) {
+      fs.unlinkSync(pendingOptimizationBackupPath);
+    }
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 });
@@ -8636,6 +9192,9 @@ ipcMain.handle('launcher:remove-content', async (_event, payload) => {
       : getActiveProfile();
     if (!profile) throw new Error('No active profile');
     const existing = profile.mods.find(m => m.id === payload?.id);
+    if (profile.optimizationManaged && profile.optimizationKind === 'sodium' && existing?.id === 'sodium') {
+      throw new Error('Sodium is required by this managed performance profile. Use a separate profile to remove it.');
+    }
     if (existing) {
       for (const disabled of [false, true]) {
         const filePath = resolveInstalledContentPath(profile, existing, disabled)
@@ -8672,6 +9231,9 @@ ipcMain.handle('launcher:toggle-content', async (_event, payload) => {
 
     const entry = launcherState.profiles[idx].mods[modIdx];
     const currentEnabled = entry.enabled !== false;
+    if (profile.optimizationManaged && profile.optimizationKind === 'sodium' && entry.id === 'sodium') {
+      throw new Error('Sodium is required by this managed performance profile and cannot be disabled.');
+    }
     const actualFromPath = resolveInstalledContentPath(profile, entry, !currentEnabled) || resolveInstalledContentPath(profile, entry, currentEnabled);
     if (!actualFromPath) throw new Error(`Installed file for ${entry.name} was not found`);
     const nextEnabled = !currentEnabled;
@@ -8728,7 +9290,7 @@ ipcMain.handle('launcher:get-diagnostics', async () => {
     loader: profile?.loader || null,
     renderer: profile?.rendererMode || null,
     jvmArguments: getJvmArguments(normalizeSettings({ ...launcherState.settings, ...(profile || {}) })),
-    launchArguments: lastLaunchArguments,
+    launchArguments: redactLaunchArguments(lastLaunchArguments),
     checks: {
       java: javaPath !== 'java' && javaVersion !== 'Unavailable' ? 'good' : 'warning',
       profileDirectory: profileRoot && fs.existsSync(profileRoot) ? 'good' : 'problem',
@@ -8881,25 +9443,63 @@ ipcMain.handle('launcher:run-benchmark', async (_event, payload) => {
 ipcMain.handle('launcher:launch', async (_event, payload) => {
   const requestedProfileId = payload?.profileId || null;
   const requestedAccountId = payload?.accountId || null;
+  let launchProfileId = requestedProfileId;
   try {
     const account = launcherState.accounts.find(item => item.id === requestedAccountId) || getActiveAccount();
     if (!account) throw new Error('No account selected');
     launcherState.activeAccountId = account.id;
-    const profile = launcherState.profiles.find(item => item.id === requestedProfileId) || getActiveProfile();
+    const sourceProfile = launcherState.profiles.find(item => item.id === requestedProfileId) || getActiveProfile();
+    let profile = sourceProfile;
     if (!profile) throw new Error('No active profile');
+    const settings = normalizeSettings({ ...launcherState.settings, ...profile, ...(payload?.settings || {}) });
+    if (settings.performancePreset === 'max-fps-pvp' && !profile.optimizationManaged && payload?.skipAutoOptimization !== true) {
+      try {
+        profile = await createManagedSodiumProfile(sourceProfile);
+        emitLog(profile.name, 'info', `Using isolated Sodium profile for ${sourceProfile.name}.`, profile.id);
+        if (profile.optimizationSkippedMods.length) {
+          emitLog(profile.name, 'info', `Skipped mods without an exact verified release: ${profile.optimizationSkippedMods.join(', ')}.`, profile.id);
+        }
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        emitStatus(`Sodium is not verified for Minecraft ${sourceProfile.mcVersion}; preparing an isolated Vanilla fallback.`);
+        emitLog(sourceProfile.name, 'warn', `Automatic Sodium profile unavailable: ${reason}`, sourceProfile.id);
+        profile = createManagedVanillaFallback(sourceProfile);
+      }
+      launchProfileId = profile.id;
+    }
+    if (profile.optimizationManaged && profile.optimizationKind === 'sodium') {
+      const sodium = profile.mods.find(item => item.id === 'sodium');
+      const sodiumPath = sodium && sodium.enabled !== false
+        ? resolveInstalledContentPath(profile, sodium, false)
+        : null;
+      if (!sodiumPath) {
+        const optimizationSource = launcherState.profiles.find(item => item.id === profile.optimizationSourceProfileId);
+        if (!optimizationSource) throw new Error('Sodium is missing or disabled, and the original source profile is unavailable.');
+        emitLog(profile.name, 'warn', 'Sodium is missing or disabled; using an isolated Vanilla fallback.', profile.id);
+        profile = createManagedVanillaFallback(optimizationSource);
+        launchProfileId = profile.id;
+      }
+    }
+    if (profile.optimizationManaged && !profile.optimizationWorldSetupComplete) {
+      const optimizationSource = launcherState.profiles.find(item => item.id === profile.optimizationSourceProfileId);
+      if (!optimizationSource) throw new Error('The source profile for this isolated optimization profile no longer exists.');
+      await prepareManagedWorlds(profile, optimizationSource);
+    }
     if (runningProcesses.has(profile.id)) throw new Error(`${profile.name} is already running`);
     profile.lastUsedAt = Date.now();
     scheduleStateWrite();
 
-    const settings = normalizeSettings({ ...launcherState.settings, ...profile, ...(payload?.settings || {}) });
     const memoryMax = Math.min(32, Math.max(1, Number(settings.memoryMax) || 6));
     const minecraftRoot = getMinecraftRootFor(profile.id);
     ensureLauncherGameFolders(minecraftRoot);
+    const optionsPath = path.join(minecraftRoot, 'options.txt');
+    const existingOptions = fs.existsSync(optionsPath) ? fs.readFileSync(optionsPath, 'utf8') : '';
+    fs.writeFileSync(optionsPath, applyMinecraftVideoPreset(existingOptions, settings), 'utf8');
     const sharedCacheRoot = getSharedCacheRoot();
     fs.mkdirSync(path.join(sharedCacheRoot, 'assets'), { recursive: true });
     fs.mkdirSync(path.join(sharedCacheRoot, 'libraries'), { recursive: true });
     launcherState.sessions = launcherState.sessions.filter(session => session.profileId !== profile.id);
-    const session = { profileId: profile.id, profileName: profile.name, pid: null, running: true, logs: [] };
+    const session = { profileId: profile.id, profileName: profile.name, pid: null, running: true, stopRequested: false, logs: [] };
     launcherState.sessions.push(session);
     scheduleStateWrite();
     emitLog(profile.name, 'normal', `Starting ${profile.mcVersion} with ${profile.loader}`, profile.id);
@@ -8931,7 +9531,7 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
     });
     profileLauncher.on('data', line => emitLog(profile.name, classifyLogLine(line), line, profile.id));
     profileLauncher.on('arguments', args => {
-      lastLaunchArguments = Array.isArray(args) ? args : [];
+      lastLaunchArguments = redactLaunchArguments(args);
       emitLog(profile.name, 'info', `Final launch command: java ${lastLaunchArguments.join(' ')}`, profile.id);
     });
     const javaExecutable = await resolveJavaForMinecraft(profile.mcVersion, profile.javaPath);
@@ -8977,16 +9577,33 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       emitStatus(`Running · ${profile.name} · ${account.name}`);
       child.stdout?.on('data', data => String(data).split(/\r?\n/).forEach(line => emitLog(profile.name, 'normal', line, profile.id)));
       child.stderr?.on('data', data => String(data).split(/\r?\n/).forEach(line => emitLog(profile.name, 'warn', line, profile.id)));
-      child.on('exit', code => {
+      child.on('exit', (code, signal) => {
         runningProcesses.delete(profile.id);
         session.running = false;
         session.pid = null;
         session.exitCode = code ?? null;
-        session.crashAnalysis = code === 0 ? null : analyzeMinecraftFailure(profile, session, code ?? null);
+        session.exitSignal = signal || null;
+        const launchFailed = !session.stopRequested && (code !== 0 || Boolean(signal));
+        session.crashAnalysis = launchFailed ? analyzeMinecraftFailure(profile, session, code ?? null) : null;
+        if (code === 0 && profile.optimizationManaged && profile.optimizationRollbackFiles.length) {
+          try {
+            fs.rmSync(path.join(getMinecraftRootFor(profile.id), 'optimization-rollback'), { recursive: true, force: true });
+            profile.optimizationRollbackFiles = [];
+          } catch (error) {
+            console.error(`Could not clear verified optimization rollback files for ${profile.id}:`, error);
+          }
+        }
         scheduleStateWrite();
-        emitProcessState(false, profile, child.pid);
-        emitLog(profile.name, code === 0 ? 'info' : 'err', `Minecraft exited with code ${code ?? 0}`, profile.id);
-        emitStatus(`Minecraft exited with code ${code ?? 0}`);
+        emitProcessState(false, profile, child.pid, {
+          exitCode: code,
+          exitSignal: signal || null,
+          launchFailed,
+          optimizationManaged: profile.optimizationManaged,
+          optimizationSourceProfileId: profile.optimizationSourceProfileId,
+        });
+        const exitSummary = code === null ? `signal ${signal || 'unknown'}` : `code ${code}`;
+        emitLog(profile.name, launchFailed ? 'err' : 'info', `Minecraft exited with ${exitSummary}`, profile.id);
+        emitStatus(`Minecraft exited with ${exitSummary}`);
       });
     }
 
@@ -8996,19 +9613,19 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       throw new Error('Minecraft did not start. Open this profile\'s Logs tab for the MCLC failure details.');
     }
 
-    return { ok: true, profileName: profile.name, version: versionNumber, accountName: account.name, pid: child?.pid || null };
+    return { ok: true, profileId: profile.id, profileName: profile.name, version: versionNumber, accountName: account.name, pid: child?.pid || null };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const failedSession = requestedProfileId && getSession(requestedProfileId);
-    if (failedSession && !runningProcesses.has(requestedProfileId)) {
+    const failedSession = launchProfileId && getSession(launchProfileId);
+    if (failedSession && !runningProcesses.has(launchProfileId)) {
       failedSession.running = false;
       failedSession.pid = null;
       scheduleStateWrite();
     }
-    const failedProfile = launcherState.profiles.find(item => item.id === requestedProfileId) || getActiveProfile();
+    const failedProfile = launcherState.profiles.find(item => item.id === launchProfileId) || getActiveProfile();
     if (failedProfile) emitLog(failedProfile.name, 'err', `Launch failed: ${message}`, failedProfile.id);
     emitStatus(`Launch failed · ${message}`);
-    return { ok: false, error: message };
+    return { ok: false, canceled: error?.code === 'WORLD_SETUP_CANCELED', profileId: launchProfileId, error: message };
   }
 });
 
@@ -9022,6 +9639,7 @@ ipcMain.handle('launcher:stop', async (_event, payload) => {
   emitStatus('Closing Minecraft safely...');
   emitLog(profile?.name || 'Profile', 'normal', 'Stop requested; allowing Minecraft to save and close...', profileId);
   const pid = child?.pid || session?.pid;
+  if (session) session.stopRequested = true;
   try {
     if (child && !child.killed) child.kill('SIGTERM');
     await new Promise(resolve => {
@@ -9151,15 +9769,6 @@ app.whenReady().then(async () => {
     }
   });
   watchLauncherFile();
-  for (const profile of launcherState.profiles) {
-    if (profile.loader !== 'fabric') continue;
-    try {
-      emitStatus(`Checking Fabric API for ${profile.name}...`);
-      if (await ensureFabricApi(profile)) scheduleStateWrite();
-    } catch (error) {
-      emitLog(profile.name, 'err', `Fabric API preinstall failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
   const profile = getActiveProfile();
   if (profile && profile.rendererMode !== 'vanilla' && (!['fabric', 'quilt'].includes(profile.loader) || !getLoaderVersionId(profile, profile.mcVersion, profile.loader))) {
     mainWindow.webContents.once('did-finish-load', () => emitStatus(`Warning: ${profile.rendererMode} is selected but ${profile.loader} is not installed yet`));

@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-function createStateStore({ getStateFilePath, initialState, normalizeState, onPersistError }) {
+function createStateStore({ getStateFilePath, initialState, normalizeState, serializeState, deserializeState, onPersisted, onPersistError }) {
   let state = normalizeState ? normalizeState(initialState || {}) : (initialState || {});
   let writeTimer = null;
   let writePending = false;
@@ -23,7 +23,8 @@ function createStateStore({ getStateFilePath, initialState, normalizeState, onPe
         return state;
       }
       const parsed = JSON.parse(fs.readFileSync(targetPath, 'utf8'));
-      state = normalizeState ? normalizeState(parsed || state) : (parsed || state);
+      const decoded = deserializeState ? deserializeState(parsed || state) : (parsed || state);
+      state = normalizeState ? normalizeState(decoded) : decoded;
       return state;
     } catch (error) {
       if (onPersistError) onPersistError(error, 'read');
@@ -39,8 +40,10 @@ function createStateStore({ getStateFilePath, initialState, normalizeState, onPe
     try {
       const dir = path.dirname(targetPath);
       fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(targetPath, JSON.stringify(state, null, 2), 'utf8');
+      const persistedState = serializeState ? serializeState(state) : state;
+      fs.writeFileSync(targetPath, JSON.stringify(persistedState, null, 2), 'utf8');
       writePending = false;
+      if (onPersisted) onPersisted();
       return true;
     } catch (error) {
       if (onPersistError) onPersistError(error, 'write');
@@ -65,8 +68,10 @@ function createStateStore({ getStateFilePath, initialState, normalizeState, onPe
       try {
         const dir = path.dirname(targetPath);
         await fs.promises.mkdir(dir, { recursive: true });
-        await fs.promises.writeFile(targetPath, JSON.stringify(state, null, 2), 'utf8');
+        const persistedState = serializeState ? serializeState(state) : state;
+        await fs.promises.writeFile(targetPath, JSON.stringify(persistedState, null, 2), 'utf8');
         writePending = false;
+        if (onPersisted) onPersisted();
       } catch (error) {
         writePending = true;
         if (onPersistError) onPersistError(error, 'write');

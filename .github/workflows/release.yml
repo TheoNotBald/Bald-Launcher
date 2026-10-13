@@ -49,7 +49,8 @@ jobs:
           $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $tag = if ($env:GITHUB_EVENT_NAME -eq 'push') { $env:GITHUB_REF_NAME } else { "v$version" }
           $output = Join-Path $PWD 'build-release-validation'
-          $installer = Join-Path $output "Bald Launcher Setup $version.exe"
+          $expectedInstallerName = "Bald-Launcher-Setup-$version.exe"
+          $installer = Join-Path $output $expectedInstallerName
           $blockmap = "$installer.blockmap"
           $latest = Join-Path $output 'latest.yml'
 
@@ -60,24 +61,18 @@ jobs:
           }
 
           $metadata = Get-Content -LiteralPath $latest -Raw
-          $expectedInstallerName = "Bald-Launcher-Setup-$version.exe"
           if ($metadata -notmatch "(?m)^version: $([regex]::Escape($version))$" -or
               $metadata -notmatch "(?m)^path: $([regex]::Escape($expectedInstallerName))$") {
             throw "Generated latest.yml does not describe version $version and $expectedInstallerName."
           }
 
-          $publishedInstaller = Join-Path $output $expectedInstallerName
-          $publishedBlockmap = "$publishedInstaller.blockmap"
-          Move-Item -LiteralPath $installer -Destination $publishedInstaller
-          Move-Item -LiteralPath $blockmap -Destination $publishedBlockmap
-
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {
-            gh release upload $tag $publishedInstaller $publishedBlockmap $latest --clobber
+            gh release upload $tag $installer $blockmap $latest --clobber
           } elseif ($env:GITHUB_EVENT_NAME -eq 'push') {
-            gh release create $tag $publishedInstaller $publishedBlockmap $latest --title "Bald Launcher $version" --notes "Windows release $version" --verify-tag
+            gh release create $tag $installer $blockmap $latest --title "Bald Launcher $version" --notes "Windows release $version" --verify-tag
           } else {
-            gh release create $tag $publishedInstaller $publishedBlockmap $latest --title "Bald Launcher $version" --notes "Windows release $version" --target $env:GITHUB_SHA
+            gh release create $tag $installer $blockmap $latest --title "Bald Launcher $version" --notes "Windows release $version" --target $env:GITHUB_SHA
           }
           if ($LASTEXITCODE -ne 0) {
             throw "GitHub release upload failed for $tag."
