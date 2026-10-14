@@ -30,7 +30,12 @@ const { waitForLogResponse } = require('./src/servers/console-response');
 const { canAdoptDiscoveredProcess, findMatchingServerProcess, getProcessStartTime, matchesServerProcessIdentity: verifyServerProcessIdentity } = require('./src/servers/process-identity');
 const { ensureLauncherProfilesFile } = require('./src/shared/launcher-profiles');
 const { getLoaderJvmArguments } = require('./src/shared/loader-jvm-arguments');
-const { applyMinecraftVideoPreset } = require('./src/shared/minecraft-options');
+const {
+  getJvmArguments,
+  getRequiredJavaVersion,
+  isOptimizationOptedIn,
+  recommendMinecraftMemoryGb,
+} = require('./src/shared/performance-runtime');
 const { configureUpdaterFeed } = require('./src/shared/updater-feed');
 const { normalizeAccountCosmetics, getAccountCosmetics, setAccountSelection, pushRecentItem } = require('./src/cosmetics/account/cosmetic-state');
 const { createCosmeticLibrary } = require('./src/cosmetics/library/cosmetic-library');
@@ -230,20 +235,6 @@ const RENDERER_PROJECTS = {
 };
 
 const VULKAN_SUPPORTED_1_21 = new Set(['1.21', '1.21.1', '1.21.2', '1.21.3', '1.21.4', '1.21.5', '1.21.9', '1.21.10', '1.21.11']);
-const SODIUM_BUNDLE = ['lithium', 'ferrite-core', 'immediatelyfast', 'modernfix', 'entityculling', 'moreculling'];
-
-function createSodiumDatabaseEntry(mcVersion) {
-  return {
-    status: 'recommended',
-    label: 'Sodium',
-    project: 'sodium',
-    optimizationMods: SODIUM_BUNDLE,
-    dependencies: ['fabric-api'],
-    excludedMods: ['vulkanmod', 'not-enough-vulkan', 'entityculling', 'moreculling', 'immediatelyfast', 'modernfix', 'noisium', 'particle-core'],
-    compatibility: Object.fromEntries(['sodium', ...SODIUM_BUNDLE].map(project => [project, 'SUPPORTED'])),
-    mcVersion,
-  };
-}
 
 function getRendererDatabaseEntry(mcVersion, loader, renderer) {
   const normalizedLoader = normalizeContentLoader(loader);
@@ -251,9 +242,6 @@ function getRendererDatabaseEntry(mcVersion, loader, renderer) {
     || (mcVersion.startsWith('26.1') ? RENDERER_DATABASE[`26.1.1:${normalizedLoader}:${renderer}`] : null)
     || (mcVersion.startsWith('26.2') ? RENDERER_DATABASE[`26.2:${normalizedLoader}:${renderer}`] : null);
   if (exact) return exact;
-  if (renderer === 'sodium' && mcVersion.startsWith('1.21') && ['fabric', 'quilt', 'neoforge'].includes(normalizedLoader)) {
-    return createSodiumDatabaseEntry(mcVersion);
-  }
   return null;
 }
 
@@ -538,15 +526,15 @@ const DEFAULT_STATE = {
   ],
   activeProfileId: 'default',
   settings: {
-    memoryMax: 6,
+    memoryMax: recommendMinecraftMemoryGb(os.totalmem(), os.freemem()),
+    memoryMaxAuto: true,
     resolution: '1920×1080',
     fpsCap: 'Unlimited',
     renderDistance: 8,
     simulationDistance: 5,
-    performancePreset: 'max-fps-pvp',
     jvmProfile: 'default',
     customJvmArgs: '',
-    processPriority: 'normal',
+    optimizationModsEnabled: false,
   },
   themes: {
     '1': createBuiltInTheme('Bald Dark'),
@@ -2782,21 +2770,12 @@ function readInstalledModInventory(modsFolder) {
 }
 
 function normalizeSettings(settings) {
-  const performancePreset = ['max-fps-pvp', 'balanced-pvp', 'quality'].includes(settings?.performancePreset)
-    ? settings.performancePreset
-    : 'max-fps-pvp';
-  const renderDistance = Math.min(32, Math.max(2, Number(settings?.renderDistance) || DEFAULT_STATE.settings.renderDistance));
-  const simulationDistance = Math.min(32, Math.max(5, Number(settings?.simulationDistance) || DEFAULT_STATE.settings.simulationDistance));
   return {
     memoryMax: Math.min(32, Math.max(1, Number(settings?.memoryMax) || DEFAULT_STATE.settings.memoryMax)),
-    resolution: String(settings?.resolution || DEFAULT_STATE.settings.resolution),
-    fpsCap: String(settings?.fpsCap || DEFAULT_STATE.settings.fpsCap),
-    renderDistance,
-    simulationDistance,
-    performancePreset,
+    memoryMaxAuto: settings?.memoryMaxAuto === true,
     jvmProfile: ['default', 'zgc', 'custom'].includes(settings?.jvmProfile) ? settings.jvmProfile : 'default',
     customJvmArgs: String(settings?.customJvmArgs || ''),
-    processPriority: settings?.processPriority === 'above-normal' ? 'above-normal' : 'normal',
+    optimizationModsEnabled: isOptimizationOptedIn(settings),
   };
 }
 
@@ -2967,21 +2946,6 @@ function getCurseForgeApiKey() {
   return String(process.env.CURSEFORGE_API_KEY || '').trim();
 }
 
-function getJvmArguments(settings) {
-  const tunedG1Args = [
-    '-XX:+UseG1GC', '-XX:+ParallelRefProcEnabled', '-XX:MaxGCPauseMillis=130',
-    '-XX:+UnlockExperimentalVMOptions', '-XX:+DisableExplicitGC',
-    '-XX:G1NewSizePercent=30', '-XX:G1MaxNewSizePercent=40', '-XX:G1HeapRegionSize=8M',
-    '-XX:G1ReservePercent=20', '-XX:G1HeapWastePercent=5', '-XX:G1MixedGCCountTarget=4',
-    '-XX:InitiatingHeapOccupancyPercent=15', '-XX:G1MixedGCLiveThresholdPercent=90',
-    '-XX:G1RSetUpdatingPauseTimePercent=5', '-XX:SurvivorRatio=32', '-XX:+PerfDisableSharedMem',
-    '-XX:MaxTenuringThreshold=1',
-  ];
-  if (settings.jvmProfile === 'custom') return settings.customJvmArgs.trim().split(/\s+/).filter(Boolean);
-  if (settings.jvmProfile === 'zgc') return ['-XX:+UseZGC', '-XX:+ZGenerational'];
-  return tunedG1Args;
-}
-
 function parseJavaMajorVersion(javaExecutable) {
   const cacheKey = String(javaExecutable || '');
   if (javaMajorVersionCache.has(cacheKey)) return javaMajorVersionCache.get(cacheKey);
@@ -2997,20 +2961,6 @@ function parseJavaMajorVersion(javaExecutable) {
     javaMajorVersionCache.set(cacheKey, 0);
     return 0;
   }
-}
-
-function getRequiredJavaVersion(mcVersion) {
-  const version = String(mcVersion || '').trim();
-  const [major = 0, minor = 0, patch = 0] = version.split('.').map(Number);
-  if (major >= 25) return 25;
-  if (major >= 23) return 22;
-  if (major === 1) {
-    if (minor >= 21 || (minor === 20 && patch >= 5)) return 21;
-    if (minor >= 18) return 17;
-    if (minor === 17) return 16;
-    return 8;
-  }
-  return 21;
 }
 
 function getManagedJavaRoot(version) {
@@ -3043,17 +2993,16 @@ async function installManagedJava(version) {
   const asset = Array.isArray(response.data) ? response.data[0] : null;
   const binary = asset?.binary?.package;
   if (!binary?.link) throw new Error(`Java ${version} is required, but no compatible JDK download was found.`);
+  if (!binary.checksum) throw new Error(`Java ${version} download has no published SHA-256 checksum; refusing an unverified runtime.`);
   const archivePath = path.join(app.getPath('userData'), 'runtimes', `jdk-${version}.download`);
   const stagingPath = `${rootPath}.staging`;
   fs.mkdirSync(path.dirname(archivePath), { recursive: true });
   emitStatus(`Downloading Java ${version}...`);
   const archive = await axios.get(binary.link, { responseType: 'arraybuffer', timeout: 180000, headers: { 'User-Agent': 'Bald-Launcher' } });
   const archiveBuffer = Buffer.from(archive.data);
-  if (binary.checksum) {
-    const checksum = crypto.createHash('sha256').update(archiveBuffer).digest('hex');
-    if (checksum.toLowerCase() !== String(binary.checksum).toLowerCase()) {
-      throw new Error(`Java ${version} download failed integrity verification.`);
-    }
+  const checksum = crypto.createHash('sha256').update(archiveBuffer).digest('hex');
+  if (checksum.toLowerCase() !== String(binary.checksum).toLowerCase()) {
+    throw new Error(`Java ${version} download failed integrity verification.`);
   }
   fs.writeFileSync(archivePath, archiveBuffer);
   try {
@@ -3161,11 +3110,6 @@ async function resolveJavaForMinecraft(mcVersion, preferredPath = '') {
     return preferredPath;
   }
   return getJavaPath(minimumVersion, true);
-}
-
-function setProcessPriority(child, priority) {
-  if (process.platform !== 'win32' || priority !== 'above-normal' || !child?.pid) return;
-  execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `$p=Get-Process -Id ${Number(child.pid)} -ErrorAction SilentlyContinue; if ($p) {$p.PriorityClass='AboveNormal'}`], () => {});
 }
 
 function getActiveAccount() {
@@ -9267,13 +9211,32 @@ ipcMain.handle('launcher:open-folder', async (_event, folderType) => {
 });
 
 ipcMain.handle('launcher:get-diagnostics', async () => {
-  const javaPath = await getJavaPath();
-  const javaVersion = await new Promise(resolve => execFile(javaPath, ['-version'], (error, stdout, stderr) => resolve(error ? 'Unavailable' : `${stdout || ''}${stderr || ''}`.trim())));
-  const gpu = await new Promise(resolve => {
-    if (process.platform !== 'win32') return resolve('Unavailable');
-    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name'], (error, stdout) => resolve(error ? 'Unavailable' : stdout.trim()));
-  });
   const profile = getActiveProfile();
+  const javaPath = await getJavaPath(getRequiredJavaVersion(profile?.mcVersion || '1.21.1'));
+  const javaVersion = await new Promise(resolve => execFile(javaPath, ['-version'], (error, stdout, stderr) => resolve(error ? 'Unavailable' : `${stdout || ''}${stderr || ''}`.trim())));
+  const gpuAdapters = await new Promise(resolve => {
+    if (process.platform !== 'win32') return resolve([]);
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_VideoController | Select-Object Name,DriverVersion,AdapterRAM | ConvertTo-Json -Compress'],
+      { timeout: 8000, windowsHide: true, maxBuffer: 1024 * 1024 },
+      (error, stdout) => {
+        if (error || !stdout.trim()) return resolve([]);
+        try {
+          const parsed = JSON.parse(stdout);
+          const adapters = Array.isArray(parsed) ? parsed : [parsed];
+          resolve(adapters.map(adapter => ({
+            name: String(adapter.Name || 'Unknown adapter'),
+            driverVersion: String(adapter.DriverVersion || 'Unavailable'),
+            memoryBytes: Number(adapter.AdapterRAM) || null,
+          })));
+        } catch {
+          resolve([]);
+        }
+      },
+    );
+  });
+  const gpu = gpuAdapters.map(adapter => adapter.name).join(', ') || 'Unavailable';
   const profileRoot = profile ? getMinecraftRootFor(profile.id) : null;
   const disk = profileRoot && fs.statfsSync ? (() => { try { const info = fs.statfsSync(profileRoot); return { freeGB: Math.round((info.bsize * info.bavail) / 1073741824), totalGB: Math.round((info.bsize * info.blocks) / 1073741824) }; } catch (_error) { return null; } })() : null;
   const internet = await new Promise(resolve => { const request = require('https').get('https://api.modrinth.com/v2', { timeout: 4000 }, response => { response.resume(); resolve(response.statusCode >= 200 && response.statusCode < 500); }); request.on('error', () => resolve(false)); request.on('timeout', () => { request.destroy(); resolve(false); }); });
@@ -9281,15 +9244,23 @@ ipcMain.handle('launcher:get-diagnostics', async () => {
     cpu: os.cpus()[0]?.model || 'Unknown',
     logicalCores: os.cpus().length,
     memoryGB: Math.round(os.totalmem() / 1073741824),
+    availableMemoryGB: Number((os.freemem() / 1073741824).toFixed(1)),
+    recommendedMemoryGB: recommendMinecraftMemoryGb(os.totalmem(), os.freemem(), profile?.optimizationKind === 'sodium'),
     platform: `${process.platform} ${process.arch}`,
+    operatingSystem: `${os.type()} ${os.release()}`,
     javaPath,
     javaVersion,
+    javaMajorVersion: parseJavaMajorVersion(javaPath) || null,
     gpu,
+    gpuAdapters,
+    gpuDetection: gpu === 'Unavailable'
+      ? 'GPU model detection failed; Minecraft active adapter and GPU capabilities are not available from this check.'
+      : 'Installed adapter names only; the active Minecraft adapter and GPU capabilities are not verified.',
     profile: profile?.name || null,
     minecraft: profile?.mcVersion || null,
     loader: profile?.loader || null,
     renderer: profile?.rendererMode || null,
-    jvmArguments: getJvmArguments(normalizeSettings({ ...launcherState.settings, ...(profile || {}) })),
+    jvmArguments: getJvmArguments(normalizeSettings({ ...launcherState.settings, ...(profile || {}) }), parseJavaMajorVersion(javaPath)),
     launchArguments: redactLaunchArguments(lastLaunchArguments),
     checks: {
       java: javaPath !== 'java' && javaVersion !== 'Unavailable' ? 'good' : 'warning',
@@ -9452,7 +9423,7 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
     let profile = sourceProfile;
     if (!profile) throw new Error('No active profile');
     const settings = normalizeSettings({ ...launcherState.settings, ...profile, ...(payload?.settings || {}) });
-    if (settings.performancePreset === 'max-fps-pvp' && !profile.optimizationManaged && payload?.skipAutoOptimization !== true) {
+    if (isOptimizationOptedIn(settings) && !profile.optimizationManaged && payload?.skipAutoOptimization !== true) {
       try {
         profile = await createManagedSodiumProfile(sourceProfile);
         emitLog(profile.name, 'info', `Using isolated Sodium profile for ${sourceProfile.name}.`, profile.id);
@@ -9489,12 +9460,11 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
     profile.lastUsedAt = Date.now();
     scheduleStateWrite();
 
-    const memoryMax = Math.min(32, Math.max(1, Number(settings.memoryMax) || 6));
+    const memoryMax = settings.memoryMaxAuto
+      ? recommendMinecraftMemoryGb(os.totalmem(), os.freemem(), profile.optimizationKind === 'sodium')
+      : Math.min(32, Math.max(1, Number(settings.memoryMax) || 6));
     const minecraftRoot = getMinecraftRootFor(profile.id);
     ensureLauncherGameFolders(minecraftRoot);
-    const optionsPath = path.join(minecraftRoot, 'options.txt');
-    const existingOptions = fs.existsSync(optionsPath) ? fs.readFileSync(optionsPath, 'utf8') : '';
-    fs.writeFileSync(optionsPath, applyMinecraftVideoPreset(existingOptions, settings), 'utf8');
     const sharedCacheRoot = getSharedCacheRoot();
     fs.mkdirSync(path.join(sharedCacheRoot, 'assets'), { recursive: true });
     fs.mkdirSync(path.join(sharedCacheRoot, 'libraries'), { recursive: true });
@@ -9535,6 +9505,11 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       emitLog(profile.name, 'info', `Final launch command: java ${lastLaunchArguments.join(' ')}`, profile.id);
     });
     const javaExecutable = await resolveJavaForMinecraft(profile.mcVersion, profile.javaPath);
+    const javaMajor = parseJavaMajorVersion(javaExecutable);
+    const jvmArguments = getJvmArguments(settings, javaMajor);
+    if (settings.jvmProfile === 'zgc' && javaMajor < 21) {
+      emitLog(profile.name, 'warn', `ZGC generational mode requires Java 21 or newer; using the Java ${javaMajor || 'default'} garbage collector.`, profile.id);
+    }
     const loaderJvmArguments = getLoaderJvmArguments(
       path.join(minecraftRoot, 'versions', versionNumber, `${versionNumber}.json`),
       {
@@ -9550,7 +9525,7 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
         : { number: profile.mcVersion, type: 'custom', custom: versionNumber },
       memory: { min: '1G', max: `${Math.min(32, Math.max(1, memoryMax))}G` },
       javaPath: javaExecutable,
-      customArgs: [...getJvmArguments(settings), ...loaderJvmArguments],
+      customArgs: [...jvmArguments, ...loaderJvmArguments],
       authorization,
       overrides: {
         gameDirectory: minecraftRoot,
@@ -9559,10 +9534,6 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
         maxSockets: 8,
         natives: path.join(minecraftRoot, 'natives'),
       },
-      window: {
-        width: settings.resolution.includes('3840') ? 3840 : settings.resolution.includes('1920') ? 1920 : 1280,
-        height: settings.resolution.includes('2160') ? 2160 : settings.resolution.includes('1080') ? 1080 : 720,
-      },
     });
 
     if (child) {
@@ -9570,9 +9541,8 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       session.pid = child.pid || null;
       session.running = true;
       scheduleStateWrite();
-      setProcessPriority(child, settings.processPriority);
       emitLog(profile.name, 'info', `Java ${getRequiredJavaVersion(profile.mcVersion)}: ${javaExecutable}`, profile.id);
-      emitLog(profile.name, 'info', `JVM arguments: ${getJvmArguments(settings).join(' ') || 'MCLC defaults'}`, profile.id);
+      emitLog(profile.name, 'info', `JVM arguments: ${jvmArguments.join(' ') || 'Java defaults'}`, profile.id);
       emitProcessState(true, profile, child.pid);
       emitStatus(`Running · ${profile.name} · ${account.name}`);
       child.stdout?.on('data', data => String(data).split(/\r?\n/).forEach(line => emitLog(profile.name, 'normal', line, profile.id)));

@@ -46,6 +46,11 @@ test('profile cards render profile-supplied text as escaped text', () => {
     capitalize: value => String(value).charAt(0).toUpperCase() + String(value).slice(1),
     badgeClass: () => 'vanilla',
     badgeLabel: () => 'Vanilla',
+    profileModeLabel: profile => profile.optimizationKind === 'vanilla-fallback'
+      ? 'True Vanilla'
+      : profile.optimizationKind === 'sodium'
+        ? 'Optimized Fabric · Sodium'
+        : 'Vanilla',
   };
   vm.runInNewContext(`${source}\nrenderProfileGrid();`, context);
 

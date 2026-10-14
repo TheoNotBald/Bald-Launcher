@@ -17,7 +17,7 @@ test('shared content loader normalization is available to installation and versi
   const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
   assert.match(main, /normalizeContentLoader,\s*\n\s*selectCurseForgeFile/);
   assert.match(main, /const normalizedLoader = normalizeContentLoader\(loader\)/);
-  assert.match(main, /getModrinthVersions\(projectId, mcVersion, normalizeContentLoader\(loader\), type/);
+  assert.match(main, /getModrinthVersions\(projectId, mcVersion, normalizedLoader, type/);
   assert.match(main, /const loader = String\(server/);
   assert.doesNotMatch(main, /function getVulkanDatabaseEntry[\s\S]*?function normalizeContentLoader/);
 });

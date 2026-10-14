@@ -1247,22 +1247,20 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
     <div class="panel" id="panel-settings" style="display:none;">
       <div class="settings-panel">
         <div class="settings-section"><div class="ss-title">Memory & Java</div>
+          <label class="setting-row"><span class="setting-label">Automatically recommend RAM</span><input type="checkbox" id="memoryMaxAuto" onchange="toggleAutoMemory()"/></label>
           <div class="setting-row"><span class="setting-label">RAM maximum</span><input type="range" class="setting-slider" min="1" max="32" value="6" step="1" id="ramSlider" oninput="updateRam(this.value)"/><span class="setting-val" id="ramVal">6 GB</span></div>
-          <div class="setting-row"><span class="setting-label">Java arguments</span><input class="setting-input" value="-XX:+UseG1GC -XX:G1HeapRegionSize=32M" style="width:195px;"/></div>
-          <div class="setting-row"><span class="setting-label">Java path</span><input class="setting-input" value="Auto-detect" style="width:140px;"/></div>
+          <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">Automatic recommendations leave memory for Windows and other apps and account for currently available RAM. Turn this off to keep a manual value. Minecraft's Java version is selected for the chosen game version; a compatible profile Java path is kept.</div>
         </div>
         <div class="settings-section"><div class="ss-title">Launcher</div>
           <div class="setting-row"><span class="setting-label">Close launcher on launch</span><select class="setting-select"><option>Yes</option><option>No</option><option>Minimize</option></select></div>
           <div class="setting-row"><span class="setting-label">Keep open after game closes</span><select class="setting-select"><option>Yes</option><option>No</option></select></div>
         </div>
-        <div class="settings-section"><div class="ss-title">PvP performance</div>
-          <div class="setting-row"><span class="setting-label">Video preset</span><select class="setting-select" id="performancePreset" onchange="syncSettings()"><option value="max-fps-pvp" selected>Max FPS PvP</option><option value="balanced-pvp">Balanced PvP</option><option value="quality">Quality</option></select></div>
-          <div class="setting-row"><span class="setting-label">Render distance</span><input type="range" class="setting-slider" min="2" max="32" value="8" step="1" id="rdSlider" oninput="updateRd(this.value)"/><span class="setting-val" id="rdVal">8 ch</span></div>
-          <div class="setting-row"><span class="setting-label">Simulation distance</span><input type="range" class="setting-slider" min="5" max="32" value="5" step="1" id="simSlider" oninput="updateSim(this.value)"/><span class="setting-val" id="simVal">5 ch</span></div>
-          <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">Max FPS creates or uses a separate Optimized Fabric profile only when Sodium is verified for this exact Minecraft version. Your current profile, mods, settings and saves stay untouched; you can copy a world into the isolated profile. Use the profile menu to create or launch true Vanilla. Balanced and Quality change video settings only; installed renderer mods remain clearly labeled on their profiles. Render and simulation distances are preserved.</div>
-          <div class="setting-row"><span class="setting-label">JVM profile</span><select class="setting-select" id="jvmProfile" onchange="toggleJvmArgs();syncSettings()"><option value="default">Tuned G1GC</option><option value="zgc">Ultra low-stutter (ZGC)</option><option value="custom">Custom</option></select></div>
+        <div class="settings-section"><div class="ss-title">Minecraft performance</div>
+          <label class="setting-row"><span class="setting-label">Opt in to isolated Sodium profile</span><input type="checkbox" id="optimizationModsEnabled" onchange="syncSettings()"/></label>
+          <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">Off by default. When enabled, launching may create a separate profile and install Sodium plus compatible client-side mods after exact release checks. Your existing profiles, mods, worlds, and Minecraft settings are not copied over or changed. You can keep using the original profile; FPS gains are not guaranteed.</div>
+          <div class="setting-row"><span class="setting-label">JVM profile</span><select class="setting-select" id="jvmProfile" onchange="toggleJvmArgs();syncSettings()"><option value="default">Java defaults (recommended)</option><option value="zgc">ZGC (Java 21+)</option><option value="custom">Custom</option></select></div>
           <div class="setting-row"><span class="setting-label">Custom JVM arguments</span><input class="setting-input" id="customJvmArgs" value="" placeholder="Only when Custom is selected" style="width:260px;" onchange="syncSettings()"/></div>
-          <div class="setting-row"><span class="setting-label">Minecraft priority</span><select class="setting-select" id="processPriority" onchange="syncSettings()"><option value="normal">Normal</option><option value="above-normal">Above Normal</option></select></div>
+          <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">The launcher does not edit Minecraft video settings, change process priority, or promise a specific FPS gain.</div>
         </div>
         <div class="settings-section"><div class="ss-title">Diagnostics</div>
           <button class="modal-btn" type="button" onclick="loadDiagnostics()"><i class="ti ti-terminal-2" aria-hidden="true"></i> Refresh diagnostics</button>
@@ -4068,23 +4066,19 @@ async function deleteAccount(id){
 
 // ---------------- Settings ----------------
 function updateRam(v){ document.getElementById('ramVal').textContent=v+' GB'; syncSettings(); }
-function updateRd(v){ document.getElementById('rdVal').textContent=v+' ch'; syncSettings(); }
-function updateSim(v){ document.getElementById('simVal').textContent=v+' ch'; syncSettings(); }
-function updateRes(){ syncSettings(); }
-function updateFps(){ syncSettings(); }
+function toggleAutoMemory(){
+  document.getElementById('ramSlider').disabled = document.getElementById('memoryMaxAuto').checked;
+  syncSettings();
+}
 function toggleJvmArgs(){ document.getElementById('customJvmArgs').disabled = document.getElementById('jvmProfile').value !== 'custom'; }
 function syncSettings(){
   const valueOf = (id, fallback) => document.getElementById(id)?.value ?? fallback;
   const settings = {
     memoryMax: Number(valueOf('ramSlider', 6)),
-    resolution: valueOf('resSel', '1920×1080'),
-    fpsCap: valueOf('fpsCap', 'Unlimited'),
-    renderDistance: Number(valueOf('rdSlider', 8)),
-    simulationDistance: Number(valueOf('simSlider', 5)),
-    performancePreset: valueOf('performancePreset', 'max-fps-pvp'),
+    memoryMaxAuto: document.getElementById('memoryMaxAuto')?.checked === true,
     jvmProfile: valueOf('jvmProfile', 'default'),
     customJvmArgs: valueOf('customJvmArgs', ''),
-    processPriority: valueOf('processPriority', 'normal'),
+    optimizationModsEnabled: document.getElementById('optimizationModsEnabled')?.checked === true,
   };
   state.settings = { ...(state.settings || {}), ...settings };
   if (launcherBridge?.syncState) launcherBridge.syncState(state);
@@ -4099,10 +4093,14 @@ async function loadDiagnostics(){
   const checks = Object.entries(result.checks || {}).map(([name, status]) => `${labels[status] || status}  ${name}`).join('\n');
   if (output) output.textContent = [
     `Java: ${result.javaVersion || result.javaPath || 'Unavailable'}`,
-    `GPU: ${result.gpu || 'Unavailable'}`,
-    `RAM: ${result.memoryGB || '?'} GB`,
+    `GPU adapters: ${(result.gpuAdapters || []).map(adapter => `${adapter.name} (driver ${adapter.driverVersion})`).join(', ') || 'Unavailable'}`,
+    `RAM: ${result.memoryGB || '?'} GB total, ${result.availableMemoryGB ?? '?'} GB available`,
+    `Conservative Minecraft heap recommendation: ${result.recommendedMemoryGB ?? '?'} GB`,
+    `OS / architecture: ${result.operatingSystem || 'Unavailable'} / ${result.platform || 'Unavailable'}`,
+    `CPU: ${result.cpu || 'Unknown'} (${result.logicalCores || '?'} logical threads)`,
     `Disk: ${result.disk ? `${result.disk.freeGB} GB free / ${result.disk.totalGB} GB` : 'Unavailable'}`,
     `Profile: ${result.profile || 'None'}`,
+    `GPU detection: ${result.gpuDetection || 'Unavailable'}`,
     '', checks,
   ].join('\n');
   if (analysisOutput) {
@@ -6220,7 +6218,7 @@ async function boot(){
       activeAccountId:'ms-main',
       profiles:[{id:'default',name:'Default profile',mcVersion:'1.21.1',loader:'fabric',rendererMode:'vulkan',icon:'B',mods:[]}],
       activeProfileId:'default',
-      settings:{ memoryMax:6, resolution:'1920×1080', fpsCap:'Unlimited', renderDistance:8, simulationDistance:5, performancePreset:'max-fps-pvp' },
+      settings:{ memoryMax:6, memoryMaxAuto:true, jvmProfile:'default', customJvmArgs:'', optimizationModsEnabled:false },
       servers: [],
     };
   }
@@ -6229,14 +6227,15 @@ async function boot(){
   renderAccounts();
   bindProfileLaunchButton();
   const settings = state.settings || {};
-  document.getElementById('rdSlider').value = settings.renderDistance || 8;
-  document.getElementById('rdVal').textContent = `${document.getElementById('rdSlider').value} ch`;
-  document.getElementById('simSlider').value = settings.simulationDistance || 5;
-  document.getElementById('simVal').textContent = `${document.getElementById('simSlider').value} ch`;
-  document.getElementById('performancePreset').value = settings.performancePreset || 'max-fps-pvp';
+  document.getElementById('optimizationModsEnabled').checked = settings.optimizationModsEnabled === true;
+  document.getElementById('memoryMaxAuto').checked = settings.memoryMaxAuto === true;
+  if (settings.memoryMax) {
+    document.getElementById('ramSlider').value = settings.memoryMax;
+    document.getElementById('ramVal').textContent = `${settings.memoryMax} GB`;
+  }
+  toggleAutoMemory();
   document.getElementById('jvmProfile').value = settings.jvmProfile || 'default';
   document.getElementById('customJvmArgs').value = settings.customJvmArgs || '';
-  document.getElementById('processPriority').value = settings.processPriority || 'normal';
   toggleJvmArgs();
   const savedPage = (() => { try { return localStorage.getItem('bald:last-page'); } catch (_error) { return null; } })();
   const savedProfile = (() => { try { return localStorage.getItem('bald:last-profile'); } catch (_error) { return null; } })();
