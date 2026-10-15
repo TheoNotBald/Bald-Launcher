@@ -5,9 +5,29 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
-const { getLoaderJvmArguments } = require('../src/shared/loader-jvm-arguments');
+const { getLoaderJvmArguments, getLoaderLibraryPaths } = require('../src/shared/loader-jvm-arguments');
 
-test('resolves NeoForge module-path placeholders to the shared libraries directory', t => {
+test('NeoForge library discovery and MCLC classpaths use the installer library directory', () => {
+  const profileRoot = path.join(os.tmpdir(), 'bald-neoforge-profile');
+  const sharedCacheRoot = path.join(os.tmpdir(), 'bald-shared-cache');
+
+  assert.deepEqual(getLoaderLibraryPaths('neoforge', profileRoot, sharedCacheRoot), {
+    libraryDirectory: path.join(profileRoot, 'libraries'),
+    libraryRoot: path.join(profileRoot, 'libraries'),
+  });
+});
+
+test('other loaders keep using the shared library cache', () => {
+  const profileRoot = path.join(os.tmpdir(), 'bald-fabric-profile');
+  const sharedCacheRoot = path.join(os.tmpdir(), 'bald-shared-cache');
+
+  assert.deepEqual(getLoaderLibraryPaths('fabric', profileRoot, sharedCacheRoot), {
+    libraryDirectory: path.join(sharedCacheRoot, 'libraries'),
+    libraryRoot: path.join(sharedCacheRoot, 'libraries'),
+  });
+});
+
+test('resolves NeoForge module-path placeholders from the supplied loader library directory', t => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bald-loader-jvm-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const versionJsonPath = path.join(root, 'versions', 'neoforge-21.1.259', 'neoforge-21.1.259.json');
@@ -25,7 +45,11 @@ test('resolves NeoForge module-path placeholders to the shared libraries directo
       ],
     },
   }));
-  const libraryDirectory = path.join(root, 'shared-cache', 'libraries');
+  const libraryDirectory = getLoaderLibraryPaths(
+    'neoforge',
+    root,
+    path.join(root, 'shared-cache'),
+  ).libraryDirectory;
 
   assert.deepEqual(getLoaderJvmArguments(versionJsonPath, {
     libraryDirectory,

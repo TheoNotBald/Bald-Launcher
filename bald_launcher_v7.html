@@ -1092,10 +1092,11 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
 
     <div class="panel" id="panel-performance" style="display:none;">
       <div class="settings-panel">
-        <div class="appearance-header"><div><div class="appearance-title">Performance Center</div><div class="appearance-subtitle">Measured launcher and Minecraft process telemetry. FPS metrics require a game-side telemetry source.</div></div></div>
+        <div class="appearance-header"><div><div class="appearance-title">Performance Center</div><div class="appearance-subtitle">Process telemetry and Windows GPU Engine samples. FPS is measured from PresentMon frame events when available; installed GPU inventory is not proof of the active adapter.</div></div></div>
         <div class="settings-section"><div class="ss-title">Live performance</div><pre id="performanceLiveOutput" style="white-space:pre-wrap;color:var(--text-secondary);font:12px/1.7 var(--font-mono);">Minecraft is not running.</pre><button class="modal-btn" type="button" onclick="refreshPerformanceCenter()"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh metrics</button></div>
+        <div class="settings-section"><div class="ss-title">Windows GPU preference</div><div style="color:var(--text-secondary);font-size:var(--text-sm);margin-bottom:8px;">Use Windows' supported per-app graphics preference for Minecraft's exact Java executable. This opens Windows Settings; Bald Launcher does not edit the registry or silently change your GPU setting. Add the Java executable shown below as a desktop app, choose High performance, then restart Minecraft. A saved preference alone does not prove it took effect: refresh while Minecraft is running to inspect process-specific 3D-engine adapter IDs.</div><div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="modal-btn" type="button" onclick="openWindowsGpuSettings()"><i class="ti ti-settings" aria-hidden="true"></i> Open Windows Graphics settings</button><button class="modal-btn" type="button" onclick="refreshGpuPreference()"><i class="ti ti-refresh" aria-hidden="true"></i> Check Java preference and active adapter</button></div><pre id="gpuPreferenceOutput" style="white-space:pre-wrap;color:var(--text-secondary);font:12px/1.7 var(--font-mono);margin-top:10px;">Check the selected profile to see its resolved Java executable and Windows preference.</pre></div>
         <div class="settings-section"><div class="ss-title">Recommendations</div><div id="performanceRecommendations" style="color:var(--text-secondary);font-size:var(--text-sm);">No recommendations collected.</div></div>
-        <div class="settings-section"><div class="ss-title">Controlled benchmark</div><div style="color:var(--text-secondary);font-size:var(--text-sm);margin-bottom:8px;">Measures process CPU and RAM for 15 seconds. FPS, frame time, 1% low, 0.1% low, and VRAM remain unavailable unless exposed by Minecraft.</div><button class="modal-btn primary" type="button" onclick="runPerformanceBenchmark()"><i class="ti ti-chart-line" aria-hidden="true"></i> Run benchmark</button><pre id="benchmarkOutput" style="white-space:pre-wrap;color:var(--text-secondary);font:12px/1.7 var(--font-mono);margin-top:10px;">No benchmark results.</pre></div>
+        <div class="settings-section"><div class="ss-title">Controlled benchmark</div><div style="color:var(--text-secondary);font-size:var(--text-sm);margin-bottom:8px;">Gameplay capture: 30-second warm-up plus 60 seconds measured by PresentMon. Enter the same world/test-scene label for both runs, use identical settings and the same world snapshot, then alternate and repeat each run at least three times. Startup is a separate test: time from clicking Launch to the main menu after restarting the launcher and game, and keep those readings separate; this tool does not collect startup times. FPS is unavailable unless PresentMon is installed; 1% lows require at least 1,000 frame intervals and 0.1% lows require at least 10,000. No video settings are changed.</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;"><select class="modal-select" id="benchmarkRole" aria-label="Benchmark run type"><option value="baseline">Baseline · original profile</option><option value="optimized">Optimized · isolated Sodium profile</option></select><input class="modal-input" id="benchmarkScene" maxlength="120" placeholder="Same world + scene (e.g. test-world spawn, facing north)" aria-label="Benchmark world and scene" style="min-width:280px;flex:1;" /></div><div style="color:var(--text-tertiary);font-size:var(--text-xs);margin-bottom:10px;">Automatic optimization is limited to clean Vanilla/Fabric/Quilt profiles. Active mods and unsupported loaders are never migrated or altered. Managed profiles copy the original options.txt, resource packs, shader packs, and Iris selection into a separate folder.</div><button class="modal-btn primary" type="button" onclick="runPerformanceBenchmark()"><i class="ti ti-chart-line" aria-hidden="true"></i> Run benchmark</button><pre id="benchmarkOutput" style="white-space:pre-wrap;color:var(--text-secondary);font:12px/1.7 var(--font-mono);margin-top:10px;">No benchmark results.</pre></div>
         <div class="settings-section"><div class="ss-title">Performance history</div><div id="performanceHistory" style="color:var(--text-secondary);font-size:var(--text-sm);">No benchmark history.</div></div>
       </div>
     </div>
@@ -2250,7 +2251,10 @@ async function openBundleModal(rendererMode, profile){
 
   if (launcherBridge?.previewBundle){
     const result = await launcherBridge.previewBundle({ mcVersion: profile.mcVersion, loader: profile.loader, rendererMode });
-    bundleItems = (result?.items || []).map(item => ({ ...item, installed: isBrowseContentInstalled(profile, item), selected: !item.unresolved && !isBrowseContentInstalled(profile, item) }));
+    bundleItems = (result?.items || []).map(item => {
+      const installed = isBrowseContentInstalled(profile, item);
+      return { ...item, installed, selected: item.selected !== false && !item.unresolved && !installed };
+    });
   } else {
     bundleItems = [];
   }
@@ -4093,6 +4097,13 @@ async function loadDiagnostics(){
   const checks = Object.entries(result.checks || {}).map(([name, status]) => `${labels[status] || status}  ${name}`).join('\n');
   if (output) output.textContent = [
     `Java: ${result.javaVersion || result.javaPath || 'Unavailable'}`,
+    `Java executable: ${result.javaPath || 'Unavailable'}`,
+    `Active Java process: ${result.minecraftProcess?.processType || result.processDetection || 'Not found'}${result.minecraftProcess?.pid ? ` · PID ${result.minecraftProcess.pid}` : ''}`,
+    `Active process CPU / RAM: ${result.minecraftProcess?.cpuPercent == null ? 'Unavailable' : `${result.minecraftProcess.cpuPercent}%`} / ${result.minecraftProcess?.memoryMb == null ? 'Unavailable' : `${result.minecraftProcess.memoryMb} MB`}`,
+    `Process 3D-engine usage: ${result.minecraftProcess?.gpu3dPercent == null ? 'Unavailable' : `${result.minecraftProcess.gpu3dPercent}%`} (${result.minecraftProcess?.gpu3dMeasurement || 'not sampled'})`,
+    `Process GPU adapter IDs: ${(result.minecraftProcess?.gpuAdaptersInUse || []).map(adapter => `${adapter.luid} (physical index ${adapter.physicalAdapterIndex})`).join(', ') || 'Unavailable'}`,
+    `Windows preference for this Java executable: ${gpuPreferenceLabel(result.minecraftGpuPreference?.state)}${result.minecraftGpuPreference?.error ? ` (${result.minecraftGpuPreference.error})` : ''}`,
+    `Redacted Java arguments: ${(result.minecraftProcess?.launchArguments || result.launchArguments || []).join(' ') || 'Unavailable'}`,
     `GPU adapters: ${(result.gpuAdapters || []).map(adapter => `${adapter.name} (driver ${adapter.driverVersion})`).join(', ') || 'Unavailable'}`,
     `RAM: ${result.memoryGB || '?'} GB total, ${result.availableMemoryGB ?? '?'} GB available`,
     `Conservative Minecraft heap recommendation: ${result.recommendedMemoryGB ?? '?'} GB`,
@@ -4216,7 +4227,11 @@ async function refreshPerformanceCenter(){
   if (!result?.ok) { if (output) output.textContent = result?.error || 'Performance data unavailable.'; return; }
   const snapshot = result.snapshot || {};
   const value = metric => snapshot[metric] == null ? 'Unavailable' : snapshot[metric];
-  if (output) output.textContent = [`Profile: ${profile.name}`, `Minecraft: ${snapshot.minecraft} · ${snapshot.loader} · ${snapshot.renderer}`, `FPS: ${value('fps')} (not exposed by Minecraft)`, `Frame time: ${value('frameTimeMs')} (not exposed by Minecraft)`, `1% low: ${value('onePercentLow')}`, `0.1% low: ${value('zeroPointOnePercentLow')}`, `CPU: ${snapshot.cpuPercent == null ? 'Unavailable' : `${snapshot.cpuPercent}%`}`, `RAM: ${snapshot.memoryMb == null ? 'Unavailable' : `${snapshot.memoryMb} MB`}`, `GPU: ${snapshot.gpu || 'Unavailable'}`, `VRAM: ${value('vramMb')}`, `Java: ${snapshot.java}`, `Shaders: ${snapshot.shaderState}`].join('\n');
+  const safeArgs = Array.isArray(snapshot.launchArguments) ? snapshot.launchArguments.join(' ') : '';
+  const gpuAdapters = Array.isArray(snapshot.gpuAdaptersInUse) && snapshot.gpuAdaptersInUse.length
+    ? snapshot.gpuAdaptersInUse.map(adapter => `${adapter.luid} (physical index ${adapter.physicalAdapterIndex}; max sampled 3D engine ${adapter.max3dEnginePercent}%)`).join(', ')
+    : 'No process-specific active adapter was identified.';
+  if (output) output.textContent = [`Profile: ${profile.name}`, `Minecraft: ${snapshot.minecraft} · ${snapshot.loader} · ${snapshot.renderer}`, `Process: ${snapshot.processType || 'Unavailable'}${snapshot.pid ? ` · PID ${snapshot.pid}` : ''}`, `Java: ${snapshot.java}${snapshot.javaMajor ? ` (Java ${snapshot.javaMajor})` : ''}`, `Launch arguments: ${safeArgs || 'Unavailable'}`, `FPS: ${value('fps')} (not measured by live polling)`, `Frame time: ${value('frameTimeMs')}`, `1% low: ${value('onePercentLow')}`, `0.1% low: ${value('zeroPointOnePercentLow')}`, `Process CPU: ${snapshot.cpuPercent == null ? 'Unavailable' : `${snapshot.cpuPercent}%`}`, `Process RAM: ${snapshot.memoryMb == null ? 'Unavailable' : `${snapshot.memoryMb} MB`}`, `GPU 3D engine: ${snapshot.gpu3dPercent == null ? 'Unavailable' : `${snapshot.gpu3dPercent}%`}`, `Process GPU adapter ID(s): ${gpuAdapters}`, `GPU sample: ${snapshot.gpu3dMeasurement || snapshot.processDetection || 'Not sampled'}`, `VRAM: ${value('vramMb')}`, `Shaders: ${snapshot.shaderState}`].join('\n');
   const recommendations = [];
   if (Number(profile.memoryMax) < 4) recommendations.push('Increase RAM allocation|Low heap can cause stutter and loading failures.|More headroom for Minecraft and mod memory use.');
   if (Number(profile.memoryMax) > 12) recommendations.push('Review RAM allocation|Excessive heap can increase garbage-collection pauses.|Reserve memory for Windows and other applications.');
@@ -4224,6 +4239,56 @@ async function refreshPerformanceCenter(){
   if (!recommendations.length) recommendations.push('No immediate rule-based recommendation|The launcher has no measured issue to act on.|No settings were changed.');
   if (recommendationBox) recommendationBox.innerHTML = recommendations.map(item => { const [title, why, effect] = item.split('|'); const apply = title === 'Increase RAM allocation' ? `<button class="modal-btn" style="margin-top:7px;" onclick="applyPerformanceRecommendation('ram')"><i class="ti ti-check" aria-hidden="true"></i> Apply</button>` : ''; return `<div style="padding:8px 0;border-bottom:1px solid var(--ui-border);"><strong>${escapeHtml(title)}</strong><br>Why: ${escapeHtml(why)}<br>Expected effect: ${escapeHtml(effect)}${apply}</div>`; }).join('');
   renderPerformanceHistory(result.history || []);
+}
+function gpuPreferenceLabel(state){
+  return ({
+    'high-performance': 'High performance preference is configured for this Java executable.',
+    'power-saving': 'Power saving preference is configured for this Java executable.',
+    'system-default': 'Windows is configured to use its system default preference for this Java executable.',
+    'not-configured': 'No explicit per-app GPU preference is configured; Windows decides.',
+    unsupported: 'Windows per-app graphics preferences are unavailable on this platform.',
+    unavailable: 'Windows preference could not be read.',
+  })[state] || 'Windows returned an unrecognized graphics preference value.';
+}
+async function refreshGpuPreference(){
+  const output = document.getElementById('gpuPreferenceOutput');
+  const profile = getProfile(currentProfileId || state.activeProfileId);
+  if (!profile || !launcherBridge?.getGpuPreference) return;
+  if (output) output.textContent = 'Checking the selected profile Java executable and process GPU counters...';
+  try {
+    const result = await launcherBridge.getGpuPreference(profile.id);
+    if (!result?.ok) { if (output) output.textContent = result?.error || 'GPU preference information unavailable.'; return; }
+    const preference = result.preference || {};
+    const adapters = Array.isArray(result.gpuAdaptersInUse) ? result.gpuAdaptersInUse : [];
+    const observed = adapters.length
+      ? adapters.map(adapter => `${adapter.luid} (physical index ${adapter.physicalAdapterIndex}; max sampled process 3D engine ${adapter.max3dEnginePercent}%)`).join('\n')
+      : "No process-specific 3D adapter sample available. Start this profile's Minecraft client and check again.";
+    if (output) output.textContent = [
+      `Profile: ${profile.name}`,
+      `Java executable to add in Windows Settings: ${result.javaPath || 'Unavailable'}`,
+      `Windows per-app preference: ${gpuPreferenceLabel(preference.state)}`,
+      preference.value ? `Windows preference data: ${preference.value}` : '',
+      `Process: ${result.processType || 'Not running'}${result.running ? ' (process found)' : ''}`,
+      `Observed Minecraft 3D adapter ID(s):\n${observed}`,
+      result.gpuError ? `GPU counter note: ${result.gpuError}` : '',
+      'Adapter IDs come from Windows GPU Engine counters. Installed GPU names do not identify the active adapter; compare the observed IDs before and after changing Windows preference, and verify the named GPU in Windows Task Manager.',
+      'Changing the Java runtime can change this executable path. Apply the preference to the Java executable used by this profile and restart Minecraft.',
+    ].filter(Boolean).join('\n');
+  } catch (error) {
+    if (output) output.textContent = `GPU preference check failed: ${error?.message || error}`;
+  }
+}
+async function openWindowsGpuSettings(){
+  const output = document.getElementById('gpuPreferenceOutput');
+  if (!launcherBridge?.openWindowsGpuSettings) return;
+  try {
+    const result = await launcherBridge.openWindowsGpuSettings();
+    if (output) output.textContent = result?.ok
+      ? 'Windows Advanced Graphics Settings opened. Add the exact Java executable shown above as a desktop app and choose High performance. After saving and restarting Minecraft, click "Check Java preference and active adapter" to verify the saved preference and inspect the process GPU adapter ID.'
+      : result?.error || 'Could not open Windows Graphics settings.';
+  } catch (error) {
+    if (output) output.textContent = `Could not open Windows Graphics settings: ${error?.message || error}`;
+  }
 }
 async function applyPerformanceRecommendation(kind){
   const profile = getProfile(currentProfileId || state.activeProfileId);
@@ -4237,17 +4302,23 @@ function renderPerformanceHistory(history){
   const box = document.getElementById('performanceHistory');
   if (!box) return;
   if (!history.length) { box.textContent = 'No benchmark history.'; return; }
-  box.innerHTML = history.slice().reverse().map((item, index, list) => { const previous = list[index + 1]; const cpu = item.averageCpuPercent == null ? 'Unavailable' : `${item.averageCpuPercent}% CPU`; const memory = item.peakMemoryMb == null ? 'Unavailable' : `${item.peakMemoryMb} MB peak RAM`; const comparison = previous && item.averageCpuPercent != null && previous.averageCpuPercent != null ? ` · CPU ${item.averageCpuPercent <= previous.averageCpuPercent ? 'better' : 'higher'}` : ''; return `<div style="padding:7px 0;border-bottom:1px solid var(--ui-border);"><strong>${new Date(item.startedAt).toLocaleString()}</strong><br>${cpu} · ${memory}${comparison}<br>FPS: unavailable · frame time: unavailable</div>`; }).join('');
+  box.innerHTML = history.slice().reverse().map(item => { const cpu = item.averageCpuPercent == null ? 'Unavailable' : `${item.averageCpuPercent}% CPU`; const memory = item.peakMemoryMb == null ? 'Unavailable' : `${item.peakMemoryMb} MB peak RAM`; const fps = item.averageFps == null ? 'FPS unavailable' : `${item.averageFps} average FPS`; const low = item.onePercentLow == null ? '1% low unavailable' : `${item.onePercentLow} 1% low`; const comparison = item.comparison?.comparable ? ` · 3+ run median change ${item.comparison.averageFpsChangePercent > 0 ? '+' : ''}${item.comparison.averageFpsChangePercent}% (${item.comparison.baselineMedianFps} → ${item.comparison.optimizedMedianFps} FPS)` : ''; const captureError = item.captureError ? `<br>${escapeHtml(item.captureError)}` : ''; return `<div style="padding:7px 0;border-bottom:1px solid var(--ui-border);"><strong>${escapeHtml(item.role || 'unlabelled')} · ${new Date(item.startedAt).toLocaleString()}</strong><br>${escapeHtml(item.sceneId || '')}<br>${fps} · ${low}<br>${cpu} · ${memory}${comparison}${captureError}</div>`; }).join('');
 }
 async function runPerformanceBenchmark(){
   const output = document.getElementById('benchmarkOutput');
   const profile = getProfile(currentProfileId || state.activeProfileId);
   if (!profile || !launcherBridge?.runBenchmark) return;
-  if (output) output.textContent = 'Benchmark running for 15 seconds...';
-  const result = await launcherBridge.runBenchmark({ profileId: profile.id, durationMs: 15000 });
+  const role = document.getElementById('benchmarkRole')?.value || '';
+  const sceneId = String(document.getElementById('benchmarkScene')?.value || '').trim();
+  if (sceneId.length < 3) { if (output) output.textContent = 'Enter the same world and test-scene label for both runs.'; return; }
+  if (output) output.textContent = 'Benchmark warm-up: 30 seconds. Frame capture: 60 seconds. Keep the same scene in the foreground.';
+  const result = await launcherBridge.runBenchmark({ profileId: profile.id, role, sceneId, durationSeconds: 60 });
   if (!result?.ok) { if (output) output.textContent = result?.error || 'Benchmark unavailable.'; return; }
   const item = result.result;
-  if (output) output.textContent = [`Run: ${new Date(item.startedAt).toLocaleString()}`, 'Average FPS: Unavailable', '1% low: Unavailable', '0.1% low: Unavailable', 'Frame time: Unavailable', `Average CPU: ${item.averageCpuPercent == null ? 'Unavailable' : `${item.averageCpuPercent}%`}`, `Peak RAM: ${item.peakMemoryMb == null ? 'Unavailable' : `${item.peakMemoryMb} MB`}`, `Stored as benchmark ${item.id}`].join('\n');
+  const comparison = item.comparison?.comparable
+    ? [`Median FPS: ${item.comparison.baselineMedianFps} → ${item.comparison.optimizedMedianFps}`, `Baseline run range: ${item.comparison.baselineFpsRange.min}–${item.comparison.baselineFpsRange.max} FPS`, `Optimized run range: ${item.comparison.optimizedFpsRange.min}–${item.comparison.optimizedFpsRange.max} FPS`, `Median average FPS change: ${item.comparison.averageFpsChangePercent > 0 ? '+' : ''}${item.comparison.averageFpsChangePercent}%`, `Median 1% low change: ${item.comparison.onePercentLowChangePercent == null ? 'Unavailable' : `${item.comparison.onePercentLowChangePercent > 0 ? '+' : ''}${item.comparison.onePercentLowChangePercent}%`}`]
+    : [`Comparison: ${item.comparison?.reason || 'No matching opposite-role run.'}`];
+  if (output) output.textContent = [`Run: ${new Date(item.startedAt).toLocaleString()} · ${item.role}`, `Scene: ${item.sceneId}`, `Java: ${item.javaRuntime || 'Unavailable'} · ${item.javaPath || 'path unavailable'}`, `Loader / renderer: ${item.loaderVersion || 'unknown'} · ${item.rendererMode || 'unknown'}`, `Active mod JARs: ${(item.activeMods || []).map(mod => mod.path).join(', ') || 'none detected'}`, `Redacted launch arguments: ${(item.launchArguments || []).join(' ') || 'Unavailable'}`, `Average FPS: ${item.averageFps == null ? 'Unavailable' : item.averageFps}`, `1% low: ${item.onePercentLow == null ? 'Unavailable' : item.onePercentLow}`, `0.1% low: ${item.zeroPointOnePercentLow == null ? 'Unavailable' : item.zeroPointOnePercentLow}`, `Mean frame time: ${item.frameTimeMs == null ? 'Unavailable' : `${item.frameTimeMs} ms`}`, `Frame samples: ${item.frameTimeSamples || 0}`, `Average CPU: ${item.averageCpuPercent == null ? 'Unavailable' : `${item.averageCpuPercent}%`}`, `Peak RAM: ${item.peakMemoryMb == null ? 'Unavailable' : `${item.peakMemoryMb} MB`}`, `Maximum sampled process 3D-engine usage: ${item.gpu3dPercent == null ? 'Unavailable' : `${item.gpu3dPercent}%`}`, ...comparison, item.captureError ? `Capture note: ${item.captureError}` : '', `Stored as benchmark ${item.id}`].filter(Boolean).join('\n');
   renderPerformanceHistory(result.history || []);
 }
 

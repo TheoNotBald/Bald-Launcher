@@ -65,4 +65,10 @@ function getLoaderJvmArguments(versionJsonPath, options = {}) {
   });
 }
 
-module.exports = { getLoaderJvmArguments };
+function getLoaderLibraryPaths(loader, profileRoot, sharedCacheRoot) {
+  const root = loader === 'neoforge' ? profileRoot : sharedCacheRoot;
+  const directory = path.resolve(root, 'libraries');
+  return { libraryDirectory: directory, libraryRoot: directory };
+}
+
+module.exports = { getLoaderJvmArguments, getLoaderLibraryPaths };

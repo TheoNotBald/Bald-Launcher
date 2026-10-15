@@ -82,6 +82,8 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   analyzeServerCrash: serverId => ipcRenderer.invoke('server:analyze-crash', { serverId }),
   openCrashEvidence: payload => ipcRenderer.invoke('launcher:open-crash-evidence', payload),
   getPerformance: profileId => ipcRenderer.invoke('launcher:get-performance', profileId),
+  getGpuPreference: profileId => ipcRenderer.invoke('launcher:get-gpu-preference', profileId),
+  openWindowsGpuSettings: () => ipcRenderer.invoke('launcher:open-windows-gpu-settings'),
   runBenchmark: payload => ipcRenderer.invoke('launcher:run-benchmark', payload),
 
   createServer: server => ipcRenderer.invoke('launcher:create-server', server),

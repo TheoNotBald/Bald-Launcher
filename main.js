@@ -21,6 +21,8 @@ const { autoUpdater } = require('electron-updater');
 const { createPlayitManager } = require('./playit-manager');
 const { createStateStore } = require('./src/shared/state-store');
 const { createSecureStateCodec } = require('./src/shared/secure-state-codec');
+const { commitStagedFiles } = require('./src/shared/file-transaction');
+const { parseWindowsGpuPreference, summarizeGpuEngineSamples } = require('./src/shared/windows-gpu');
 const { redactLaunchArguments } = require('./src/shared/launch-arguments');
 const { findSha256Asset, parseSha256Checksum, verifySha256 } = require('./src/shared/sha256-checksum');
 const ServerStats = require('./src/servers/server-stats');
@@ -29,12 +31,23 @@ const { restoreWorldFromZip } = require('./src/servers/backup-restore');
 const { waitForLogResponse } = require('./src/servers/console-response');
 const { canAdoptDiscoveredProcess, findMatchingServerProcess, getProcessStartTime, matchesServerProcessIdentity: verifyServerProcessIdentity } = require('./src/servers/process-identity');
 const { ensureLauncherProfilesFile } = require('./src/shared/launcher-profiles');
-const { getLoaderJvmArguments } = require('./src/shared/loader-jvm-arguments');
+const { getLoaderJvmArguments, getLoaderLibraryPaths } = require('./src/shared/loader-jvm-arguments');
 const {
+  areProfileRootsIsolated,
+  canCreateOptimizationProfile,
+  compareBenchmarkGroups,
+  copyMinecraftVisualSettings,
+  createBenchmarkConfigurationSignature,
+  createBenchmarkSignature,
+  findModSetConflicts,
   getJvmArguments,
   getRequiredJavaVersion,
   isOptimizationOptedIn,
+  parsePresentMonCsv,
+  parseWindowsCommandLine,
   recommendMinecraftMemoryGb,
+  runIsolatedProfileSetup,
+  validateRendererBundleSelection,
 } = require('./src/shared/performance-runtime');
 const { configureUpdaterFeed } = require('./src/shared/updater-feed');
 const { normalizeAccountCosmetics, getAccountCosmetics, setAccountSelection, pushRecentItem } = require('./src/cosmetics/account/cosmetic-state');
@@ -71,6 +84,63 @@ try {
   hasSingleInstanceLock = app.requestSingleInstanceLock();
 } catch (error) {
   console.warn('Single instance lock check failed:', error);
+}
+
+async function getInstalledGpuModels() {
+  if (process.platform !== 'win32') return [];
+  return new Promise(resolve => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_VideoController | Select-Object Name | ConvertTo-Json -Compress'], {
+      timeout: 8000, windowsHide: true, maxBuffer: 1024 * 1024,
+    }, (error, stdout) => {
+      if (error || !stdout.trim()) return resolve([]);
+      try {
+        const parsed = JSON.parse(stdout);
+        resolve((Array.isArray(parsed) ? parsed : [parsed]).map(adapter => String(adapter.Name || '')).filter(Boolean));
+      } catch (parseError) {
+        console.warn('[Performance] Could not parse installed GPU inventory:', parseError);
+        resolve([]);
+      }
+    });
+  });
+}
+
+async function readWindowsGpuPreference(executablePath) {
+  if (process.platform !== 'win32') {
+    return { state: 'unsupported', value: null, error: 'Windows graphics preferences are only available on Windows.' };
+  }
+  const normalizedPath = String(executablePath || '').trim();
+  if (!normalizedPath) return { state: 'unavailable', value: null, error: 'The Minecraft Java executable could not be determined.' };
+  const encodedPath = Buffer.from(normalizedPath, 'utf8').toString('base64');
+  const script = [
+    '$ErrorActionPreference = "Stop"',
+    `$exePath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("${encodedPath}"))`,
+    '$key = Get-ItemProperty -Path "HKCU:\\Software\\Microsoft\\DirectX\\UserGpuPreferences" -ErrorAction SilentlyContinue',
+    '$property = if ($key) { $key.PSObject.Properties[$exePath] } else { $null }',
+    '$value = if ($property) { [string]$property.Value } else { $null }',
+    '@{ value = $value } | ConvertTo-Json -Compress',
+  ].join('; ');
+  return new Promise(resolve => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      timeout: 8000,
+      windowsHide: true,
+      maxBuffer: 1024 * 1024,
+    }, (error, stdout) => {
+      if (error || !stdout.trim()) {
+        return resolve({
+          state: 'unavailable',
+          value: null,
+          error: error?.message || 'Windows did not return the per-application graphics preference.',
+        });
+      }
+      try {
+        const result = JSON.parse(stdout);
+        const value = typeof result.value === 'string' ? result.value : null;
+        resolve({ state: parseWindowsGpuPreference(value), value, error: null });
+      } catch (parseError) {
+        resolve({ state: 'unavailable', value: null, error: `Could not parse the Windows graphics preference: ${parseError.message}` });
+      }
+    });
+  });
 }
 if (!hasSingleInstanceLock) {
   console.warn('Single instance lock not acquired; continuing launch.');
@@ -358,6 +428,22 @@ const OPTIMIZATION_PROJECT_SLUGS = {
 
 const OPTIONAL_RENDERER_RECOMMENDATIONS = new Set(['MoreCulling']);
 
+function getRendererBundleDefinition(mcVersion, loader, rendererMode) {
+  const normalizedLoader = normalizeContentLoader(loader);
+  const databaseEntry = rendererMode === 'vulkan'
+    ? getVulkanDatabaseEntry(mcVersion, normalizedLoader)
+    : getRendererDatabaseEntry(mcVersion, normalizedLoader, rendererMode);
+  const fallbackProjects = (RENDERER_BUNDLES[rendererMode] || [])
+    .map(term => OPTIMIZATION_PROJECT_SLUGS[term])
+    .filter(Boolean);
+  const allowedProjectIds = databaseEntry
+    ? [databaseEntry.project, ...(databaseEntry.optimizationMods || [])].filter(Boolean)
+    : fallbackProjects;
+  return {
+    allowedProjectIds: [...new Set(allowedProjectIds)],
+    excludedProjectIds: databaseEntry?.excludedMods || [],
+  };
+}
 
 const DEFAULT_THEME = {
   name: 'Default',
@@ -545,6 +631,7 @@ const DEFAULT_STATE = {
   },
   activeThemeId: '1',
   servers: [],
+  performanceMachineId: crypto.randomUUID(),
   profileSync: {
     sourceMode: 'profile',
     sourceProfileId: null,
@@ -592,6 +679,7 @@ const launcherStateStore = createStateStore({
         settings: normalizeSettings(rawState.settings),
         sessions: Array.isArray(rawState.sessions) ? rawState.sessions : [],
         servers: Array.isArray(rawState.servers) ? rawState.servers.map(normalizeServer) : [],
+        performanceMachineId: String(rawState.performanceMachineId || crypto.randomUUID()),
         themes: rawState.themes || DEFAULT_STATE.themes,
         activeThemeId: rawState.activeThemeId || DEFAULT_STATE.activeThemeId,
         profileSync: normalizeProfileSync(rawState.profileSync),
@@ -1263,8 +1351,6 @@ function handleServerProcessOutput(serverId, type, chunk, stream = 'default') {
   }
   return lines;
 }
-let lastLaunchArguments = [];
-
 function cloneDefaultState() {
   return {
     accounts: DEFAULT_STATE.accounts.map(normalizeAccount),
@@ -1274,6 +1360,7 @@ function cloneDefaultState() {
     settings: { ...DEFAULT_STATE.settings },
     sessions: [],
     servers: Array.isArray(DEFAULT_STATE.servers) ? DEFAULT_STATE.servers.map(normalizeServer) : [],
+    performanceMachineId: DEFAULT_STATE.performanceMachineId,
   };
 }
 
@@ -2544,6 +2631,7 @@ function normalizeProfile(profile) {
     optimizationSourceProfileId: String(profile?.optimizationSourceProfileId || '').slice(0, 120) || null,
     optimizationSourceProfileName: String(profile?.optimizationSourceProfileName || '').slice(0, 80) || null,
     optimizationWorldSetupComplete: profile?.optimizationWorldSetupComplete === true,
+    optimizationVisualSettingsCopied: profile?.optimizationVisualSettingsCopied === true,
     optimizationSkippedMods: Array.isArray(profile?.optimizationSkippedMods)
       ? profile.optimizationSkippedMods.map(value => String(value).slice(0, 120)).slice(0, 30)
       : [],
@@ -2584,6 +2672,8 @@ function normalizeInstalledContent(entry) {
     environment: String(entry?.environment || '').slice(0, 32),
     side: String(entry?.side || '').slice(0, 32),
     sha1: String(entry?.sha1 || '').slice(0, 40),
+    sha512: String(entry?.sha512 || '').slice(0, 128),
+    licenseId: String(entry?.licenseId || '').slice(0, 120),
     latestVersionId: String(entry?.latestVersionId || '').slice(0, 64),
     latestVersion: String(entry?.latestVersion || '').slice(0, 100),
     updateAvailable: entry?.updateAvailable === true,
@@ -3289,15 +3379,21 @@ const AUTOMATIC_SODIUM_PROJECTS = [
   { id: 'ferrite-core', name: 'FerriteCore' },
   { id: 'immediatelyfast', name: 'ImmediatelyFast' },
   { id: 'modernfix', name: 'ModernFix' },
-  { id: 'entityculling', name: 'EntityCulling' },
-  { id: 'badoptimizations', name: 'BadOptimizations' },
-  { id: 'moreculling', name: 'MoreCulling' },
-  { id: 'c2me-fabric', name: 'C2ME' },
-  { id: 'fabric-api', name: 'Fabric API' },
+  { id: 'iris', name: 'Iris', conditional: true },
 ];
 
-async function resolveAutomaticSodiumPlan(mcVersion) {
+async function resolveAutomaticSodiumPlan(mcVersion, includeIris = false) {
   const resolvedFiles = new Map();
+  const projectMetadata = new Map();
+  const getProjectMetadata = projectId => {
+    if (!projectMetadata.has(projectId)) {
+      projectMetadata.set(projectId, axios.get(`${MODRINTH_API}/project/${encodeURIComponent(projectId)}`, {
+        timeout: 15000,
+        headers: { 'User-Agent': 'BaldLauncher/0.1.0 (contact: none)' },
+      }).then(response => response.data));
+    }
+    return projectMetadata.get(projectId);
+  };
   const resolveFile = (projectId, versionId) => {
     const key = `${projectId}:${versionId || ''}`;
     if (!resolvedFiles.has(key)) {
@@ -3327,9 +3423,20 @@ async function resolveAutomaticSodiumPlan(mcVersion) {
     return localPlan;
   };
 
-  const trees = await Promise.all(AUTOMATIC_SODIUM_PROJECTS.map(async project => {
+  const projects = AUTOMATIC_SODIUM_PROJECTS
+    .filter(project => !project.conditional || includeIris)
+    .map(project => project.conditional && includeIris ? { ...project, required: true } : project);
+  const trees = await Promise.all(projects.map(async project => {
     try {
-      return { project, tree: await resolveTree(project.id), error: null };
+      const tree = await resolveTree(project.id);
+      for (const [projectId] of tree) {
+        const metadata = await getProjectMetadata(projectId);
+        if (metadata.status !== 'approved' || !metadata.license?.id
+          || String(metadata.client_side || '').toLowerCase() === 'unsupported') {
+          throw new Error(`${projectId} is not an approved, client-compatible project with a declared license.`);
+        }
+      }
+      return { project, tree, error: null };
     } catch (error) {
       if (project.required) throw error;
       return { project, tree: null, error };
@@ -3342,19 +3449,44 @@ async function resolveAutomaticSodiumPlan(mcVersion) {
       skipped.push(project.name);
       continue;
     }
+    const candidate = [...files, ...tree].map(([projectId, file]) => ({
+      projectId: String(file.version.project_id || projectId),
+      versionId: file.version.id,
+      version: file.version,
+    }));
+    const conflicts = findModSetConflicts(candidate);
+    const treeProjectIds = new Set([...tree].map(([projectId, file]) => String(file.version.project_id || projectId)));
     const conflict = [...tree].some(([projectId, file]) => {
       const existing = files.get(projectId);
       return existing && existing.version.id !== file.version.id;
-    });
+    }) || conflicts.some(item => treeProjectIds.has(item.first) || treeProjectIds.has(item.second));
     if (conflict) {
       if (project.required) throw new Error(`The verified mod set requires conflicting versions of ${project.id}.`);
+      skipped.push(project.name);
+      continue;
+    }
+    const missingIntegrity = [...tree].find(([, file]) => !/^[a-f0-9]{128}$/i.test(String(file.hashes?.sha512 || '')));
+    if (missingIntegrity) {
+      if (project.required) throw new Error(`Modrinth did not provide a SHA-512 checksum for ${missingIntegrity[0]}.`);
       skipped.push(project.name);
       continue;
     }
     for (const [projectId, file] of tree) files.set(projectId, file);
   }
 
-  return { files, skipped };
+  const selectedConflicts = findModSetConflicts([...files].map(([projectId, file]) => ({
+    projectId: String(file.version.project_id || projectId),
+    versionId: file.version.id,
+    version: file.version,
+  })));
+  if (selectedConflicts.length) {
+    throw new Error(`The selected optimization mods conflict: ${selectedConflicts.map(item => `${item.first} / ${item.second}`).join(', ')}.`);
+  }
+  const licenses = new Map();
+  for (const projectId of files.keys()) {
+    licenses.set(projectId, (await getProjectMetadata(projectId)).license.id);
+  }
+  return { files, skipped, licenses };
 }
 
 function findManagedOptimizationProfile(sourceProfile, kind) {
@@ -3394,6 +3526,20 @@ function createManagedOptimizationProfile(sourceProfile, kind) {
 }
 
 async function createManagedSodiumProfile(sourceProfile) {
+  if (!canCreateOptimizationProfile(sourceProfile)) {
+    throw new Error('Automatic optimization profiles are limited to unmodified Vanilla/Fabric/Quilt profiles. Existing enabled mods and unsupported loaders are left unchanged.');
+  }
+  const sourceRoot = getMinecraftRootFor(sourceProfile.id);
+  const activeModDirectory = path.join(sourceRoot, 'mods');
+  if (fs.existsSync(activeModDirectory)) {
+    const directoryStat = fs.lstatSync(activeModDirectory);
+    if (directoryStat.isSymbolicLink() || !directoryStat.isDirectory()) {
+      throw new Error('The source profile mod directory is not a regular directory; the optimization profile was not created.');
+    }
+    if (fs.readdirSync(activeModDirectory).some(file => /\.jar$/i.test(file))) {
+      throw new Error('The source profile contains active mod JARs, so an isolated performance bundle would not preserve its mod set. The original profile was left unchanged.');
+    }
+  }
   const existing = findManagedOptimizationProfile(sourceProfile, 'sodium');
   if (existing) {
     const sodiumEntry = existing.mods.find(entry => entry.id === 'sodium' && entry.enabled !== false);
@@ -3405,75 +3551,128 @@ async function createManagedSodiumProfile(sourceProfile) {
   }
 
   await getLoaderManifest(sourceProfile.mcVersion, 'fabric');
-  const plan = await resolveAutomaticSodiumPlan(sourceProfile.mcVersion);
+  const shaderSelection = await hasSelectedShaderPack(sourceRoot);
+  const plan = await resolveAutomaticSodiumPlan(sourceProfile.mcVersion, shaderSelection);
   if (!plan.files.has('sodium')) {
     throw new Error(`No compatible Sodium release was verified for Minecraft ${sourceProfile.mcVersion}.`);
   }
 
   const profile = createManagedOptimizationProfile(sourceProfile, 'sodium');
   profile.optimizationSkippedMods = plan.skipped;
-  launcherState.profiles.push(profile);
   const root = getMinecraftRootFor(profile.id);
+  if (!areProfileRootsIsolated(sourceRoot, root)) {
+    throw new Error('The optimized profile directory is not isolated from the source profile.');
+  }
+  launcherState.profiles.push(profile);
   try {
-    ensureLauncherGameFolders(root);
-    await installLoader(profile);
-    const displayNames = new Map(AUTOMATIC_SODIUM_PROJECTS.map(project => [project.id, project.name]));
-    for (const [projectId, file] of plan.files) {
-      const name = displayNames.get(projectId) || projectId;
-      const entry = normalizeInstalledContent({
-        id: projectId,
-        name,
-        slug: projectId,
-        type: 'mod',
-        enabled: true,
-        source: 'modrinth',
-        minecraftVersion: sourceProfile.mcVersion,
-        loader: 'fabric',
-        versionId: file.version.id,
-        installedVersion: file.version.version_number,
-        versionType: file.version.version_type,
-        publishedAt: file.version.date_published || '',
-        sha1: file.hashes.sha1,
-        fileName: `${sanitizeFileName(name)}.jar`,
-        projectUrl: `https://modrinth.com/mod/${encodeURIComponent(projectId)}`,
-      });
-      const filePath = getInstalledFilePath(profile, 'mod', entry.name, false);
-      emitStatus(`Installing verified ${entry.name} for Minecraft ${profile.mcVersion}...`);
-      const actualHash = await downloadToFile(file.url, filePath, entry.name);
-      if (actualHash.toLowerCase() !== file.hashes.sha1.toLowerCase()) {
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        throw new Error(`SHA-1 verification failed for ${entry.name}.`);
+    await runIsolatedProfileSetup(sourceRoot, root, async () => {
+      ensureLauncherGameFolders(root);
+      await copyMinecraftVisualSettings(sourceRoot, root, shaderSelection);
+      await installLoader(profile);
+      const displayNames = new Map(AUTOMATIC_SODIUM_PROJECTS.map(project => [project.id, project.name]));
+      for (const [projectId, file] of plan.files) {
+        const name = displayNames.get(projectId) || projectId;
+        const entry = normalizeInstalledContent({
+          id: projectId,
+          name,
+          slug: projectId,
+          type: 'mod',
+          enabled: true,
+          source: 'modrinth',
+          minecraftVersion: sourceProfile.mcVersion,
+          loader: 'fabric',
+          versionId: file.version.id,
+          installedVersion: file.version.version_number,
+          versionType: file.version.version_type,
+          publishedAt: file.version.date_published || '',
+          sha1: file.hashes.sha1,
+          sha512: file.hashes.sha512,
+          licenseId: plan.licenses.get(projectId) || '',
+          fileName: `${sanitizeFileName(name)}.jar`,
+          projectUrl: `https://modrinth.com/mod/${encodeURIComponent(projectId)}`,
+        });
+        const filePath = getInstalledFilePath(profile, 'mod', entry.name, false);
+        emitStatus(`Installing verified ${entry.name} for Minecraft ${profile.mcVersion}...`);
+        const actualHash = await downloadToFile(file.url, filePath, entry.name);
+        if (actualHash.toLowerCase() !== file.hashes.sha1.toLowerCase()) {
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+          throw new Error(`SHA-1 verification failed for ${entry.name}.`);
+        }
+        const actualSha512 = await hashFile(filePath, 'sha512');
+        if (actualSha512.toLowerCase() !== file.hashes.sha512.toLowerCase()) {
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+          throw new Error(`SHA-512 verification failed for ${entry.name}.`);
+        }
+        profile.mods.push(entry);
       }
-      profile.mods.push(entry);
-    }
-    profile.optimizationReady = true;
-    profile.updatedAt = Date.now();
-    launcherState.activeProfileId = profile.id;
-    scheduleStateWrite();
+      profile.optimizationVisualSettingsCopied = true;
+      profile.optimizationReady = true;
+      profile.updatedAt = Date.now();
+      launcherState.activeProfileId = profile.id;
+      scheduleStateWrite();
+    });
     return profile;
   } catch (error) {
     launcherState.profiles = launcherState.profiles.filter(item => item.id !== profile.id);
     if (launcherState.activeProfileId === profile.id) launcherState.activeProfileId = sourceProfile.id;
-    try {
-      fs.rmSync(root, { recursive: true, force: true });
-    } catch (cleanupError) {
-      console.error(`Could not remove incomplete optimized profile ${profile.id}:`, cleanupError);
-    }
     scheduleStateWrite();
     throw error;
   }
 }
 
-function createManagedVanillaFallback(sourceProfile) {
+async function createManagedVanillaFallback(sourceProfile) {
   const existing = findManagedOptimizationProfile(sourceProfile, 'vanilla-fallback');
   if (existing && fs.existsSync(getMinecraftRootFor(existing.id))) return existing;
   const profile = createManagedOptimizationProfile(sourceProfile, 'vanilla-fallback');
+  const sourceRoot = getMinecraftRootFor(sourceProfile.id);
+  const targetRoot = getMinecraftRootFor(profile.id);
+  if (!areProfileRootsIsolated(sourceRoot, targetRoot)) throw new Error('The Vanilla fallback profile directory is not isolated from the source profile.');
+  await runIsolatedProfileSetup(sourceRoot, targetRoot, async () => {
+    ensureLauncherGameFolders(targetRoot);
+    await copyMinecraftVisualSettings(sourceRoot, targetRoot, false);
+  });
+  profile.optimizationVisualSettingsCopied = true;
   profile.optimizationReady = true;
   launcherState.profiles.push(profile);
-  ensureLauncherGameFolders(getMinecraftRootFor(profile.id));
   launcherState.activeProfileId = profile.id;
   scheduleStateWrite();
   return profile;
+}
+
+async function hashFile(filePath, algorithm = 'sha256') {
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash(algorithm);
+    const input = fs.createReadStream(filePath);
+    input.on('error', reject);
+    input.on('data', chunk => hash.update(chunk));
+    input.on('end', () => resolve(hash.digest('hex')));
+  });
+}
+
+async function hasSelectedShaderPack(profileRoot) {
+  const optionsPath = path.join(profileRoot, 'options.txt');
+  if (!fs.existsSync(optionsPath)) return false;
+  const metadata = await fs.promises.lstat(optionsPath);
+  if (!metadata.isFile() || metadata.isSymbolicLink()) {
+    throw new Error('The source options.txt is not a regular file; the optimization profile was not created.');
+  }
+  const options = await fs.promises.readFile(optionsPath, 'utf8');
+  const setting = options.split(/\r?\n/).find(line => /^shaderPack:/i.test(line));
+  return Boolean(setting && setting.slice(setting.indexOf(':') + 1).trim());
+}
+
+async function assertTreeHasNoSymlinks(folderPath, label) {
+  const rootStat = await fs.promises.lstat(folderPath);
+  if (rootStat.isSymbolicLink()) throw new Error(`${label} contains a symbolic link; it was not copied.`);
+  if (rootStat.isDirectory()) {
+    for (const entry of await fs.promises.readdir(folderPath, { withFileTypes: true })) {
+      const entryPath = path.join(folderPath, entry.name);
+      if (entry.isSymbolicLink()) throw new Error(`${label} contains a symbolic link named "${entry.name}"; it was not copied.`);
+      if (entry.isDirectory()) await assertTreeHasNoSymlinks(entryPath, label);
+    }
+  } else if (!rootStat.isFile()) {
+    throw new Error(`${label} is not a regular file or directory.`);
+  }
 }
 
 function isDirectChildPath(parentPath, childPath) {
@@ -4607,9 +4806,28 @@ ipcMain.handle('launcher:preview-bundle', async (_event, { mcVersion, loader, re
   if (!terms.length) return { ok: true, items: [] };
 
   const normalizedLoader = normalizeContentLoader(loader);
+  const definition = getRendererBundleDefinition(mcVersion, normalizedLoader, rendererMode);
+  const allowedProjects = new Set(definition.allowedProjectIds);
+  const excludedProjects = new Set(definition.excludedProjectIds);
   const items = [];
   for (const term of terms) {
     const slug = OPTIMIZATION_PROJECT_SLUGS[term];
+    if (slug && !allowedProjects.has(slug)) {
+      const excluded = excludedProjects.has(slug);
+      items.push({
+        id: slug,
+        name: term,
+        desc: excluded
+          ? `Excluded from the verified ${rendererMode} compatibility set for Minecraft ${mcVersion}.`
+          : `Not verified for the ${rendererMode} compatibility set on Minecraft ${mcVersion}.`,
+        type: 'mod',
+        selected: false,
+        unresolved: true,
+        loader: normalizedLoader,
+        minecraftVersion: mcVersion,
+      });
+      continue;
+    }
     try {
       if (!slug) {
         items.push({ id: term, name: term, desc: 'This recommendation has no downloadable project mapping.', type: 'mod', selected: false, unresolved: true });
@@ -4683,6 +4901,10 @@ ipcMain.handle('launcher:preview-bundle', async (_event, { mcVersion, loader, re
 // Installs the checklist's confirmed selections, tagged so a later mode
 // switch knows which installed items belong to this bundle.
 ipcMain.handle('launcher:apply-bundle', async (_event, payload = {}) => {
+  let stagingDirectory = null;
+  let committedPaths = [];
+  let targetProfile = null;
+  let previousMods = null;
   try {
     const { items, rendererMode } = payload;
     const requestedProfileId = payload.profileId;
@@ -4690,39 +4912,145 @@ ipcMain.handle('launcher:apply-bundle', async (_event, payload = {}) => {
       ? launcherState.profiles.find(item => item.id === String(requestedProfileId))
       : getActiveProfile();
     if (!profile) throw new Error('No active profile');
-    const databaseEntry = rendererMode === 'vulkan'
-      ? getVulkanDatabaseEntry(profile.mcVersion, profile.loader)
-      : getRendererDatabaseEntry(profile.mcVersion, profile.loader, rendererMode);
-    const fallbackProjects = (RENDERER_BUNDLES[rendererMode] || []).map(term => OPTIMIZATION_PROJECT_SLUGS[term]).filter(Boolean);
-    const allowedProjects = new Set([
-      ...(databaseEntry ? [databaseEntry.project, ...(databaseEntry.optimizationMods || [])] : []),
-      ...fallbackProjects,
-    ]);
+    const definition = getRendererBundleDefinition(profile.mcVersion, profile.loader, rendererMode);
+    const selectedProjectIds = validateRendererBundleSelection(
+      (Array.isArray(items) ? items : []).map(item => item?.id).filter(Boolean),
+      definition.allowedProjectIds,
+      definition.excludedProjectIds,
+    );
     ensureLauncherGameFolders(getMinecraftRootFor(profile));
 
     const idx = launcherState.profiles.findIndex(p => p.id === profile.id);
-    await ensureFabricApi(profile);
-    const installPlan = [];
-    for (const item of items || []) {
-      const itemId = String(item?.id || '');
-      if (!allowedProjects.has(itemId)) continue;
-      if (item?.unresolved) continue;
-      const entry = normalizeInstalledContent({ ...item, enabled: true, bundleFor: rendererMode });
-      if (isContentInstalled(profile.mods, entry) || hasInstalledContentFile(profile, entry)) continue;
-      const resolvedFile = await resolveModrinthFile(itemId, profile.mcVersion, profile.loader, 'mod', item.versionId || null);
-      installPlan.push({ entry, resolvedFile });
+    targetProfile = launcherState.profiles[idx];
+    previousMods = targetProfile.mods.slice();
+    const selectedItems = new Map((Array.isArray(items) ? items : [])
+      .map(item => [String(item?.id || ''), item]));
+    const plannedFiles = new Map();
+    const resolveTree = async (projectId, versionId = null, visiting = new Set()) => {
+      if (visiting.has(projectId)) throw new Error(`A required dependency cycle was found for ${projectId}.`);
+      const existing = plannedFiles.get(projectId);
+      if (existing) {
+        if (versionId && existing.version.id !== versionId) {
+          throw new Error(`The selected bundle requires conflicting versions of ${projectId}.`);
+        }
+        return;
+      }
+      const file = await resolveModrinthFile(projectId, profile.mcVersion, profile.loader, 'mod', versionId);
+      if (!/^[a-f0-9]{128}$/i.test(String(file.hashes?.sha512 || ''))) {
+        throw new Error(`Modrinth did not provide a SHA-512 checksum for ${projectId}.`);
+      }
+      plannedFiles.set(projectId, file);
+      const nextVisiting = new Set(visiting);
+      nextVisiting.add(projectId);
+      for (const dependency of getRequiredModrinthDependencies(file.version)) {
+        await resolveTree(dependency.projectId, dependency.versionId, nextVisiting);
+      }
+    };
+    for (const projectId of selectedProjectIds) {
+      const item = selectedItems.get(projectId);
+      if (item?.unresolved) throw new Error(`${projectId} has no verified compatible release.`);
+      await resolveTree(projectId, item?.versionId || null);
     }
-    for (const { entry, resolvedFile } of installPlan) {
-      const filePath = getInstalledFilePath(profile, entry.type, entry.name, false);
-      await installModrinthContent(profile, entry, filePath, resolvedFile.version.id);
-      if (!launcherState.profiles[idx].mods.some(m => m.id === entry.id)) {
-        launcherState.profiles[idx].mods.push(entry);
+    if (profile.loader === 'fabric') {
+      const fabricApi = profile.mods.find(mod => mod.id === 'fabric-api' && mod.enabled !== false);
+      const fabricApiPath = fabricApi ? resolveInstalledContentPath(profile, fabricApi, false) : null;
+      if (!fabricApiPath || !fs.existsSync(fabricApiPath)) await resolveTree('fabric-api');
+    }
+    for (const [projectId, file] of plannedFiles) {
+      const installed = (profile.mods || []).find(mod => mod.id === projectId && mod.enabled !== false);
+      if (installed?.versionId && installed.versionId !== file.version.id) {
+        throw new Error(`${projectId} is already installed at a different version. Remove or update it separately before applying this bundle.`);
       }
     }
+
+    const comparisonFiles = [...plannedFiles.entries()].map(([projectId, file]) => ({
+      projectId: String(file.version.project_id || projectId),
+      versionId: file.version.id,
+      version: file.version,
+    }));
+    const installedModrinthEntries = (profile.mods || []).filter(mod => mod.enabled !== false
+      && mod.type === 'mod' && mod.source === 'modrinth' && mod.id && mod.versionId
+      && !plannedFiles.has(String(mod.id)));
+    for (const mod of installedModrinthEntries) {
+      const file = await resolveModrinthFile(mod.id, profile.mcVersion, profile.loader, 'mod', mod.versionId);
+      comparisonFiles.push({
+        projectId: String(file.version.project_id || mod.id),
+        versionId: file.version.id,
+        version: file.version,
+      });
+    }
+    const conflicts = findModSetConflicts(comparisonFiles);
+    if (conflicts.length) {
+      throw new Error(`The selected bundle conflicts with itself or enabled installed mods: ${conflicts.map(item => `${item.first} / ${item.second}`).join(', ')}.`);
+    }
+
+    const displayNames = new Map(Object.entries(OPTIMIZATION_PROJECT_SLUGS).map(([name, slug]) => [slug, name]));
+    const fabricApiPath = getInstalledFilePath(profile, 'mod', 'Fabric API', false);
+    stagingDirectory = path.join(path.dirname(fabricApiPath), `.bald-bundle-${crypto.randomUUID()}`);
+    fs.mkdirSync(stagingDirectory, { recursive: true });
+    const stagedFiles = [];
+    const installedEntries = [];
+    for (const [projectId, resolvedFile] of plannedFiles) {
+      const existing = profile.mods.find(mod => mod.id === projectId && mod.enabled !== false);
+      const existingPath = existing ? resolveInstalledContentPath(profile, existing, false) : null;
+      if (existingPath && fs.existsSync(existingPath)) continue;
+      const item = selectedItems.get(projectId);
+      const name = projectId === 'fabric-api' ? 'Fabric API' : (item?.name || displayNames.get(projectId) || projectId);
+      const entry = normalizeInstalledContent({
+        ...(item || {}),
+        id: projectId,
+        name,
+        type: 'mod',
+        enabled: true,
+        source: 'modrinth',
+        bundleFor: rendererMode,
+        versionId: resolvedFile.version.id,
+        sha1: resolvedFile.hashes.sha1,
+        sha512: resolvedFile.hashes.sha512,
+      });
+      const filePath = getInstalledFilePath(profile, entry.type, entry.name, false);
+      const stagedPath = path.join(stagingDirectory, `${crypto.randomUUID()}.jar`);
+      const actualHash = await downloadToFile(resolvedFile.url, stagedPath, entry.name);
+      if (actualHash.toLowerCase() !== resolvedFile.hashes.sha1.toLowerCase()
+        || (await hashFile(stagedPath, 'sha512')).toLowerCase() !== resolvedFile.hashes.sha512.toLowerCase()) {
+        throw new Error(`Checksum verification failed for ${entry.name}.`);
+      }
+      stagedFiles.push({ stagedPath, targetPath: filePath });
+      installedEntries.push(entry);
+    }
+    committedPaths = commitStagedFiles(stagedFiles);
+    targetProfile.mods = [
+      ...targetProfile.mods.filter(mod => !installedEntries.some(entry => entry.id === mod.id)),
+      ...installedEntries,
+    ];
+    fs.rmSync(stagingDirectory, { recursive: true, force: true });
+    stagingDirectory = null;
     scheduleStateWrite();
     return { ok: true, state: launcherState };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    const rollbackErrors = [];
+    for (const filePath of committedPaths.reverse()) {
+      try {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      } catch (rollbackError) {
+        rollbackErrors.push(rollbackError.message);
+      }
+    }
+    if (targetProfile && previousMods) targetProfile.mods = previousMods;
+    if (stagingDirectory) {
+      try {
+        fs.rmSync(stagingDirectory, { recursive: true, force: true });
+      } catch (cleanupError) {
+        rollbackErrors.push(cleanupError.message);
+      }
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      error: rollbackErrors.length
+        ? `${message} Rollback/cleanup was incomplete: ${rollbackErrors.join('; ')}`
+        : message,
+    };
   }
 });
 
@@ -5504,7 +5832,7 @@ ipcMain.handle('launcher:ensure-vanilla-profile', async (_event, sourceProfileId
   if (source.optimizationManaged && source.optimizationKind === 'vanilla-fallback') {
     return { ok: true, profile: source, state: launcherState };
   }
-  const profile = createManagedVanillaFallback(source);
+  const profile = await createManagedVanillaFallback(source);
   try {
     await prepareManagedWorlds(profile, source);
     return { ok: true, profile, state: launcherState };
@@ -9212,7 +9540,15 @@ ipcMain.handle('launcher:open-folder', async (_event, folderType) => {
 
 ipcMain.handle('launcher:get-diagnostics', async () => {
   const profile = getActiveProfile();
-  const javaPath = await getJavaPath(getRequiredJavaVersion(profile?.mcVersion || '1.21.1'));
+  const processRecord = profile && runningProcesses.get(profile.id);
+  const profileRoot = profile ? getMinecraftRootFor(profile.id) : null;
+  const processProbe = process.platform === 'win32' && profile
+    ? await queryWindowsMinecraftProcess(processRecord?.pid || null, profileRoot)
+    : { ok: false, error: 'Active process inspection is supported on Windows only.' };
+  const javaPath = processProbe.ok && processProbe.process?.executablePath
+    ? processProbe.process.executablePath
+    : processRecord?.javaPath
+      || await resolveJavaForMinecraft(profile?.mcVersion || '1.21.1', profile?.javaPath || '');
   const javaVersion = await new Promise(resolve => execFile(javaPath, ['-version'], (error, stdout, stderr) => resolve(error ? 'Unavailable' : `${stdout || ''}${stderr || ''}`.trim())));
   const gpuAdapters = await new Promise(resolve => {
     if (process.platform !== 'win32') return resolve([]);
@@ -9237,7 +9573,10 @@ ipcMain.handle('launcher:get-diagnostics', async () => {
     );
   });
   const gpu = gpuAdapters.map(adapter => adapter.name).join(', ') || 'Unavailable';
-  const profileRoot = profile ? getMinecraftRootFor(profile.id) : null;
+  const gpuPreference = await readWindowsGpuPreference(javaPath);
+  const diagnosticPid = processRecord?.pid || processProbe.process?.pid || null;
+  const diagnosticCpu = diagnosticPid ? await readProcessUsage(diagnosticPid, 'cpu') : null;
+  const diagnosticMemory = diagnosticPid ? await readProcessUsage(diagnosticPid, 'memory') : null;
   const disk = profileRoot && fs.statfsSync ? (() => { try { const info = fs.statfsSync(profileRoot); return { freeGB: Math.round((info.bsize * info.bavail) / 1073741824), totalGB: Math.round((info.bsize * info.blocks) / 1073741824) }; } catch (_error) { return null; } })() : null;
   const internet = await new Promise(resolve => { const request = require('https').get('https://api.modrinth.com/v2', { timeout: 4000 }, response => { response.resume(); resolve(response.statusCode >= 200 && response.statusCode < 500); }); request.on('error', () => resolve(false)); request.on('timeout', () => { request.destroy(); resolve(false); }); });
   return {
@@ -9251,6 +9590,23 @@ ipcMain.handle('launcher:get-diagnostics', async () => {
     javaPath,
     javaVersion,
     javaMajorVersion: parseJavaMajorVersion(javaPath) || null,
+    minecraftProcess: processProbe.ok && processProbe.process ? {
+      pid: processProbe.process.pid,
+      executablePath: processProbe.process.executablePath,
+      processType: processProbe.process.isClient ? 'Minecraft client' : 'Java process (not identified as a Minecraft client)',
+      launchArguments: redactLaunchArguments(parseWindowsCommandLine(processProbe.process.commandLine || '')),
+      cpuPercent: diagnosticCpu,
+      memoryMb: diagnosticMemory,
+      gpu3dPercent: processProbe.process.gpu3dPercent,
+      gpuAdaptersInUse: processProbe.process.gpuAdaptersInUse || [],
+      gpu3dMeasurement: processProbe.process.gpu3dPercent == null
+        ? processProbe.process.gpuError || 'Windows GPU Engine counters were unavailable for this process.'
+        : 'Maximum reported 3D-engine utilization for this process; not total GPU utilization.',
+    } : null,
+    minecraftGpuPreference: gpuPreference,
+    processDetection: processProbe.ok
+      ? processProbe.process ? 'The Java process was inspected through Windows process metadata.' : 'No Java process was found for this profile.'
+      : processProbe.error,
     gpu,
     gpuAdapters,
     gpuDetection: gpu === 'Unavailable'
@@ -9261,7 +9617,9 @@ ipcMain.handle('launcher:get-diagnostics', async () => {
     loader: profile?.loader || null,
     renderer: profile?.rendererMode || null,
     jvmArguments: getJvmArguments(normalizeSettings({ ...launcherState.settings, ...(profile || {}) }), parseJavaMajorVersion(javaPath)),
-    launchArguments: redactLaunchArguments(lastLaunchArguments),
+    launchArguments: processRecord?.launchArguments || (processProbe.ok && processProbe.process
+      ? redactLaunchArguments(parseWindowsCommandLine(processProbe.process.commandLine || ''))
+      : []),
     checks: {
       java: javaPath !== 'java' && javaVersion !== 'Unavailable' ? 'good' : 'warning',
       profileDirectory: profileRoot && fs.existsSync(profileRoot) ? 'good' : 'problem',
@@ -9331,21 +9689,315 @@ ipcMain.handle('launcher:open-crash-evidence', async (_event, payload = {}) => {
   }
 });
 
-async function collectPerformanceSnapshot(profile) {
-  const processRecord = runningProcesses.get(profile.id);
-  let cpuPercent = null;
-  let memoryMb = null;
-  if (processRecord?.pid) {
-    try {
-      const stats = await pidusage(processRecord.pid);
-      cpuPercent = Number(Number(stats.cpu || 0).toFixed(1));
-      memoryMb = Number((Number(stats.memory || 0) / 1048576).toFixed(1));
-    } catch (_error) {}
+async function readProcessUsage(pid, metric) {
+  try {
+    const stats = await pidusage(pid);
+    return metric === 'cpu'
+      ? Number(Number(stats.cpu || 0).toFixed(1))
+      : Number((Number(stats.memory || 0) / 1048576).toFixed(1));
+  } catch (error) {
+    console.warn(`[Performance] Could not read process ${metric}:`, error);
+    return null;
   }
-  const diagnostics = await new Promise(resolve => {
-    if (!mainWindow || mainWindow.isDestroyed()) return resolve({ gpu: 'Unavailable' });
-    resolve({ gpu: 'Unavailable' });
+}
+
+async function queryWindowsMinecraftProcess(pid, profileRoot) {
+  if (process.platform !== 'win32') return { ok: false, error: 'Windows process/GPU inspection is unavailable on this platform.' };
+  const numericPid = Number(pid);
+  const encodedRoot = Buffer.from(String(profileRoot || ''), 'utf8').toString('base64');
+  const script = [
+    '$ErrorActionPreference = "Stop"',
+    `$targetPid = ${Number.isInteger(numericPid) && numericPid > 0 ? numericPid : 0}`,
+    `$profileRoot = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("${encodedRoot}"))`,
+    'if ($targetPid -gt 0) { $target = Get-CimInstance Win32_Process -Filter "ProcessId=$targetPid" } else { $target = Get-CimInstance Win32_Process | Where-Object { $_.Name -match "^javaw?\\.exe$" -and $_.CommandLine -and $_.CommandLine.Contains($profileRoot) } | Select-Object -First 1 }',
+    'if (-not $target) { @{ process = $null; error = $null } | ConvertTo-Json -Compress; exit 0 }',
+    '$gpuEngines = @(); $gpuError = $null',
+    'try { $paths = (Get-Counter -ListSet "GPU Engine").PathsWithInstances | Where-Object { $_ -match "pid_$($target.ProcessId)(_|\\))" -and $_ -match "engtype_3D" }; if ($paths) { $counterSets = Get-Counter -Counter $paths -SampleInterval 1 -MaxSamples 2; $samples = $counterSets[-1].CounterSamples; foreach ($sample in $samples) { if ($sample.InstanceName -match "engtype_3D") { $gpuEngines += @{ instanceName = [string]$sample.InstanceName; utilizationPercent = [math]::Round([double]$sample.CookedValue, 1) } } } } } catch { $gpuError = $_.Exception.Message }',
+    '$command = [string]$target.CommandLine',
+    '$client = ($command -match "net\\.minecraft\\.client\\.main\\.Main|--gameDir") -and ($command -notmatch "fabric-server-launch|net\\.minecraft\\.server\\.Main")',
+    '@{ process = @{ pid = [int]$target.ProcessId; executablePath = [string]$target.ExecutablePath; commandLine = $command; isClient = [bool]$client; gpuEngines = @($gpuEngines); gpuError = $gpuError }; error = $null } | ConvertTo-Json -Depth 5 -Compress',
+  ].join('; ');
+  return new Promise(resolve => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      timeout: 15000,
+      windowsHide: true,
+      maxBuffer: 1024 * 1024,
+    }, (error, stdout) => {
+      if (error || !stdout.trim()) return resolve({ ok: false, error: error?.message || 'Windows process inspection returned no data.' });
+      try {
+        const parsed = JSON.parse(stdout);
+        if (!parsed.process) return resolve({ ok: true, process: null });
+        const engines = Array.isArray(parsed.process.gpuEngines)
+          ? parsed.process.gpuEngines
+          : parsed.process.gpuEngines
+            ? [parsed.process.gpuEngines]
+            : [];
+        const gpuAdaptersInUse = summarizeGpuEngineSamples(engines, Number(parsed.process.pid));
+        resolve({
+          ok: true,
+          process: {
+            ...parsed.process,
+            gpuAdaptersInUse,
+            gpu3dPercent: gpuAdaptersInUse.length
+              ? Math.max(...gpuAdaptersInUse.map(adapter => adapter.max3dEnginePercent))
+              : null,
+          },
+        });
+      } catch (parseError) {
+        resolve({ ok: false, error: `Windows process inspection returned invalid data: ${parseError.message}` });
+      }
+    });
   });
+}
+
+async function hashDirectoryTree(folderPath) {
+  if (!fs.existsSync(folderPath)) return crypto.createHash('sha256').update('missing').digest('hex');
+  await assertTreeHasNoSymlinks(folderPath, 'Benchmark resource files');
+  const hash = crypto.createHash('sha256');
+  const appendDirectory = async (directory, relative = '') => {
+    const entries = await fs.promises.readdir(directory, { withFileTypes: true });
+    entries.sort((left, right) => left.name.localeCompare(right.name));
+    for (const entry of entries) {
+      const entryRelative = path.posix.join(relative.split(path.sep).join('/'), entry.name);
+      const entryPath = path.join(directory, entry.name);
+      hash.update(entryRelative);
+      if (entry.isDirectory()) {
+        hash.update('directory');
+        await appendDirectory(entryPath, entryRelative);
+      } else if (entry.isFile()) {
+        hash.update(await hashFile(entryPath));
+      } else {
+        throw new Error(`Benchmark resource "${entryRelative}" is not a regular file or directory.`);
+      }
+    }
+  };
+  await appendDirectory(folderPath);
+  return hash.digest('hex');
+}
+
+async function hashActiveMods(profile) {
+  const modsDirectory = path.join(getMinecraftRootFor(profile.id), 'mods');
+  if (!fs.existsSync(modsDirectory)) {
+    return { sha256: crypto.createHash('sha256').update('no-active-mods').digest('hex'), entries: [] };
+  }
+  await assertTreeHasNoSymlinks(modsDirectory, 'Minecraft mods');
+  const files = [];
+  const walk = async (directory, relative = '') => {
+    for (const entry of await fs.promises.readdir(directory, { withFileTypes: true })) {
+      const entryRelative = path.posix.join(relative.split(path.sep).join('/'), entry.name);
+      const entryPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        await walk(entryPath, entryRelative);
+      } else if (entry.isFile() && /\.jar$/i.test(entry.name) && !/\.disabled$/i.test(entry.name)) {
+        files.push({ path: entryRelative, sha256: await hashFile(entryPath) });
+      }
+    }
+  };
+  await walk(modsDirectory);
+  files.sort((left, right) => left.path.localeCompare(right.path));
+  return { sha256: crypto.createHash('sha256').update(JSON.stringify(files)).digest('hex'), entries: files };
+}
+
+async function getBenchmarkContext(profile, sceneId, activeProcess) {
+  const sourceProfile = profile.optimizationManaged
+    ? launcherState.profiles.find(item => item.id === profile.optimizationSourceProfileId)
+    : profile;
+  if (!sourceProfile) throw new Error('The optimized profile no longer has its source profile.');
+  const optionsPath = path.join(getMinecraftRootFor(profile.id), 'options.txt');
+  if (!fs.existsSync(optionsPath)) throw new Error('Minecraft options.txt is missing; launch the selected profile once before benchmarking.');
+  await assertTreeHasNoSymlinks(optionsPath, 'Minecraft options');
+  const optionsSha256 = await hashFile(optionsPath);
+  const resourcesSha256 = crypto.createHash('sha256').update(JSON.stringify({
+    resourcepacks: await hashDirectoryTree(path.join(getMinecraftRootFor(profile.id), 'resourcepacks')),
+    shaderpacks: await hashDirectoryTree(path.join(getMinecraftRootFor(profile.id), 'shaderpacks')),
+    irisConfig: await (async () => {
+      const irisConfig = path.join(getMinecraftRootFor(profile.id), 'config', 'iris.properties');
+      if (!fs.existsSync(irisConfig)) return 'missing';
+      await assertTreeHasNoSymlinks(irisConfig, 'Iris shader settings');
+      return hashFile(irisConfig);
+    })(),
+  })).digest('hex');
+  const activeMods = await hashActiveMods(profile);
+  const gpuNames = Array.isArray(activeProcess?.installedAdapters)
+    ? activeProcess.installedAdapters.map(adapter => typeof adapter === 'string' ? adapter : adapter.name).filter(Boolean).sort().join(',')
+    : '';
+  const optionsText = await fs.promises.readFile(optionsPath, 'utf8');
+  const selectedShaderPack = optionsText.split(/\r?\n/).some(line => /^shaderPack:/i.test(line)
+    && Boolean(line.slice(line.indexOf(':') + 1).trim()));
+  const profileModsPath = path.join(getMinecraftRootFor(profile.id), 'mods');
+  const hasIris = (profile.mods || []).some(mod => mod.id === 'iris' && mod.enabled !== false)
+    || (fs.existsSync(profileModsPath) && fs.readdirSync(profileModsPath).some(file => /^iris(?:[-_ ].*)?\.jar$/i.test(file)));
+  const shaderRuntime = selectedShaderPack && hasIris ? 'iris-selected'
+    : hasIris ? 'iris-installed'
+      : selectedShaderPack ? 'selected-without-iris'
+        : 'no-selected-shader';
+  const cpu = os.cpus();
+  const hardware = JSON.stringify({
+    platform: process.platform,
+    architecture: process.arch,
+    operatingSystem: `${os.type()} ${os.release()}`,
+    cpu: cpu[0]?.model || 'unknown',
+    logicalCores: cpu.length,
+    memoryBytes: os.totalmem(),
+    installedGpuModels: gpuNames,
+  });
+  const actualJavaPath = activeProcess?.process?.executablePath || activeProcess?.javaPath || '';
+  if (!actualJavaPath) throw new Error('The running Minecraft Java executable could not be identified.');
+  const javaMajor = parseJavaMajorVersion(actualJavaPath) || activeProcess?.javaMajor || null;
+  if (!javaMajor) throw new Error('The running Java major version could not be determined.');
+  const javaVersionExecutable = path.basename(actualJavaPath).toLowerCase() === 'javaw.exe'
+    ? path.join(path.dirname(actualJavaPath), 'java.exe')
+    : actualJavaPath;
+  const javaRuntime = await new Promise(resolve => execFile(
+    fs.existsSync(javaVersionExecutable) ? javaVersionExecutable : actualJavaPath,
+    ['-version'],
+    {
+    timeout: 5000,
+    windowsHide: true,
+    },
+    (error, stdout, stderr) => {
+      const output = `${stdout || ''}${stderr || ''}`.trim();
+      resolve(!error && output ? output : '');
+    },
+  ));
+  if (!javaRuntime) {
+    throw new Error('The exact running Java runtime version could not be queried; benchmark comparison is disabled.');
+  }
+  const launchArguments = Array.isArray(activeProcess?.launchArguments)
+    ? activeProcess.launchArguments
+    : [];
+  const launchArgumentsSha256 = crypto.createHash('sha256')
+    .update(JSON.stringify(launchArguments))
+    .digest('hex');
+  const loaderVersion = activeProcess?.loaderVersion
+    || (profile.loader === 'vanilla' ? profile.mcVersion : getLoaderVersionId(profile, profile.mcVersion, profile.loader))
+    || 'unknown';
+  if (loaderVersion === 'unknown') throw new Error('The selected loader version could not be identified for benchmark comparison.');
+  const jvmConfigurationSha256 = crypto.createHash('sha256').update(JSON.stringify({
+    arguments: Array.isArray(activeProcess?.jvmArguments) ? activeProcess.jvmArguments : [],
+    memoryMaxGb: activeProcess?.memoryMaxGb ?? null,
+  })).digest('hex');
+  const signature = createBenchmarkSignature({
+    machineId: launcherState.performanceMachineId,
+    hardware,
+    sourceProfileId: sourceProfile.id,
+    sceneId,
+    minecraft: profile.mcVersion,
+    loader: profile.loader,
+    loaderVersion,
+    renderer: profile.rendererMode,
+    javaMajor,
+    javaPath: path.resolve(actualJavaPath).toLowerCase(),
+    javaRuntime,
+    jvmConfigurationSha256,
+    shaderRuntime,
+    optionsSha256,
+    resourcesSha256,
+  });
+  const configurationSignature = createBenchmarkConfigurationSignature({
+    loader: profile.loader,
+    loaderVersion,
+    renderer: profile.rendererMode,
+    activeModsSha256: activeMods.sha256,
+  });
+  return {
+    sourceProfile,
+    sourceProfileId: sourceProfile.id,
+    sceneId,
+    javaMajor,
+    javaPath: path.resolve(actualJavaPath),
+    javaRuntime,
+    launchArguments,
+    launchArgumentsSha256,
+    jvmConfigurationSha256,
+    loaderVersion,
+    activeModsSha256: activeMods.sha256,
+    activeMods: activeMods.entries,
+    configurationSignature,
+    shaderRuntime,
+    optionsSha256,
+    resourcesSha256,
+    signature,
+    hardware,
+  };
+}
+
+async function findPresentMonExecutable() {
+  const configuredPath = String(process.env.PRESENTMON_PATH || '');
+  if (configuredPath && fs.existsSync(configuredPath)) return configuredPath;
+  const candidates = [
+    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Intel', 'PresentMon', 'PresentMon.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Programs', 'PresentMon', 'PresentMon.exe'),
+  ].filter(candidate => candidate && fs.existsSync(candidate));
+  if (candidates.length) return candidates[0];
+  if (process.platform !== 'win32') return null;
+  return new Promise(resolve => execFile('where.exe', ['PresentMon.exe'], { windowsHide: true, timeout: 5000 }, (error, stdout) => {
+    resolve(!error && stdout.trim() ? stdout.trim().split(/\r?\n/)[0] : null);
+  }));
+}
+
+async function startPresentMonCapture(executable, processId, durationSeconds) {
+  const directory = fs.mkdtempSync(path.join(app.getPath('temp'), 'bald-presentmon-'));
+  const csvPath = path.join(directory, 'frames.csv');
+  let child;
+  try {
+    child = spawn(executable, [
+      '--process_id', String(processId),
+      '--output_file', csvPath,
+      '--delay', '30',
+      '--timed', String(durationSeconds),
+      '--terminate_after_timed',
+      '--no_console_stats',
+    ], { windowsHide: true, stdio: 'ignore' });
+  } catch (error) {
+    fs.rmSync(directory, { recursive: true, force: true });
+    return { directory: null, csvPath, child: null, closed: Promise.resolve(null), spawnError: error };
+  }
+  let spawnError = null;
+  const closed = new Promise(resolve => child.once('close', (code, signal) => resolve({ code, signal })));
+  try {
+    await new Promise((resolve, reject) => {
+      child.once('spawn', resolve);
+      child.once('error', reject);
+    });
+  } catch (error) {
+    spawnError = error;
+  }
+  return { directory, csvPath, child, closed, spawnError };
+}
+
+async function waitForMilliseconds(durationMs) {
+  await new Promise(resolve => setTimeout(resolve, durationMs));
+}
+
+function getPerformanceHistory(profile) {
+  const sourceId = profile.optimizationManaged ? profile.optimizationSourceProfileId : profile.id;
+  return launcherState.profiles
+    .filter(item => item.id === sourceId || item.optimizationSourceProfileId === sourceId)
+    .flatMap(item => (item.benchmarkHistory || []).map(result => ({ ...result })))
+    .sort((left, right) => String(left.startedAt).localeCompare(String(right.startedAt)))
+    .slice(-60);
+}
+
+function getBenchmarkComparison(history, result) {
+  const matching = history.filter(item => item.signature === result.signature);
+  return compareBenchmarkGroups(
+    matching.filter(item => item.role === 'baseline'),
+    matching.filter(item => item.role === 'optimized'),
+  );
+}
+
+async function collectPerformanceSnapshot(profile, includeWindowsTelemetry = false) {
+  const processRecord = runningProcesses.get(profile.id);
+  const processProbe = includeWindowsTelemetry && process.platform === 'win32' && processRecord?.pid
+    ? await queryWindowsMinecraftProcess(processRecord.pid, getMinecraftRootFor(profile.id))
+    : includeWindowsTelemetry && process.platform === 'win32'
+      ? await queryWindowsMinecraftProcess(null, getMinecraftRootFor(profile.id))
+      : null;
+  const pid = processRecord?.pid || processProbe?.process?.pid || null;
+  const [cpuPercent, memoryMb] = pid
+    ? await Promise.all([readProcessUsage(pid, 'cpu'), readProcessUsage(pid, 'memory')])
+    : [null, null];
   return {
     recordedAt: new Date().toISOString(),
     profileId: profile.id,
@@ -9360,9 +10012,20 @@ async function collectPerformanceSnapshot(profile) {
     zeroPointOnePercentLow: null,
     cpuPercent,
     memoryMb,
-    gpu: diagnostics.gpu,
+    gpu3dPercent: processProbe?.process?.gpu3dPercent ?? null,
+    gpuAdaptersInUse: processProbe?.process?.gpuAdaptersInUse || [],
+    gpu3dMeasurement: processProbe?.process?.gpu3dPercent == null
+      ? 'Not sampled; refresh live metrics to request Windows GPU Engine counters.'
+      : 'Windows process-specific 3D-engine samples and adapter identifiers; not total GPU utilization.',
     vramMb: null,
-    java: profile.javaPath || 'Automatic Java detection',
+    pid,
+    java: processRecord?.javaPath || profile.javaPath || 'Automatic Java detection',
+    javaMajor: processRecord?.javaMajor || null,
+    processType: processProbe?.process
+      ? processProbe.process.isClient ? 'Minecraft client' : 'Java process; not identified as a Minecraft client'
+      : processRecord?.pid ? 'Tracked Java process' : 'No tracked process',
+    processDetection: processProbe?.error || null,
+    launchArguments: processRecord?.launchArguments || [],
     estimatedMetrics: ['fps', 'frameTimeMs', 'onePercentLow', 'zeroPointOnePercentLow', 'vramMb'],
   };
 }
@@ -9370,42 +10033,203 @@ async function collectPerformanceSnapshot(profile) {
 ipcMain.handle('launcher:get-performance', async (_event, profileId) => {
   const profile = launcherState.profiles.find(item => item.id === profileId) || getActiveProfile();
   if (!profile) return { ok: false, error: 'No profile selected.' };
-  return { ok: true, running: runningProcesses.has(profile.id), snapshot: await collectPerformanceSnapshot(profile), history: profile.benchmarkHistory || [] };
+  const snapshot = await collectPerformanceSnapshot(profile, true);
+  const adapters = await getInstalledGpuModels();
+  const history = getPerformanceHistory(profile);
+  for (const result of history) result.comparison = getBenchmarkComparison(history, result);
+  return {
+    ok: true,
+    running: runningProcesses.has(profile.id),
+    snapshot,
+    history,
+    installedAdapters: adapters,
+  };
+});
+
+ipcMain.handle('launcher:get-gpu-preference', async (_event, profileId) => {
+  try {
+    if (process.platform !== 'win32') {
+      return { ok: false, error: 'Windows graphics preferences are only available on Windows.' };
+    }
+    const profile = launcherState.profiles.find(item => item.id === String(profileId || '')) || getActiveProfile();
+    if (!profile) return { ok: false, error: 'No profile selected.' };
+    const processRecord = runningProcesses.get(profile.id);
+    const processProbe = process.platform === 'win32'
+      ? await queryWindowsMinecraftProcess(processRecord?.pid || null, getMinecraftRootFor(profile.id))
+      : { ok: false, process: null, error: 'Windows GPU preference is not supported on this platform.' };
+    const minimumJava = getRequiredJavaVersion(profile.mcVersion);
+    let javaPath = processProbe.ok && processProbe.process?.executablePath
+      ? processProbe.process.executablePath
+      : processRecord?.javaPath || '';
+    if (!javaPath && profile.javaPath && fs.existsSync(profile.javaPath)
+      && parseJavaMajorVersion(profile.javaPath) >= minimumJava) {
+      javaPath = profile.javaPath;
+    }
+    if (!javaPath) {
+      const discoveredJava = await getJavaPath(minimumJava, false);
+      javaPath = fs.existsSync(discoveredJava) ? discoveredJava : '';
+    }
+    const preference = await readWindowsGpuPreference(javaPath);
+    return {
+      ok: true,
+      profileId: profile.id,
+      javaPath,
+      preference,
+      running: Boolean(processProbe.ok && processProbe.process),
+      processType: processProbe.process?.isClient ? 'Minecraft client' : processProbe.process ? 'Java process' : null,
+      gpuAdaptersInUse: processProbe.process?.gpuAdaptersInUse || [],
+      gpu3dPercent: processProbe.process?.gpu3dPercent ?? null,
+      gpuError: processProbe.process?.gpuError || processProbe.error || null,
+    };
+  } catch (error) {
+    console.error('[Performance] Could not inspect Windows GPU preference:', error);
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:open-windows-gpu-settings', async () => {
+  if (process.platform !== 'win32') {
+    return { ok: false, error: 'Windows graphics preferences are only available on Windows.' };
+  }
+  try {
+    await shell.openExternal('ms-settings:display-advancedgraphics');
+    return { ok: true };
+  } catch (error) {
+    console.error('[Performance] Could not open Windows Graphics settings:', error);
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
 });
 
 ipcMain.handle('launcher:run-benchmark', async (_event, payload) => {
   const profile = launcherState.profiles.find(item => item.id === payload?.profileId) || getActiveProfile();
   if (!profile) return { ok: false, error: 'No profile selected.' };
-  if (!runningProcesses.has(profile.id)) return { ok: false, error: 'Launch Minecraft with this profile before running a benchmark.' };
-  const durationMs = Math.min(60000, Math.max(5000, Number(payload?.durationMs) || 15000));
-  emitStatus(`Benchmarking ${profile.name}...`);
+  const processRecord = runningProcesses.get(profile.id);
+  if (!processRecord?.pid) return { ok: false, error: 'Launch Minecraft with this profile before running a benchmark.' };
+  const role = payload?.role === 'optimized' ? 'optimized' : payload?.role === 'baseline' ? 'baseline' : '';
+  if (!role) return { ok: false, error: 'Choose whether this is a baseline or optimized-profile run.' };
+  if (role === 'optimized' && !(profile.optimizationManaged && profile.optimizationKind === 'sodium')) {
+    return { ok: false, error: 'An optimized run must use an isolated, launcher-managed Sodium profile.' };
+  }
+  if (role === 'baseline' && profile.optimizationManaged) {
+    return { ok: false, error: 'A baseline run must use the original, non-managed profile.' };
+  }
+  const sceneId = String(payload?.sceneId || '').trim().slice(0, 120);
+  if (sceneId.length < 3) return { ok: false, error: 'Enter the same world and test scene label for both runs.' };
+  const durationSeconds = Math.min(120, Math.max(15, Math.round(Number(payload?.durationSeconds) || 60)));
+  const durationMs = durationSeconds * 1000;
+  const activeProcess = await queryWindowsMinecraftProcess(processRecord.pid, getMinecraftRootFor(profile.id));
+  if (process.platform === 'win32' && (!activeProcess.ok || !activeProcess.process)) {
+    return { ok: false, error: `Could not verify the Minecraft process before capture: ${activeProcess.error || 'no matching Java process was found'}` };
+  }
+  if (activeProcess.ok && activeProcess.process && !activeProcess.process.isClient) {
+    return { ok: false, error: 'The tracked Java process was not identified as a Minecraft client; server and other Java processes cannot be FPS benchmarked.' };
+  }
+  const context = await getBenchmarkContext(profile, sceneId, {
+    ...activeProcess,
+    javaPath: processRecord.javaPath,
+    javaMajor: processRecord.javaMajor,
+    launchArguments: processRecord.launchArguments,
+    jvmArguments: processRecord.jvmArguments,
+    memoryMaxGb: processRecord.memoryMaxGb,
+    loaderVersion: processRecord.versionNumber,
+    installedAdapters: await getInstalledGpuModels(),
+  });
+  const presentMon = process.platform === 'win32' ? await findPresentMonExecutable() : null;
+  let capture = null;
+  if (presentMon) capture = await startPresentMonCapture(presentMon, processRecord.pid, durationSeconds);
+  emitStatus(capture
+    ? `Benchmark warm-up · ${profile.name} · 30 seconds, then ${durationSeconds} seconds of frame capture`
+    : `Sampling CPU/RAM · ${profile.name} · PresentMon was not found; FPS will remain unavailable`);
   const samples = [];
   const startedAt = Date.now();
-  while (Date.now() - startedAt < durationMs && runningProcesses.has(profile.id)) {
+  let captureError = capture?.spawnError ? `PresentMon could not start: ${capture.spawnError.message}` : null;
+  emitStatus(`Benchmark warm-up · ${profile.name}`);
+  await waitForMilliseconds(30000);
+  const measurementStartedAt = Date.now();
+  while (Date.now() - measurementStartedAt < durationMs && runningProcesses.has(profile.id)) {
     samples.push(await collectPerformanceSnapshot(profile));
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
+  if (!runningProcesses.has(profile.id)) {
+    captureError = captureError || 'Minecraft exited before the requested benchmark interval completed.';
+    if (capture?.child && capture.child.exitCode == null) capture.child.kill();
+  }
+  let frameMetrics = null;
+  if (capture && !captureError) {
+    const closeResult = await Promise.race([
+      capture.closed,
+      waitForMilliseconds(15000).then(() => null),
+    ]);
+    if (!closeResult && capture.child.exitCode == null) {
+      capture.child.kill();
+      await Promise.race([capture.closed, waitForMilliseconds(5000)]);
+    }
+    try {
+      if (closeResult?.code !== 0) throw new Error(`PresentMon exited with code ${closeResult?.code ?? 'unknown'}.`);
+      frameMetrics = parsePresentMonCsv(await fs.promises.readFile(capture.csvPath, 'utf8'), processRecord.pid);
+    } catch (error) {
+      captureError = `FPS capture failed: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+  if (capture?.directory && fs.existsSync(capture.directory)) fs.rmSync(capture.directory, { recursive: true, force: true });
   const measuredCpu = samples.filter(sample => sample.cpuPercent != null).map(sample => sample.cpuPercent);
   const measuredMemory = samples.filter(sample => sample.memoryMb != null).map(sample => sample.memoryMb);
   const result = {
     id: `benchmark-${crypto.randomUUID()}`,
     startedAt: new Date(startedAt).toISOString(),
-    durationMs: Date.now() - startedAt,
-    averageFps: null,
-    onePercentLow: null,
-    zeroPointOnePercentLow: null,
-    frameTimeMs: null,
+    durationMs: Date.now() - measurementStartedAt,
+    role,
+    sceneId,
+    averageFps: frameMetrics?.averageFps ?? null,
+    onePercentLow: frameMetrics?.onePercentLow ?? null,
+    zeroPointOnePercentLow: frameMetrics?.zeroPointOnePercentLow ?? null,
+    frameTimeMs: frameMetrics?.frameTimeMs ?? null,
+    frameTimeSamples: frameMetrics?.sampleCount ?? 0,
+    captureError: captureError || (presentMon ? null : 'PresentMon was not found. Install PresentMon and relaunch Bald Launcher to measure FPS.'),
+    presentMonPath: presentMon,
+    pid: processRecord.pid,
+    javaMajor: context.javaMajor,
+    sourceProfileId: context.sourceProfileId,
+    signature: context.signature,
+    optionsSha256: context.optionsSha256,
+    resourcesSha256: context.resourcesSha256,
+    activeModsSha256: context.activeModsSha256,
+    activeMods: context.activeMods,
+    configurationSignature: context.configurationSignature,
+    loaderVersion: context.loaderVersion,
+    rendererMode: profile.rendererMode,
+    javaPath: context.javaPath,
+    javaRuntime: context.javaRuntime,
+    launchArguments: context.launchArguments,
+    launchArgumentsSha256: context.launchArgumentsSha256,
+    jvmConfigurationSha256: context.jvmConfigurationSha256,
+    machineId: launcherState.performanceMachineId,
     averageCpuPercent: measuredCpu.length ? Number((measuredCpu.reduce((sum, value) => sum + value, 0) / measuredCpu.length).toFixed(1)) : null,
     peakMemoryMb: measuredMemory.length ? Math.max(...measuredMemory) : null,
-    metricsUnavailable: ['averageFps', 'onePercentLow', 'zeroPointOnePercentLow', 'frameTimeMs', 'vramMb'],
+    gpu3dPercent: activeProcess.process?.gpu3dPercent ?? null,
+    metricsUnavailable: [
+      ...(!frameMetrics ? ['averageFps', 'onePercentLow', 'zeroPointOnePercentLow', 'frameTimeMs'] : []),
+      'vramMb',
+    ],
     profileId: profile.id,
     profileName: profile.name,
-    settings: { memoryMax: profile.memoryMax, rendererMode: profile.rendererMode, mcVersion: profile.mcVersion, loader: profile.loader },
+    settings: {
+      rendererMode: profile.rendererMode,
+      mcVersion: profile.mcVersion,
+      loader: profile.loader,
+      sceneId,
+      shaderRuntime: context.shaderRuntime,
+      optionsSha256: context.optionsSha256,
+    },
   };
   profile.benchmarkHistory = [...(profile.benchmarkHistory || []), result].slice(-30);
+  const history = getPerformanceHistory(profile);
+  result.comparison = getBenchmarkComparison(history, result);
+  profile.benchmarkHistory[profile.benchmarkHistory.length - 1] = result;
+  if (!launcherState.performanceMachineId) launcherState.performanceMachineId = crypto.randomUUID();
   scheduleStateWrite();
   emitStatus(`Benchmark complete · ${profile.name}`);
-  return { ok: true, result, history: profile.benchmarkHistory };
+  return { ok: true, result, history: getPerformanceHistory(profile) };
 });
 
 // ---------------------------------------------------------------------------
@@ -9424,19 +10248,29 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
     if (!profile) throw new Error('No active profile');
     const settings = normalizeSettings({ ...launcherState.settings, ...profile, ...(payload?.settings || {}) });
     if (isOptimizationOptedIn(settings) && !profile.optimizationManaged && payload?.skipAutoOptimization !== true) {
-      try {
-        profile = await createManagedSodiumProfile(sourceProfile);
-        emitLog(profile.name, 'info', `Using isolated Sodium profile for ${sourceProfile.name}.`, profile.id);
-        if (profile.optimizationSkippedMods.length) {
-          emitLog(profile.name, 'info', `Skipped mods without an exact verified release: ${profile.optimizationSkippedMods.join(', ')}.`, profile.id);
+      const sourceModDirectory = path.join(getMinecraftRootFor(sourceProfile.id), 'mods');
+      const hasActiveJar = fs.existsSync(sourceModDirectory)
+        && !fs.lstatSync(sourceModDirectory).isSymbolicLink()
+        && fs.statSync(sourceModDirectory).isDirectory()
+        && fs.readdirSync(sourceModDirectory).some(file => /\.jar$/i.test(file));
+      if (!canCreateOptimizationProfile(sourceProfile) || hasActiveJar) {
+        emitLog(sourceProfile.name, 'warn', 'Automatic optimization was skipped because this profile has active mods or an unsupported loader. The selected profile will launch unchanged.', sourceProfile.id);
+      } else {
+        try {
+          profile = await createManagedSodiumProfile(sourceProfile);
+          emitLog(profile.name, 'info', `Using isolated Sodium profile for ${sourceProfile.name}.`, profile.id);
+          if (profile.optimizationSkippedMods.length) {
+            emitLog(profile.name, 'info', `Skipped optional mods without an exact verified release: ${profile.optimizationSkippedMods.join(', ')}.`, profile.id);
+          }
+          launchProfileId = profile.id;
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          emitStatus(`Optional optimization unavailable for Minecraft ${sourceProfile.mcVersion}; launching the original profile unchanged.`);
+          emitLog(sourceProfile.name, 'warn', `Automatic Sodium profile unavailable: ${reason}`, sourceProfile.id);
+          profile = sourceProfile;
+          launchProfileId = sourceProfile.id;
         }
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
-        emitStatus(`Sodium is not verified for Minecraft ${sourceProfile.mcVersion}; preparing an isolated Vanilla fallback.`);
-        emitLog(sourceProfile.name, 'warn', `Automatic Sodium profile unavailable: ${reason}`, sourceProfile.id);
-        profile = createManagedVanillaFallback(sourceProfile);
       }
-      launchProfileId = profile.id;
     }
     if (profile.optimizationManaged && profile.optimizationKind === 'sodium') {
       const sodium = profile.mods.find(item => item.id === 'sodium');
@@ -9446,8 +10280,8 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       if (!sodiumPath) {
         const optimizationSource = launcherState.profiles.find(item => item.id === profile.optimizationSourceProfileId);
         if (!optimizationSource) throw new Error('Sodium is missing or disabled, and the original source profile is unavailable.');
-        emitLog(profile.name, 'warn', 'Sodium is missing or disabled; using an isolated Vanilla fallback.', profile.id);
-        profile = createManagedVanillaFallback(optimizationSource);
+        emitLog(profile.name, 'warn', 'Sodium is missing or disabled; the original source profile will launch unchanged.', profile.id);
+        profile = optimizationSource;
         launchProfileId = profile.id;
       }
     }
@@ -9461,13 +10295,15 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
     scheduleStateWrite();
 
     const memoryMax = settings.memoryMaxAuto
-      ? recommendMinecraftMemoryGb(os.totalmem(), os.freemem(), profile.optimizationKind === 'sodium')
+      ? recommendMinecraftMemoryGb(os.totalmem(), os.freemem())
       : Math.min(32, Math.max(1, Number(settings.memoryMax) || 6));
     const minecraftRoot = getMinecraftRootFor(profile.id);
     ensureLauncherGameFolders(minecraftRoot);
     const sharedCacheRoot = getSharedCacheRoot();
     fs.mkdirSync(path.join(sharedCacheRoot, 'assets'), { recursive: true });
     fs.mkdirSync(path.join(sharedCacheRoot, 'libraries'), { recursive: true });
+    const loaderLibraryPaths = getLoaderLibraryPaths(profile.loader, minecraftRoot, sharedCacheRoot);
+    fs.mkdirSync(loaderLibraryPaths.libraryRoot, { recursive: true });
     launcherState.sessions = launcherState.sessions.filter(session => session.profileId !== profile.id);
     const session = { profileId: profile.id, profileName: profile.name, pid: null, running: true, stopRequested: false, logs: [] };
     launcherState.sessions.push(session);
@@ -9500,9 +10336,10 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       emitStatus(`Preparing ${profile.mcVersion} (${profile.loader}, ${profile.rendererMode}) · ${progress.type || 'download'} ${progress.name} ${total ? `${Math.round((current / total) * 100)}%` : ''}`);
     });
     profileLauncher.on('data', line => emitLog(profile.name, classifyLogLine(line), line, profile.id));
+    let profileLaunchArguments = [];
     profileLauncher.on('arguments', args => {
-      lastLaunchArguments = redactLaunchArguments(args);
-      emitLog(profile.name, 'info', `Final launch command: java ${lastLaunchArguments.join(' ')}`, profile.id);
+      profileLaunchArguments = redactLaunchArguments(args);
+      emitLog(profile.name, 'info', `Final launch command: java ${profileLaunchArguments.join(' ')}`, profile.id);
     });
     const javaExecutable = await resolveJavaForMinecraft(profile.mcVersion, profile.javaPath);
     const javaMajor = parseJavaMajorVersion(javaExecutable);
@@ -9513,7 +10350,7 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
     const loaderJvmArguments = getLoaderJvmArguments(
       path.join(minecraftRoot, 'versions', versionNumber, `${versionNumber}.json`),
       {
-        libraryDirectory: path.join(sharedCacheRoot, 'libraries'),
+        libraryDirectory: loaderLibraryPaths.libraryDirectory,
         nativesDirectory: path.join(minecraftRoot, 'natives'),
         versionName: versionNumber,
       },
@@ -9530,14 +10367,24 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       overrides: {
         gameDirectory: minecraftRoot,
         assetRoot: path.join(sharedCacheRoot, 'assets'),
-        libraryRoot: path.join(sharedCacheRoot, 'libraries'),
+        libraryRoot: loaderLibraryPaths.libraryRoot,
         maxSockets: 8,
         natives: path.join(minecraftRoot, 'natives'),
       },
     });
 
     if (child) {
-      runningProcesses.set(profile.id, { child, pid: child.pid, profile });
+      runningProcesses.set(profile.id, {
+        child,
+        pid: child.pid,
+        profile,
+        javaPath: javaExecutable,
+        javaMajor,
+        launchArguments: profileLaunchArguments,
+        jvmArguments,
+        memoryMaxGb: memoryMax,
+        versionNumber,
+      });
       session.pid = child.pid || null;
       session.running = true;
       scheduleStateWrite();
