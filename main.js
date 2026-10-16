@@ -32,6 +32,7 @@ const { waitForLogResponse } = require('./src/servers/console-response');
 const { canAdoptDiscoveredProcess, findMatchingServerProcess, getProcessStartTime, matchesServerProcessIdentity: verifyServerProcessIdentity } = require('./src/servers/process-identity');
 const { ensureLauncherProfilesFile } = require('./src/shared/launcher-profiles');
 const { getLoaderJvmArguments, getLoaderLibraryPaths } = require('./src/shared/loader-jvm-arguments');
+const { refreshMicrosoftAuthorization } = require('./src/shared/launch-authorization');
 const {
   areProfileRootsIsolated,
   canCreateOptimizationProfile,
@@ -3218,20 +3219,23 @@ async function getLaunchAuthorization(account) {
       meta: { type: 'mojang' },
     };
   }
-  let authorization = account.auth;
-  if (!authorization) throw new Error(`Microsoft account "${account.name}" is not linked. Relink it from the Accounts screen.`);
-  const refreshToken = String(authorization.meta?.refresh || '');
-  if (!authorization.access_token && !refreshToken) {
-    throw new Error(`Microsoft account "${account.name}" has no valid login token. Relink it from the Accounts screen.`);
-  }
-  if (!authorization.access_token && refreshToken) {
+  if (!account.auth) throw new Error(`Microsoft account "${account.name}" is not linked. Relink it from the Accounts screen.`);
+  try {
     const { Auth } = require('msmc');
-    const xboxManager = await new Auth('select_account').refresh(refreshToken);
-    authorization = (await xboxManager.getMinecraft()).mclc(true);
+    const authorization = await refreshMicrosoftAuthorization(account.auth, async refreshToken => {
+      const xboxManager = await new Auth('select_account').refresh(refreshToken);
+      return (await xboxManager.getMinecraft()).mclc(true);
+    });
+    if (account.uuid && authorization.uuid && account.uuid !== authorization.uuid) {
+      throw new Error('Microsoft authentication returned a different Minecraft account.');
+    }
     account.auth = authorization;
     scheduleStateWrite();
+    return authorization;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Could not refresh the Minecraft session for "${account.name}". Relink this Microsoft account from the Accounts screen and try again. (${reason})`);
   }
-  return authorization;
 }
 
 function getActiveProfile() {

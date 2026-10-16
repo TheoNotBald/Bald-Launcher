@@ -280,7 +280,8 @@ test('profile launch uses the selected Microsoft account instead of silently fal
   assert.match(launch, /payload\?\.accountId/);
   assert.match(launch, /launcherState\.accounts\.find\(item => item\.id === requestedAccountId\)/);
   assert.match(launch, /getLaunchAuthorization\(account\)/);
-  assert.match(main, /Microsoft account "\$\{account\.name\}" has no valid login token/);
+  assert.match(main, /refreshMicrosoftAuthorization\(account\.auth/);
+  assert.match(main, /Could not refresh the Minecraft session for "\$\{account\.name\}"/);
   const launchClick = html.slice(html.indexOf('async function launchClick'), html.indexOf('function handleLaunchButtonClick'));
   assert.match(launchClick, /accountId: state\.activeAccountId/);
 });
