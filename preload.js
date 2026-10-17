@@ -156,6 +156,11 @@ contextBridge.exposeInMainWorld('launcherAPI', {
     ipcRenderer.on('launcher:status', handler);
     return () => ipcRenderer.removeListener('launcher:status', handler);
   },
+  onProfileImportProgress: callback => {
+    const handler = (_event, progress) => callback(progress);
+    ipcRenderer.on('launcher:profile-import-progress', handler);
+    return () => ipcRenderer.removeListener('launcher:profile-import-progress', handler);
+  },
   onLog: callback => {
     const handler = (_event, entry) => callback(entry);
     ipcRenderer.on('launcher:log', handler);

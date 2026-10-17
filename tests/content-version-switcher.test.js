@@ -188,18 +188,40 @@ test('profile update actions pass the provider latest version instead of redownl
   assert.match(main, /installModrinthContent\(profile, \{ \.\.\.entry, type \}, stagingPath, payload\.versionId \|\| entry\.latestVersionId \|\| null\)/);
 });
 
-test('profile import emits progress in the launcher status bar', () => {
+test('profile import emits staged progress and the UI displays a progress dialog', () => {
   const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  const preload = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '..', 'bald_launcher_v7.html'), 'utf8');
   const start = main.indexOf("ipcMain.handle('launcher:import-profile'");
   const end = main.indexOf("\nipcMain.handle('launcher:backup-profile'", start);
   assert.ok(start >= 0 && end > start, 'profile import handler should exist');
   const handler = main.slice(start, end);
   assert.match(handler, /emitStatus\('Importing profile · choosing file\.\.\.'\)/);
   assert.match(handler, /emitStatus\(`Importing profile · reading archive · \$\{path\.basename\(sourcePath\)\}`\)/);
-  assert.match(handler, /emitStatus\(`Importing profile · downloading \$\{completedFiles \+ 1\}\/\$\{files\.length\} · \$\{path\.basename\(relative\)\}`\)/);
+  assert.match(handler, /emitProfileImportProgress\(\{\s*phase: 'download'/);
+  assert.match(handler, /emitProfileImportProgress\(\{ phase: 'extract'/);
   assert.match(handler, /emitStatus\('Importing profile · extracting included files\.\.\.'\)/);
   assert.match(handler, /emitStatus\(`Profile imported · \$\{imported\.name\}`\)/);
   assert.match(handler, /emitStatus\(`Profile import failed · \$\{message\}`\)/);
+  assert.match(preload, /onProfileImportProgress:/);
+  assert.match(html, /id="profileImportOverlay"/);
+  assert.match(html, /id="profileImportProgressBar"/);
+  assert.match(html, /updateProfileImportProgress\(progress\)/);
+});
+
+test('large Modrinth imports stream files with bounded parallelism and avoid synchronous override copies', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  const importStart = main.indexOf("ipcMain.handle('launcher:import-profile'");
+  const importSource = main.slice(importStart, main.indexOf("ipcMain.handle('launcher:backup-profile'", importStart));
+  assert.match(importSource, /runProfileImportDownloads\(\{[\s\S]*?concurrency: 4/);
+  assert.match(importSource, /responseType: 'stream'/);
+  assert.match(importSource, /await pipeline\(response\.data, meter, fs\.createWriteStream/);
+  assert.doesNotMatch(importSource, /responseType:\s*'arraybuffer'/);
+  const overridesStart = main.indexOf('async function extractMrpackOverrides');
+  const overridesEnd = main.indexOf('\nfunction contentIdentity', overridesStart);
+  const overrides = main.slice(overridesStart, overridesEnd);
+  assert.match(overrides, /await fs\.promises\.cp/);
+  assert.doesNotMatch(overrides, /fs\.cpSync/);
 });
 
 test('cosmetic editors protect high-resolution capes and asynchronous preview state', () => {

@@ -2,6 +2,8 @@ const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require('ele
 const { execFile, execFileSync, spawn, spawnSync } = require('child_process');
 const net = require('net');
 const zlib = require('zlib');
+const { Transform } = require('stream');
+const { pipeline } = require('stream/promises');
 const fs = require('fs');
 const path = require('path');
 process.on('uncaughtException', (err) => {
@@ -33,6 +35,7 @@ const { canAdoptDiscoveredProcess, findMatchingServerProcess, getProcessStartTim
 const { ensureLauncherProfilesFile } = require('./src/shared/launcher-profiles');
 const { getLoaderJvmArguments, getLoaderLibraryPaths } = require('./src/shared/loader-jvm-arguments');
 const { refreshMicrosoftAuthorization } = require('./src/shared/launch-authorization');
+const { runProfileImportDownloads } = require('./src/shared/profile-import');
 const {
   areProfileRootsIsolated,
   canCreateOptimizationProfile,
@@ -148,6 +151,7 @@ if (!hasSingleInstanceLock) {
 }
 const launcher = new MCLC.Client();
 let mainWindow;
+let profileImportInProgress = false;
 let reloadTimer;
 let stateFilePath;
 let writeStatePending = false;
@@ -2530,6 +2534,12 @@ function emitStatus(message) {
   }
 }
 
+function emitProfileImportProgress(progress) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('launcher:profile-import-progress', progress);
+  }
+}
+
 function emitProcessState(running, profile = null, pid = null, details = {}) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('launcher:process-state', {
@@ -2741,11 +2751,18 @@ async function extractMrpackOverrides(sourcePath, destinationRoot) {
   fs.mkdirSync(staging, { recursive: true });
   await runArchiveCommand(['-xf', sourcePath, '-C', staging, 'overrides'], { capture: false });
   const extractedRoot = path.join(staging, 'overrides');
-  if (!fs.existsSync(extractedRoot)) return;
-  for (const entry of fs.readdirSync(extractedRoot)) {
-    fs.cpSync(path.join(extractedRoot, entry), path.join(destinationRoot, entry), { recursive: true, force: true });
+  try {
+    if (!fs.existsSync(extractedRoot)) return;
+    const entries = await fs.promises.readdir(extractedRoot);
+    for (const entry of entries) {
+      await fs.promises.cp(path.join(extractedRoot, entry), path.join(destinationRoot, entry), {
+        recursive: true,
+        force: true,
+      });
+    }
+  } finally {
+    await fs.promises.rm(staging, { recursive: true, force: true });
   }
-  fs.rmSync(staging, { recursive: true, force: true });
 }
 
 function contentIdentity(value) {
@@ -5242,9 +5259,12 @@ ipcMain.handle('launcher:export-profile', async (_event, profileId) => {
 });
 
 ipcMain.handle('launcher:import-profile', async () => {
+  if (profileImportInProgress) return { ok: false, error: 'A profile import is already in progress.' };
+  profileImportInProgress = true;
   let createdRoot = '';
   try {
     emitStatus('Importing profile · choosing file...');
+    emitProfileImportProgress({ phase: 'select', message: 'Choose a profile or modpack to import', percent: 0 });
     const result = await dialog.showOpenDialog({
       title: 'Import profile or Modrinth modpack',
       properties: ['openFile'],
@@ -5258,6 +5278,19 @@ ipcMain.handle('launcher:import-profile', async () => {
     const isMrpack = path.extname(sourcePath).toLowerCase() === '.mrpack';
     if (isMrpack) {
       const sourceStats = fs.statSync(sourcePath);
+      const freeBytes = fs.statfsSync ? (() => {
+        try {
+          const stats = fs.statfsSync(app.getPath('userData'));
+          return stats.bsize * stats.bavail;
+        } catch (error) {
+          console.warn('[Profile import] Could not determine free disk space.', error);
+          return null;
+        }
+      })() : null;
+      const importBudget = Math.ceil(sourceStats.size * 1.1);
+      if (freeBytes !== null && freeBytes < importBudget) {
+        throw new Error(`Not enough free disk space for this import. It needs approximately ${(importBudget / 1024 ** 3).toFixed(1)} GB; ${(freeBytes / 1024 ** 3).toFixed(1)} GB is available.`);
+      }
       const twoGb = 2 * 1024 * 1024 * 1024;
       if (sourceStats.size > twoGb) {
         const confirmation = await dialog.showMessageBox(mainWindow, {
@@ -5276,6 +5309,7 @@ ipcMain.handle('launcher:import-profile', async () => {
         }
       }
       emitStatus(`Importing profile · reading archive · ${path.basename(sourcePath)}`);
+      emitProfileImportProgress({ phase: 'read', message: 'Reading modpack manifest', percent: 2 });
       const index = JSON.parse((await readMrpackEntry(sourcePath, 'modrinth.index.json')).toString('utf8'));
       if (index.game !== 'minecraft' || Number(index.formatVersion) !== 1) throw new Error('Unsupported Modrinth modpack format.');
       const dependencies = index.dependencies || {};
@@ -5310,71 +5344,111 @@ ipcMain.handle('launcher:import-profile', async () => {
       };
       const files = Array.isArray(index.files) ? index.files : [];
       emitStatus(`Importing profile · downloading 0/${files.length} files`);
-      let completedFiles = 0;
-      for (const file of files) {
-        const relative = String(file?.path || '').replace(/\\/g, '/');
-        if (!relative || relative.startsWith('/') || relative.includes('../')) {
-          warnings.push(`Skipped unsafe modpack path: ${relative || '(empty)'}`);
-          completedFiles += 1;
-          emitStatus(`Importing profile · downloading ${completedFiles}/${files.length} files`);
-          continue;
-        }
-        const url = Array.isArray(file.downloads) ? file.downloads.find(item => /^https?:\/\//i.test(item)) : '';
-        if (!url) {
-          warnings.push(`${relative}: no download URL`);
-          completedFiles += 1;
-          emitStatus(`Importing profile · downloading ${completedFiles}/${files.length} files`);
-          continue;
-        }
-        emitStatus(`Importing profile · downloading ${completedFiles + 1}/${files.length} · ${path.basename(relative)}`);
-        try {
+      const downloadResults = await runProfileImportDownloads({
+        files,
+        destinationRoot: createdRoot,
+        concurrency: 4,
+        onProgress: progress => {
+          const percent = Math.min(88, Math.floor(4 + ((progress.percent / 100) * 84)));
+          const fileLabel = progress.currentFile ? ` · ${path.basename(progress.currentFile)}` : '';
+          emitProfileImportProgress({
+            phase: 'download',
+            message: `Downloading ${progress.completed}/${progress.total} files${progress.active > 1 ? ` · ${progress.active} active` : ''}${fileLabel}`,
+            percent,
+            completed: progress.completed,
+            total: progress.total,
+            active: progress.active,
+          });
+          emitStatus(`Importing profile · downloading ${progress.completed}/${progress.total} files${fileLabel}`);
+        },
+        downloadFile: async (file, destination, onTransfer) => {
+          const url = Array.isArray(file.downloads) ? file.downloads.find(item => /^https?:\/\//i.test(item)) : '';
+          if (!url) throw new Error('No download URL');
           const response = await axios.get(url, {
-            responseType: 'arraybuffer',
+            responseType: 'stream',
             timeout: 30000,
             maxContentLength: Infinity,
             maxBodyLength: Infinity,
+            headers: { 'User-Agent': 'BaldLauncher/0.1.0 (contact: none)' },
           });
-          const buffer = Buffer.from(response.data);
+          const temporaryPath = `${destination}.${crypto.randomUUID()}.download`;
           const expected = String(file.hashes?.sha1 || '').toLowerCase();
-          const actual = crypto.createHash('sha1').update(buffer).digest('hex');
-          if (expected && actual !== expected) throw new Error('SHA-1 verification failed');
-          const destination = path.join(createdRoot, relative);
-          fs.mkdirSync(path.dirname(destination), { recursive: true });
-          fs.writeFileSync(destination, buffer);
-          if (relative.toLowerCase().startsWith('mods/') && relative.toLowerCase().endsWith('.jar')) {
-            const match = url.match(/\/data\/([^/]+)\/versions\/([^/?]+)/i);
-            const project = await getProject(match?.[1]);
-            imported.mods.push(normalizeInstalledContent({
-              id: match?.[1] || `local-${crypto.randomUUID()}`,
-              name: project?.title || path.basename(relative, '.jar'),
-              slug: project?.slug || '',
-              type: 'mod',
-              fileName: path.basename(relative),
-              source: project ? 'modrinth' : '',
-              projectUrl: project?.slug ? `https://modrinth.com/mod/${encodeURIComponent(project.slug)}` : '',
-              iconUrl: project?.icon_url || null,
-              versionId: match?.[2] || '',
-              installedVersion: '',
-              enabled: true,
-            }));
+          const hash = crypto.createHash('sha1');
+          const totalBytes = Number(response.headers['content-length']) || 0;
+          let loadedBytes = 0;
+          const meter = new Transform({
+            transform(chunk, _encoding, callback) {
+              loadedBytes += chunk.length;
+              hash.update(chunk);
+              onTransfer({ loaded: loadedBytes, total: totalBytes });
+              callback(null, chunk);
+            },
+          });
+          try {
+            await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+            await pipeline(response.data, meter, fs.createWriteStream(temporaryPath, { flags: 'wx' }));
+            if (expected && hash.digest('hex').toLowerCase() !== expected) {
+              throw new Error('SHA-1 verification failed');
+            }
+            await fs.promises.rename(temporaryPath, destination);
+          } catch (error) {
+            await fs.promises.rm(temporaryPath, { force: true }).catch(cleanupError => {
+              console.warn('[Profile import] Could not remove partial download.', cleanupError);
+            });
+            throw error;
           }
-        } catch (error) {
-          warnings.push(`${relative}: ${error instanceof Error ? error.message : String(error)}`);
-        }
-        completedFiles += 1;
-        emitStatus(`Importing profile · downloading ${completedFiles}/${files.length} files`);
+        },
+      });
+      const importedModResults = downloadResults.filter(result => (
+        !result.error
+        && result.relative.toLowerCase().startsWith('mods/')
+        && result.relative.toLowerCase().endsWith('.jar')
+      ));
+      emitProfileImportProgress({ phase: 'metadata', message: 'Registering imported mods', percent: null });
+      for (const result of downloadResults) {
+        if (result.error) warnings.push(`${result.relative}: ${result.error}`);
       }
+      let metadataIndex = 0;
+      const importedModEntries = new Array(importedModResults.length);
+      const metadataWorkers = Array.from({ length: Math.min(6, importedModResults.length) }, async () => {
+        while (metadataIndex < importedModResults.length) {
+          const index = metadataIndex++;
+          const result = importedModResults[index];
+          const url = Array.isArray(result.file.downloads) ? result.file.downloads.find(item => /^https?:\/\//i.test(item)) : '';
+          const match = url.match(/\/data\/([^/]+)\/versions\/([^/?]+)/i);
+          const project = await getProject(match?.[1]);
+          importedModEntries[index] = normalizeInstalledContent({
+            id: match?.[1] || `local-${crypto.randomUUID()}`,
+            name: project?.title || path.basename(result.relative, '.jar'),
+            slug: project?.slug || '',
+            type: 'mod',
+            fileName: path.basename(result.relative),
+            source: project ? 'modrinth' : '',
+            projectUrl: project?.slug ? `https://modrinth.com/mod/${encodeURIComponent(project.slug)}` : '',
+            iconUrl: project?.icon_url || null,
+            versionId: match?.[2] || '',
+            installedVersion: '',
+            enabled: true,
+          });
+        }
+      });
+      await Promise.all(metadataWorkers);
+      imported.mods.push(...importedModEntries);
       emitStatus('Importing profile · extracting included files...');
+      emitProfileImportProgress({ phase: 'extract', message: 'Extracting included files · this may take a little while', percent: null });
       await extractMrpackOverrides(sourcePath, createdRoot);
+      emitProfileImportProgress({ phase: 'finalize', message: 'Finishing profile setup', percent: 96 });
       launcherState.profiles.push(imported);
       launcherState.activeProfileId = imported.id;
       applyProfileSyncToNewProfile(imported.id);
       scheduleStateWrite();
       emitStatus(`Profile imported · ${imported.name}`);
+      emitProfileImportProgress({ phase: 'complete', message: `Imported ${imported.name}`, percent: 100 });
       return { ok: true, state: launcherState, profile: imported, warnings };
     }
     emitStatus(`Importing profile · reading ${path.basename(sourcePath)}`);
-    const imported = validateProfileExport(JSON.parse(fs.readFileSync(sourcePath, 'utf8')));
+    emitProfileImportProgress({ phase: 'read', message: 'Reading profile export', percent: 20 });
+    const imported = validateProfileExport(JSON.parse(await fs.promises.readFile(sourcePath, 'utf8')));
     const originalName = imported.name;
     imported.id = createProfileId();
     imported.name = `${originalName} Import`;
@@ -5387,14 +5461,24 @@ ipcMain.handle('launcher:import-profile', async () => {
     applyProfileSyncToNewProfile(imported.id);
     scheduleStateWrite();
     emitStatus(`Profile imported · ${imported.name}`);
+    emitProfileImportProgress({ phase: 'complete', message: `Imported ${imported.name}`, percent: 100 });
     return { ok: true, state: launcherState, profile: imported };
   } catch (error) {
+    let message = error instanceof Error ? error.message : String(error);
     if (createdRoot && fs.existsSync(createdRoot)) {
-      try { fs.rmSync(createdRoot, { recursive: true, force: true }); } catch (_cleanupError) {}
+      try {
+        await fs.promises.rm(createdRoot, { recursive: true, force: true });
+      } catch (cleanupError) {
+        console.error(`[Profile import] Could not clean up failed import at ${createdRoot}.`, cleanupError);
+        message += ` The incomplete import could not be removed: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`;
+      }
     }
-    const message = error instanceof Error ? error.message : String(error);
     emitStatus(`Profile import failed · ${message}`);
+    emitProfileImportProgress({ phase: 'error', message, percent: null });
     return { ok: false, error: message, state: launcherState };
+  } finally {
+    profileImportInProgress = false;
+    setTimeout(() => emitProfileImportProgress({ phase: 'finished' }), 800);
   }
 });
 

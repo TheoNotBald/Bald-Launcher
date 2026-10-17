@@ -493,6 +493,20 @@ body{font-family:var(--font-sans);}
 .statusbar{height:25px;background:var(--bg-void);border-top:0.5px solid var(--bg-surface-2);display:flex;align-items:center;padding:0 13px;gap:13px;flex-shrink:0;}
 .sb-dot{width:6px;height:6px;border-radius:50%;background:#3b6d11;flex-shrink:0;}
 .sb-txt{font-size:var(--text-xs);color:#333;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.profile-import-overlay{position:fixed;inset:0;z-index:12000;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(4,6,4,.72);backdrop-filter:blur(4px);}
+.profile-import-overlay[hidden]{display:none;}
+.profile-import-card{width:min(440px,100%);padding:26px;background:var(--bg-surface);border:1px solid var(--border-strong);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.45);}
+.profile-import-title{font-size:18px;font-weight:600;color:var(--text-primary);margin-bottom:8px;}
+.profile-import-message{font-size:var(--text-sm);line-height:1.5;color:var(--text-secondary);min-height:22px;overflow-wrap:anywhere;}
+.profile-import-progress-row{display:flex;align-items:center;gap:12px;margin-top:20px;}
+.profile-import-progress{width:100%;height:9px;appearance:none;border:0;border-radius:99px;overflow:hidden;background:var(--bg-surface-2);}
+.profile-import-progress::-webkit-progress-bar{background:var(--bg-surface-2);border-radius:99px;}
+.profile-import-progress::-webkit-progress-value{background:var(--ui-success);border-radius:99px;transition:width .18s ease;}
+.profile-import-progress::-moz-progress-bar{background:var(--ui-success);border-radius:99px;}
+.profile-import-percent{min-width:42px;text-align:right;font:12px var(--font-mono);color:var(--text-secondary);}
+.profile-import-progress-indeterminate{height:9px;flex:1;overflow:hidden;border-radius:99px;background:var(--bg-surface-2);}
+.profile-import-progress-indeterminate::after{content:"";display:block;width:38%;height:100%;border-radius:99px;background:var(--ui-success);animation:profile-import-sweep 1.25s ease-in-out infinite alternate;}
+@keyframes profile-import-sweep{from{transform:translateX(-10%)}to{transform:translateX(175%)}}
 
 i.ti{font-style:normal;display:inline-flex;align-items:center;justify-content:center;line-height:1;min-width:1em;min-height:1em;}
 div[onclick],span[onclick]{outline:none;}
@@ -1594,6 +1608,17 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
   <div class="statusbar">
     <div class="sb-dot"></div>
     <span class="sb-txt" id="sbStatus">Ready</span>
+  </div>
+
+  <div class="profile-import-overlay" id="profileImportOverlay" role="dialog" aria-modal="true" aria-labelledby="profileImportTitle" aria-describedby="profileImportMessage" hidden>
+    <div class="profile-import-card">
+      <div class="profile-import-title" id="profileImportTitle">Importing profile</div>
+      <div class="profile-import-message" id="profileImportMessage" aria-live="polite">Preparing import…</div>
+      <div class="profile-import-progress-row">
+        <progress class="profile-import-progress" id="profileImportProgressBar" max="100" value="0" aria-label="Profile import progress"></progress>
+        <span class="profile-import-percent" id="profileImportPercent">0%</span>
+      </div>
+    </div>
   </div>
 
   <!-- NEW PROFILE MODAL -->
@@ -3685,11 +3710,56 @@ async function exportCurrentProfile(){
 }
 async function importProfileExport(){
   if (!launcherBridge?.importProfile) return;
-  const result = await launcherBridge.importProfile();
-  if (result?.ok === false){ if (!result.canceled) alert(result.error || 'Could not import profile.'); return; }
-  state = result.state || state;
-  renderProfileGrid();
-  openProfile(result.profile?.id || state.activeProfileId);
+  showProfileImportProgress({ message: 'Choose a profile or modpack to import', percent: 0 });
+  try {
+    const result = await launcherBridge.importProfile();
+    if (result?.ok === false){
+      if (!result.canceled) alert(result.error || 'Could not import profile.');
+      return;
+    }
+    state = result.state || state;
+    renderProfileGrid();
+    openProfile(result.profile?.id || state.activeProfileId);
+    if (Array.isArray(result.warnings) && result.warnings.length) {
+      addNotification('Profile imported with warnings', `${result.warnings.length} file(s) could not be imported. Review the profile import warnings.`, 'warning');
+    }
+  } catch (error) {
+    alert(error?.message || String(error));
+  } finally {
+    hideProfileImportProgress();
+  }
+}
+function showProfileImportProgress(progress={}){
+  const overlay=document.getElementById('profileImportOverlay');
+  if (!overlay) return;
+  overlay.hidden=false;
+  updateProfileImportProgress(progress);
+}
+function updateProfileImportProgress(progress={}){
+  const message=document.getElementById('profileImportMessage');
+  const bar=document.getElementById('profileImportProgressBar');
+  const percentLabel=document.getElementById('profileImportPercent');
+  if (message && progress.message) message.textContent=String(progress.message);
+  if (bar) {
+    if (Number.isFinite(progress.percent)) {
+      bar.value=Math.max(0,Math.min(100,progress.percent));
+      bar.classList.remove('profile-import-progress-indeterminate');
+      if (percentLabel) percentLabel.textContent=`${Math.round(bar.value)}%`;
+    } else {
+      bar.removeAttribute('value');
+      bar.classList.add('profile-import-progress-indeterminate');
+      if (percentLabel) percentLabel.textContent='…';
+    }
+  }
+}
+function hideProfileImportProgress(){
+  const overlay=document.getElementById('profileImportOverlay');
+  if (overlay) overlay.hidden=true;
+  const bar=document.getElementById('profileImportProgressBar');
+  if (bar) {
+    bar.value=0;
+    bar.classList.remove('profile-import-progress-indeterminate');
+  }
 }
 async function backupCurrentProfile(){
   if (!currentProfileId || !launcherBridge?.backupProfile) return;
@@ -6342,6 +6412,12 @@ async function boot(){
       if (/failed|error|warning|backup|update/i.test(text)) {
         addNotification('Launcher event', text, /failed|error/i.test(text) ? 'error' : 'warning');
       }
+    });
+  }
+  if (launcherBridge?.onProfileImportProgress) {
+    launcherBridge.onProfileImportProgress(progress => {
+      if (!progress || progress.phase === 'finished') return;
+      updateProfileImportProgress(progress);
     });
   }
   if (launcherBridge?.onUpdateAvailable){
