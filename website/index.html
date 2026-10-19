@@ -2,368 +2,401 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0a0a0a">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#090a09">
+<title>Bald Launcher — Minecraft, Your Way</title>
+<meta name="description" content="Bald Launcher brings Minecraft profiles, mods, server hosting, performance tools, and resource pack editing together in one place.">
 
-  <title>Bald Launcher</title>
-  <meta
-    name="description"
-    content="Meet Bald Launcher — your Minecraft launcher for profiles, mods, servers and more."
-  >
-
-  <style>
-    :root {
-      color-scheme: dark;
-      font-family: Inter, "Segoe UI", Arial, sans-serif;
-      background: #080808;
-      color: #ededed;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      background:
-        radial-gradient(ellipse at 50% 0%, #172414 0%, transparent 45%),
-        #080808;
-    }
-
-    a {
-      color: inherit;
-      text-decoration: none;
-    }
-
-    .site-header {
-      min-height: 72px;
-      padding: 0 6%;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 20px;
-      border-bottom: 1px solid #202020;
-      background: rgba(8, 8, 8, 0.92);
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 18px;
-      font-weight: 750;
-      letter-spacing: -0.5px;
-    }
-
-    .brand-icon {
-      display: grid;
-      place-items: center;
-      width: 38px;
-      height: 38px;
-      border-radius: 11px;
-      background: linear-gradient(145deg, #86f65e, #286b1c);
-      color: #081006;
-      font-weight: 900;
-    }
-
-    .header-links {
-      display: flex;
-      align-items: center;
-      gap: 22px;
-      color: #aaa;
-      font-size: 13px;
-    }
-
-    .header-links a:hover {
-      color: #8df46b;
-    }
-
-    .download-link {
-      padding: 10px 15px;
-      border-radius: 8px;
-      background: #367c25;
-      color: #f2ffed !important;
-      font-weight: 700;
-    }
-
-    main {
-      width: min(1500px, 100%);
-      margin: 0 auto;
-      padding: 48px 24px 60px;
-    }
-
-    .intro {
-      margin: 0 auto 28px;
-      text-align: center;
-    }
-
-    .eyebrow {
-      color: #8df46b;
-      font-size: 11px;
-      font-weight: 800;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-    }
-
-    h1 {
-      margin: 12px 0;
-      font-size: clamp(32px, 5vw, 56px);
-      letter-spacing: -2px;
-      line-height: 1.05;
-    }
-
-    .intro p {
-      max-width: 620px;
-      margin: 0 auto;
-      color: #999;
-      font-size: 15px;
-      line-height: 1.7;
-    }
-
-    .preview-label {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 12px 16px;
-      border: 1px solid #292929;
-      border-bottom: 0;
-      border-radius: 13px 13px 0 0;
-      background: #111;
-      color: #aaa;
-      font-size: 12px;
-    }
-
-    .preview-status {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #83ed5f;
-      box-shadow: 0 0 10px #83ed5f55;
-    }
-
-    .preview-frame {
-      position: relative;
-      width: 100%;
-      height: min(78vh, 900px);
-      min-height: 560px;
-      overflow: hidden;
-      border: 1px solid #292929;
-      border-radius: 0 0 13px 13px;
-      background: #0a0a0a;
-      box-shadow: 0 24px 100px #0009;
-    }
-
-    .preview-frame iframe {
-      display: block;
-      width: 100%;
-      height: 100%;
-      border: 0;
-      background: #0a0a0a;
-    }
-
-    .fallback {
-      display: none;
-      padding: 30px;
-      text-align: center;
-      color: #aaa;
-      line-height: 1.7;
-    }
-
-    .fallback a {
-      color: #8df46b;
-      text-decoration: underline;
-    }
-
-    .features {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 14px;
-      margin-top: 22px;
-    }
-
-    .feature {
-      padding: 20px;
-      border: 1px solid #222;
-      border-radius: 12px;
-      background: #101010;
-    }
-
-    .feature-icon {
-      margin-bottom: 12px;
-      font-size: 23px;
-    }
-
-    .feature h2 {
-      margin: 0 0 8px;
-      font-size: 15px;
-    }
-
-    .feature p {
-      margin: 0;
-      color: #888;
-      font-size: 13px;
-      line-height: 1.6;
-    }
-
-    footer {
-      padding: 28px 20px;
-      border-top: 1px solid #202020;
-      color: #666;
-      text-align: center;
-      font-size: 12px;
-    }
-
-    footer a {
-      color: #aaa;
-    }
-
-    @media (max-width: 650px) {
-      .site-header {
-        padding: 14px 18px;
-      }
-
-      .header-links {
-        gap: 12px;
-      }
-
-      .header-links .optional {
-        display: none;
-      }
-
-      main {
-        padding: 34px 12px 40px;
-      }
-
-      .preview-frame {
-        height: 72vh;
-        min-height: 480px;
-      }
-
-      .features {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
+<style>
+:root {
+  --bg: #090a09;
+  --panel: #111311;
+  --panel2: #171a17;
+  --line: #292d28;
+  --text: #f3f5f1;
+  --muted: #a0a69d;
+  --green: #a3f477;
+  --green2: #5cbf42;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button { font: inherit; }
+.wrap { width: min(1160px, calc(100% - 40px)); margin: auto; }
+header {
+  height: 72px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #ffffff0c;
+  background: #090a09eF;
+  backdrop-filter: blur(18px);
+}
+.nav { display:flex; align-items:center; justify-content:space-between; gap:20px; }
+.brand { display:flex; align-items:center; gap:11px; font-weight:800; letter-spacing:-.5px; }
+.logo {
+  display:grid; place-items:center; width:37px; height:37px;
+  border:1px solid #a3f47760; border-radius:11px;
+  color:var(--green); font-weight:900; font-size:19px;
+  background:linear-gradient(145deg,#263823,#111811);
+}
+.links { display:flex; align-items:center; gap:25px; font-size:13px; color:#b6bbb3; }
+.links a:hover { color:var(--green); }
+.btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:9px;
+  min-height:43px; padding:0 17px; border-radius:9px;
+  font-weight:750; font-size:13px; border:1px solid var(--line);
+  transition:transform .18s,border-color .18s,background .18s;
+}
+.btn:hover { transform:translateY(-2px); border-color:#66745f; }
+.btn.primary { color:#11170e; background:var(--green); border-color:var(--green); }
+.btn.primary:hover { background:#b8ff91; }
+.btn.secondary { background:#ffffff06; }
+.hero { padding:100px 0 76px; text-align:center; position:relative; overflow:hidden; }
+.hero:before {
+  content:""; position:absolute; z-index:-1; pointer-events:none;
+  width:750px; height:480px; left:50%; top:-280px; transform:translateX(-50%);
+  background:#7be65b17; filter:blur(80px); border-radius:50%;
+}
+.eyebrow {
+  display:inline-flex; align-items:center; gap:9px; padding:7px 11px;
+  border:1px solid #3a4a35; border-radius:999px;
+  color:#c3e8b5; background:#a3f47709;
+  font-size:11px; letter-spacing:1.5px; font-weight:800; text-transform:uppercase;
+}
+.dot { width:7px; height:7px; background:var(--green); border-radius:50%; }
+h1 { margin:25px auto 18px; max-width:900px; font-size:clamp(42px,7.2vw,82px); letter-spacing:-5px; line-height:.99; }
+h1 span { color:var(--green); }
+.hero p { max-width:660px; margin:0 auto; color:var(--muted); line-height:1.8; font-size:16px; }
+.hero-actions { display:flex; justify-content:center; flex-wrap:wrap; gap:11px; margin-top:28px; }
+.fineprint { margin-top:14px; font-size:11px; color:#73796f; }
+.hero-bottom { display:flex; justify-content:center; flex-wrap:wrap; gap:25px; margin-top:40px; color:#8e958a; font-size:12px; }
+.hero-bottom span:before { content:"✓"; color:var(--green); margin-right:8px; }
+.section { padding:83px 0; border-top:1px solid #ffffff0b; }
+.section-head { max-width:690px; margin-bottom:34px; }
+.kicker { color:var(--green); font-size:11px; letter-spacing:2px; font-weight:850; text-transform:uppercase; }
+h2 { margin:13px 0; font-size:clamp(30px,4vw,47px); line-height:1.08; letter-spacing:-2px; }
+.section-head p,.feature p,.split p { color:var(--muted); line-height:1.8; font-size:14px; }
+.feature-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+.feature {
+  min-height:215px; padding:24px; border:1px solid var(--line);
+  background:linear-gradient(145deg,#151815,#0f100f); border-radius:15px;
+}
+.feature:hover { border-color:#58694f; }
+.feature-icon {
+  width:42px; height:42px; display:grid; place-items:center;
+  border-radius:12px; background:#a3f47712; border:1px solid #a3f47724;
+  color:var(--green); font-size:19px; margin-bottom:23px;
+}
+.feature h3 { font-size:16px; margin:0 0 9px; letter-spacing:-.3px; }
+.feature p { font-size:13px; margin:0; }
+.preview-section { padding:80px 0; background:#0c0e0c; border-block:1px solid #ffffff0c; }
+.preview-intro { display:flex; justify-content:space-between; align-items:end; gap:25px; margin-bottom:24px; }
+.preview-intro .section-head { margin:0; }
+.preview-intro .section-head p { margin-bottom:0; }
+.preview-shell { overflow:hidden; border:1px solid #343a32; border-radius:15px; background:#080908; box-shadow:0 30px 100px #0008; }
+.preview-bar {
+  min-height:46px; padding:12px 16px; display:flex; align-items:center;
+  justify-content:space-between; gap:10px; background:#151715; border-bottom:1px solid #30342e;
+  font-size:11px; color:#aeb5a8;
+}
+.preview-dots { display:flex; gap:6px; }
+.preview-dots i { width:8px; height:8px; border-radius:50%; background:#464b43; }
+.preview-live { color:#c5f6ae; }
+.preview-live:before { content:""; display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); margin-right:7px; }
+.preview-frame { height:min(78vh,820px); min-height:520px; position:relative; }
+.preview-frame iframe { width:100%; height:100%; display:block; border:0; background:#0b0c0b; }
+.preview-fallback { display:none; position:absolute; inset:0; padding:35px; text-align:center; color:var(--muted); background:#0b0c0b; }
+.preview-note { color:#737b70; font-size:11px; margin-top:13px; line-height:1.6; }
+.split { display:grid; grid-template-columns:1fr 1fr; gap:55px; align-items:center; }
+.split h2 { max-width:490px; }
+.points { display:grid; gap:15px; margin-top:24px; }
+.point { display:flex; gap:12px; align-items:flex-start; }
+.check { flex:0 0 22px; height:22px; display:grid; place-items:center; color:var(--green); background:#a3f47712; border-radius:7px; font-size:12px; }
+.point strong { display:block; font-size:13px; margin-bottom:4px; }
+.point small { color:#91988c; line-height:1.6; font-size:12px; }
+.visual-card {
+  padding:25px; min-height:310px; border:1px solid #333a30; border-radius:16px;
+  background:radial-gradient(ellipse at 80% 0%,#46633a25,transparent 55%),#121512;
+}
+.fake-window { border:1px solid #343a31; border-radius:10px; overflow:hidden; background:#0c0e0c; }
+.fake-title { display:flex; align-items:center; gap:8px; padding:13px; font-size:11px; border-bottom:1px solid #2c312a; color:#c5cbbf; }
+.fake-content { padding:18px; }
+.fake-line { height:8px; border-radius:5px; background:#262c24; margin-bottom:10px; }
+.fake-line.short { width:48%; }
+.fake-line.mid { width:72%; }
+.fake-stat { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:18px; }
+.fake-stat div { padding:12px 8px; border:1px solid #30362c; border-radius:8px; color:var(--green); font-size:16px; font-weight:800; }
+.fake-stat small { display:block; color:#818a7a; font-size:9px; font-weight:500; margin-top:6px; }
+.disclaimer { color:#7d8578; font-size:10px; line-height:1.6; margin-top:14px; }
+.cta { padding:76px 0; text-align:center; }
+.cta-panel {
+  padding:60px 25px; border:1px solid #384432; border-radius:20px;
+  background:radial-gradient(ellipse at 50% 0%,#82e65b18,transparent 65%),#101310;
+}
+.cta-panel h2 { max-width:700px; margin:14px auto; }
+.cta-panel p { color:var(--muted); max-width:550px; margin:0 auto; font-size:14px; line-height:1.8; }
+footer { padding:27px 0; border-top:1px solid #ffffff10; color:#747b70; font-size:11px; }
+.footer-inner { display:flex; justify-content:space-between; align-items:center; gap:20px; }
+footer a:hover { color:var(--green); }
+@media(max-width:800px) {
+  .links { gap:14px; }
+  .links .hide-mobile { display:none; }
+  .feature-grid { grid-template-columns:repeat(2,1fr); }
+  .split { grid-template-columns:1fr; gap:28px; }
+  .preview-intro { align-items:start; flex-direction:column; }
+  h1 { letter-spacing:-2.8px; }
+}
+@media(max-width:520px) {
+  .wrap { width:calc(100% - 28px); }
+  .links { gap:10px; font-size:12px; }
+  .links .hide-mobile { display:none; }
+  .hero { padding:75px 0 55px; }
+  .hero p { font-size:14px; }
+  .hero-bottom { gap:12px 18px; }
+  .section { padding:58px 0; }
+  .feature-grid { grid-template-columns:1fr; }
+  .feature { min-height:0; }
+  .preview-frame { height:70vh; min-height:450px; }
+  .visual-card { padding:15px; }
+  .footer-inner { align-items:flex-start; flex-direction:column; }
+}
+</style>
 </head>
 
 <body>
-  <header class="site-header">
-    <a class="brand" href="#top" aria-label="Bald Launcher home">
-      <span class="brand-icon">B</span>
-      <span>Bald Launcher</span>
-    </a>
-
-    <nav class="header-links" aria-label="Main navigation">
-      <a class="optional" href="#preview">Preview</a>
-      <a
-        class="optional"
-        href="https://github.com/TheoNotBald/Bald-Launcher"
-        target="_blank"
-        rel="noopener noreferrer"
-      >GitHub</a>
-      <a
-        class="download-link"
-        href="https://github.com/TheoNotBald/Bald-Launcher/releases"
-        target="_blank"
-        rel="noopener noreferrer"
-      >Download</a>
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#home"><span class="logo">B</span><span>Bald Launcher</span></a>
+    <nav class="links">
+      <a class="hide-mobile" href="#features">Features</a>
+      <a href="#preview">Preview</a>
+      <a class="hide-mobile" href="#performance">Performance</a>
+      <a href="https://github.com/TheoNotBald/Bald-Launcher" target="_blank" rel="noopener">GitHub ↗</a>
+      <a class="btn primary" href="https://github.com/TheoNotBald/Bald-Launcher/releases" target="_blank" rel="noopener">Download</a>
     </nav>
-  </header>
+  </div>
+</header>
 
-  <main id="top">
-    <section class="intro">
-      <div class="eyebrow">Made for Minecraft</div>
-      <h1>Your game. Your way.</h1>
+<main id="home">
+  <section class="hero">
+    <div class="wrap">
+      <div class="eyebrow"><span class="dot"></span> Your Minecraft, rethought</div>
+      <h1>Everything Minecraft.<br><span>One launcher.</span></h1>
       <p>
-        Explore Bald Launcher in your browser. Check out the interface,
-        browse its screens, and see what you can do before downloading.
+        Manage your Minecraft profiles, customize your setup, explore server hosting,
+        and edit resource packs — all from one place.
       </p>
-    </section>
+      <div class="hero-actions">
+        <a class="btn primary" href="https://github.com/TheoNotBald/Bald-Launcher/releases" target="_blank" rel="noopener">↓ &nbsp; Get Bald Launcher</a>
+        <a class="btn secondary" href="#preview">Explore the preview ↘</a>
+      </div>
+      <div class="fineprint">Windows-focused · Open source · Built for Minecraft</div>
+      <div class="hero-bottom">
+        <span>Profiles and versions</span>
+        <span>Mods and resource packs</span>
+        <span>Server management</span>
+      </div>
+    </div>
+  </section>
 
-    <section id="preview" aria-label="Bald Launcher interactive preview">
-      <div class="preview-label">
-        <span> B A L D &nbsp; L A U N C H E R</span>
-        <span class="preview-status">
-          <span class="status-dot"></span>
-          Interactive preview
-        </span>
+  <section class="section" id="features">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker">One place for your setup</div>
+        <h2>Less juggling.<br>More Minecraft.</h2>
+        <p>
+          Keep your game setup and your tools together instead of hopping between
+          separate applications for every task.
+        </p>
+      </div>
+      <div class="feature-grid">
+        <article class="feature">
+          <div class="feature-icon">▦</div>
+          <h3>Profiles & versions</h3>
+          <p>Organize separate Minecraft installations and configurations for the way you play.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">◇</div>
+          <h3>Mods & loaders</h3>
+          <p>Manage your modded setup and explore compatible loaders and mod configurations.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">⌁</div>
+          <h3>Performance tools</h3>
+          <p>Explore optimization settings and benchmarking tools to help compare configurations.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">▤</div>
+          <h3>Server management</h3>
+          <p>Work with server configurations, console output, files, backups and hosting tools.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">✳</div>
+          <h3>Resource-pack studio</h3>
+          <p>Edit textures and customize resource packs with painting and model-editing tools.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">⚙</div>
+          <h3>More control</h3>
+          <p>Bring your launcher settings, game setup and supporting tools into one workflow.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="preview-section" id="preview">
+    <div class="wrap">
+      <div class="preview-intro">
+        <div class="section-head">
+          <div class="kicker">Take a look around</div>
+          <h2>The actual launcher UI.</h2>
+          <p>Explore the interface in the frame below. No screenshots pretending to be the app.</p>
+        </div>
+        <a class="btn secondary" href="https://github.com/TheoNotBald/Bald-Launcher/blob/main/bald_launcher_v7.html" target="_blank" rel="noopener">View source ↗</a>
       </div>
 
-      <div class="preview-frame">
-        <iframe
-          id="launcher-preview"
-          title="Bald Launcher real interface preview"
-          src="https://htmlpreview.github.io/?https://github.com/TheoNotBald/Bald-Launcher/blob/main/bald_launcher_v7.html"
-          loading="eager"
-          allow="clipboard-read; clipboard-write"
-          referrerpolicy="strict-origin-when-cross-origin"
-        ></iframe>
-
-        <div class="fallback" id="preview-fallback">
-          <p>
-            The preview service could not load Bald Launcher.
-            You can still open the original HTML file directly from GitHub.
-          </p>
-          <p>
-            <a
-              href="https://github.com/TheoNotBald/Bald-Launcher/blob/main/bald_launcher_v7.html"
-              target="_blank"
-              rel="noopener noreferrer"
-            >Open bald_launcher_v7.html on GitHub</a>
-          </p>
+      <div class="preview-shell">
+        <div class="preview-bar">
+          <span class="preview-dots"><i></i><i></i><i></i></span>
+          <span>BALD LAUNCHER / LIVE PREVIEW</span>
+          <span class="preview-live">Embedded interface</span>
+        </div>
+        <div class="preview-frame">
+          <iframe
+            id="launcher-preview"
+            title="Bald Launcher actual interface"
+            src="https://htmlpreview.github.io/?https://github.com/TheoNotBald/Bald-Launcher/blob/main/bald_launcher_v7.html"
+            loading="lazy"
+            allow="clipboard-read; clipboard-write"
+          ></iframe>
+          <div class="preview-fallback" id="preview-fallback">
+            <p>The external preview could not be loaded.</p>
+            <a href="https://github.com/TheoNotBald/Bald-Launcher/blob/main/bald_launcher_v7.html" target="_blank" rel="noopener">Open the real launcher HTML on GitHub ↗</a>
+          </div>
         </div>
       </div>
-    </section>
+      <p class="preview-note">
+        Browser preview limitations apply: Electron-only actions, local files and launching Minecraft
+        may not work inside a website. The desktop download is the full application.
+      </p>
+    </div>
+  </section>
 
-    <section class="features" aria-label="Launcher features">
-      <article class="feature">
-        <div class="feature-icon">🎮</div>
-        <h2>Game profiles</h2>
-        <p>Keep different Minecraft versions and configurations organized.</p>
-      </article>
+  <section class="section" id="performance">
+    <div class="wrap split">
+      <div>
+        <div class="kicker">Built around your setup</div>
+        <h2>Your game. Your profiles. Your control.</h2>
+        <p>
+          Keep vanilla and modded profiles separate, experiment with compatible
+          optimizations, and use benchmark tools to compare real runs under consistent conditions.
+        </p>
+        <div class="points">
+          <div class="point"><span class="check">✓</span><div><strong>Keep profiles organized</strong><small>Separate configurations for different versions and ways to play.</small></div></div>
+          <div class="point"><span class="check">✓</span><div><strong>Choose how you play</strong><small>Keep a vanilla experience available while exploring modded setups.</small></div></div>
+          <div class="point"><span class="check">✓</span><div><strong>Measure, don't guess</strong><small>Use comparable benchmarks to evaluate changes instead of relying on promised FPS numbers.</small></div></div>
+        </div>
+      </div>
+      <div class="visual-card" aria-label="Illustrative performance dashboard">
+        <div class="fake-window">
+          <div class="fake-title"><span class="dot"></span> PERFORMANCE CENTER <span style="margin-left:auto;color:#7e8977">OVERVIEW</span></div>
+          <div class="fake-content">
+            <div style="font-size:11px;color:#8e9986;margin-bottom:15px">YOUR CONFIGURATION</div>
+            <div class="fake-line mid"></div>
+            <div class="fake-line short"></div>
+            <div class="fake-stat">
+              <div>FPS<small>Frame rate</small></div>
+              <div>CPU<small>Processor</small></div>
+              <div>GPU<small>Graphics</small></div>
+            </div>
+            <div style="margin-top:19px;font-size:11px;color:#a0a99a">Compare baseline and optimized runs</div>
+            <div style="height:5px;border-radius:4px;background:#293026;margin-top:10px;overflow:hidden"><div style="height:100%;width:68%;background:#a3f477"></div></div>
+          </div>
+        </div>
+        <p class="disclaimer">Illustrative graphic only — not a live benchmark or a claim of guaranteed FPS improvement.</p>
+      </div>
+    </div>
+  </section>
 
-      <article class="feature">
-        <div class="feature-icon">🧩</div>
-        <h2>Mods and customization</h2>
-        <p>Explore the launcher’s tools for mods, resource packs and settings.</p>
-      </article>
+  <section class="section">
+    <div class="wrap split">
+      <div class="visual-card">
+        <div class="fake-window">
+          <div class="fake-title">RESOURCE PACK STUDIO <span style="margin-left:auto;color:var(--green)">EDITOR</span></div>
+          <div class="fake-content">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div style="border:1px solid #353c32;border-radius:8px;padding:13px">
+                <div style="font-size:10px;color:#a2ad99;margin-bottom:12px">TEXTURE CANVAS</div>
+                <div style="width:100%;aspect-ratio:1;background-color:#161916;background-image:linear-gradient(45deg,#30372d 25%,transparent 25%),linear-gradient(-45deg,#30372d 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#30372d 75%),linear-gradient(-45deg,transparent 75%,#30372d 75%);background-size:24px 24px;background-position:0 0,0 12px,12px -12px,-12px 0"></div>
+              </div>
+              <div style="border:1px solid #353c32;border-radius:8px;padding:13px">
+                <div style="font-size:10px;color:#a2ad99;margin-bottom:12px">TOOLS</div>
+                <div class="fake-line"></div><div class="fake-line short"></div><div class="fake-line mid"></div>
+                <div style="display:flex;gap:5px;margin-top:18px"><i style="width:18px;height:18px;background:#a3f477;border-radius:4px"></i><i style="width:18px;height:18px;background:#718b5e;border-radius:4px"></i><i style="width:18px;height:18px;background:#3c4737;border-radius:4px"></i></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="disclaimer">Illustrative graphic showing the concept, not an interactive editor.</p>
+      </div>
+      <div>
+        <div class="kicker">Make it yours</div>
+        <h2>More than a way to launch.</h2>
+        <p>
+          The Resource Pack Studio brings texture editing into the launcher,
+          with a canvas-oriented workflow for customizing your Minecraft look.
+          Server and performance tools extend that workspace beyond launching the game.
+        </p>
+        <div class="hero-actions" style="justify-content:flex-start">
+          <a class="btn secondary" href="#preview">Explore the interface ↗</a>
+        </div>
+      </div>
+    </div>
+  </section>
 
-      <article class="feature">
-        <div class="feature-icon">⚙️</div>
-        <h2>Your launcher, your setup</h2>
-        <p>Discover the actual Bald Launcher interface in the embedded preview.</p>
-      </article>
-    </section>
-  </main>
+  <section class="cta">
+    <div class="wrap">
+      <div class="cta-panel">
+        <div class="kicker">Ready to try it?</div>
+        <h2>Bring your Minecraft setup together.</h2>
+        <p>Get Bald Launcher from its GitHub releases, or inspect the source and follow development.</p>
+        <div class="hero-actions">
+          <a class="btn primary" href="https://github.com/TheoNotBald/Bald-Launcher/releases" target="_blank" rel="noopener">↓ &nbsp; Download Bald Launcher</a>
+          <a class="btn secondary" href="https://github.com/TheoNotBald/Bald-Launcher" target="_blank" rel="noopener">View GitHub ↗</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
 
-  <footer>
-    Bald Launcher ·
-    <a
-      href="https://github.com/TheoNotBald/Bald-Launcher"
-      target="_blank"
-      rel="noopener noreferrer"
-    >View source on GitHub</a>
-  </footer>
+<footer>
+  <div class="wrap footer-inner">
+    <a class="brand" href="#home"><span class="logo">B</span><span>Bald Launcher</span></a>
+    <span>Open source Minecraft launcher project.</span>
+    <a href="https://github.com/TheoNotBald/Bald-Launcher" target="_blank" rel="noopener">GitHub ↗</a>
+  </div>
+</footer>
 
-  <script>
-    const preview = document.getElementById("launcher-preview");
-    const fallback = document.getElementById("preview-fallback");
+<script>
+  const preview = document.getElementById("launcher-preview");
+  const fallback = document.getElementById("preview-fallback");
 
-    // This detects a navigation failure, but cannot detect every error
-    // occurring inside a cross-origin iframe.
-    preview.addEventListener("error", () => {
-      preview.style.display = "none";
-      fallback.style.display = "block";
-    });
-  </script>
+  preview.addEventListener("error", () => {
+    fallback.style.display = "grid";
+    fallback.style.placeItems = "center";
+  });
+</script>
 </body>
 </html>
