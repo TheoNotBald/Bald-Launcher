@@ -1,15 +1,402 @@
-<!doctype html>
+
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#090b09"><meta name="description" content="Bald Launcher — a customizable Minecraft launcher for profiles, mods, resource packs, servers, and more.">
-<title>Bald Launcher — Your Minecraft, your way</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#090a09">
+<title>Bald Launcher — Minecraft, Your Way</title>
+<meta name="description" content="Bald Launcher brings Minecraft profiles, mods, server hosting, performance tools, and resource pack editing together in one place.">
+
 <style>
-:root{color-scheme:dark;--bg:#090b09;--panel:#101410;--line:#252d25;--text:#f1f5ef;--muted:#9aa59a;--green:#8cf16d;--purple:#9c91ff;--max:1160px}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(ellipse at 70% 0%,rgba(94,154,70,.14),transparent 34rem),var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.6}a{color:inherit;text-decoration:none}.wrap{width:min(var(--max),calc(100% - 40px));margin:auto}.nav{height:76px;display:flex;align-items:center;justify-content:space-between;gap:24px}.brand{display:flex;align-items:center;gap:12px;font-weight:800;letter-spacing:-.04em}.brand img{width:36px;height:36px;object-fit:contain;border-radius:10px}.brand span{font-size:18px}.navlinks{display:flex;align-items:center;gap:28px;color:#b3bdb1;font-size:14px}.navlinks a:hover{color:white}.navcta,.button{display:inline-flex;align-items:center;justify-content:center;gap:10px;border-radius:10px;padding:12px 17px;font-weight:750;font-size:14px;transition:transform .15s,background .15s,border-color .15s}.navcta,.button.primary{background:var(--green);color:#0b1608;border:1px solid var(--green)}.navcta:hover,.button.primary:hover{background:#b4ff9f;transform:translateY(-1px)}.button.secondary{background:#121712;border:1px solid #303a30;color:#e7eee4}.button.secondary:hover{border-color:#60725d;transform:translateY(-1px)}.hero{padding:82px 0 66px;text-align:center}.eyebrow{display:inline-flex;align-items:center;gap:9px;border:1px solid #31432c;background:rgba(126,241,94,.07);color:#b7f7a4;border-radius:99px;padding:6px 12px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 13px #8cf16d}.hero h1{font-size:clamp(42px,7vw,78px);line-height:1.04;letter-spacing:-.065em;max-width:850px;margin:25px auto 20px}.hero h1 em{font-style:normal;color:var(--green)}.hero p{max-width:650px;margin:0 auto;color:#a8b2a6;font-size:clamp(16px,2vw,19px)}.actions{display:flex;justify-content:center;flex-wrap:wrap;gap:12px;margin-top:29px}.micro{margin-top:15px!important;font-size:12px!important;color:#778174!important}.preview{position:relative;margin:8px auto 0;max-width:1050px}.preview:before{content:"";position:absolute;inset:12% 10%;background:rgba(126,241,94,.12);filter:blur(75px);z-index:-1}.shot{width:100%;display:block;border:1px solid #303830;border-radius:16px;box-shadow:0 30px 100px #000a;background:#0d100d}.preview-caption{display:flex;justify-content:center;gap:8px;align-items:center;color:#788476;font-size:12px;margin-top:14px}.section{padding:76px 0}.section-head{text-align:center;max-width:680px;margin:0 auto 35px}.kicker{font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:800;color:var(--green)}h2{font-size:clamp(30px,4vw,45px);letter-spacing:-.05em;line-height:1.13;margin:12px 0}.section-head p{color:var(--muted);margin:0}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.feature{padding:23px;border:1px solid var(--line);border-radius:15px;background:linear-gradient(145deg,#121712,#0d100d);min-height:185px}.feature-icon{display:grid;place-items:center;width:39px;height:39px;border-radius:11px;background:#1d2b19;border:1px solid #31452b;color:var(--green);font-size:19px;margin-bottom:17px}.feature:nth-child(2) .feature-icon,.feature:nth-child(5) .feature-icon{background:#211e3b;border-color:#38325f;color:#b4adff}.feature h3{font-size:16px;margin:0 0 7px}.feature p{font-size:13px;color:var(--muted);margin:0}.split{display:grid;grid-template-columns:1fr 1fr;gap:44px;align-items:center}.terminal{border:1px solid #2b352b;border-radius:14px;background:#0b0e0b;overflow:hidden;box-shadow:0 20px 65px #0005}.terminal-top{display:flex;align-items:center;gap:7px;padding:13px 16px;border-bottom:1px solid #252c25;background:#111511}.terminal-top i{width:8px;height:8px;border-radius:50%;background:#394238}.terminal-top span{margin-left:8px;color:#879384;font-size:11px}.terminal-body{padding:22px;font:12px/2 ui-monospace,SFMono-Regular,Menlo,monospace;color:#9ba99a;overflow-wrap:anywhere}.terminal-body .green{color:var(--green)}.terminal-body .purple{color:#b4adff}.terminal-body .white{color:#edf2e9}.checklist{list-style:none;padding:0;margin:24px 0 0;display:grid;gap:13px;color:#c3cdc0;font-size:14px}.checklist li{display:flex;gap:11px;align-items:flex-start}.check{color:var(--green);font-weight:900}.download-panel{padding:36px;border-radius:20px;border:1px solid #34432f;background:radial-gradient(ellipse at 100% 0,rgba(126,241,94,.11),transparent 45%),linear-gradient(135deg,#131a12,#0c100c);display:flex;align-items:center;justify-content:space-between;gap:28px}.download-panel h2{margin-top:0;font-size:34px}.download-panel p{margin:0;color:var(--muted);max-width:560px}.download-actions{display:flex;flex-direction:column;gap:10px;min-width:190px}.download-actions .button{white-space:nowrap}.footer{padding:28px 0 38px;border-top:1px solid #202720;color:#7f8a7d;font-size:12px}.footer-inner{display:flex;align-items:center;justify-content:space-between;gap:20px}.footer-links{display:flex;gap:18px;flex-wrap:wrap}.footer a:hover{color:#d9e5d4}.notice{font-size:12px;color:#788476;margin-top:16px}
-@media(max-width:800px){.navlinks{gap:15px}.navlinks a:not(.navcta){display:none}.hero{padding:60px 0 45px}.grid{grid-template-columns:repeat(2,1fr)}.split{grid-template-columns:1fr;gap:28px}.download-panel{align-items:flex-start;flex-direction:column}.download-actions{flex-direction:row;flex-wrap:wrap}.section{padding:55px 0}}@media(max-width:520px){.wrap{width:min(var(--max),calc(100% - 28px))}.nav{height:66px}.brand span{font-size:16px}.navcta{padding:9px 12px;font-size:12px}.hero h1{font-size:43px}.grid{grid-template-columns:1fr}.feature{min-height:0}.shot{border-radius:10px}.download-panel{padding:24px}.footer-inner{align-items:flex-start;flex-direction:column}.actions .button{width:100%}.hero{padding-top:48px}}
-</style></head><body>
-<header class="wrap nav"><a class="brand" href="#" aria-label="Bald Launcher home"><img src="https://raw.githubusercontent.com/TheoNotBald/Bald-Launcher/main/foreground-launcher.png" alt=""><span>Bald Launcher</span></a><nav class="navlinks" aria-label="Main navigation"><a href="#features">Features</a><a href="#how-it-works">How it works</a><a href="https://github.com/TheoNotBald/Bald-Launcher/releases" target="_blank" rel="noreferrer">Releases ↗</a><a class="navcta" href="https://github.com/TheoNotBald/Bald-Launcher/releases/latest">Download ↓</a></nav></header>
-<main><section class="wrap hero"><div class="eyebrow"><span class="dot"></span> Built for your Minecraft setup</div><h1>Your Minecraft.<br><em>Your way.</em></h1><p>A customizable Minecraft launcher for managing profiles, mods, resource packs, servers, and the little details that make your setup yours.</p><div class="actions"><a class="button primary" href="https://github.com/TheoNotBald/Bald-Launcher/releases/latest">Download for Windows ↗</a><a class="button secondary" href="https://github.com/TheoNotBald/Bald-Launcher" target="_blank" rel="noreferrer">Explore the source ↗</a></div><p class="micro">Free to download · Windows desktop app · Open source</p><div class="preview"><img class="shot" src="https://raw.githubusercontent.com/TheoNotBald/Bald-Launcher/main/current-launcher.png" alt="Screenshot of the actual Bald Launcher desktop application" loading="eager"><div class="preview-caption"><span class="dot"></span> Actual launcher screenshot from the project repository</div></div></section>
-<section class="section" id="features"><div class="wrap"><div class="section-head"><div class="kicker">One place for your setup</div><h2>Your whole Minecraft workflow,<br>under one roof.</h2><p>Spend less time juggling folders and tools. Keep the parts of your setup you use most close at hand.</p></div><div class="grid"><article class="feature"><div class="feature-icon">▦</div><h3>Profiles & versions</h3><p>Keep different Minecraft setups organized so you can switch between the way you want to play.</p></article><article class="feature"><div class="feature-icon">✳</div><h3>Mods & resource packs</h3><p>Manage the content that shapes your game and tailor each setup to your preferences.</p></article><article class="feature"><div class="feature-icon">⌘</div><h3>Server management</h3><p>Keep server tools and console workflows close to your launcher experience.</p></article><article class="feature"><div class="feature-icon">◈</div><h3>Custom themes</h3><p>Personalize the look with theme controls, color choices, and appearance settings.</p></article><article class="feature"><div class="feature-icon">▤</div><h3>Built-in tools</h3><p>Explore the extra utilities and editing workflows included in the desktop app.</p></article><article class="feature"><div class="feature-icon">↻</div><h3>Updates & releases</h3><p>Get the latest published build and read release notes directly from the project's releases.</p></article></div></div></section>
-<section class="section" id="how-it-works"><div class="wrap split"><div><div class="kicker">Get started</div><h2>From download to your own setup.</h2><p style="color:var(--muted)">Bald Launcher is a Windows desktop application. Download the installer, open it on your PC, and follow the setup flow in the app.</p><ul class="checklist"><li><span class="check">✓</span><span>Download the latest installer from GitHub Releases.</span></li><li><span class="check">✓</span><span>Install and open Bald Launcher on Windows.</span></li><li><span class="check">✓</span><span>Set up your profiles and explore the available tools.</span></li></ul><p class="notice">This website is the product home page. It does not launch Minecraft or access files on your computer.</p></div><div class="terminal" aria-label="Project information panel"><div class="terminal-top"><i></i><i></i><i></i><span>bald-launcher · project</span></div><div class="terminal-body"><div><span class="purple">project</span> <span class="white">Bald Launcher</span></div><div><span class="purple">platform</span> Windows desktop</div><div><span class="purple">stack</span> Electron</div><div><span class="purple">source</span> github.com/TheoNotBald/Bald-Launcher</div><div style="margin-top:15px"><span class="green">●</span> <span class="white">Get the latest build</span></div><div>Releases are published on GitHub.</div><div style="margin-top:15px"><span class="green">→</span> <span class="white">Ready when you are.</span></div></div></div></div></section>
-<section class="section"><div class="wrap"><div class="download-panel"><div><div class="kicker">Ready to play?</div><h2>Make your setup yours.</h2><p>Download Bald Launcher for Windows, or check the source and release history on GitHub.</p></div><div class="download-actions"><a class="button primary" href="https://github.com/TheoNotBald/Bald-Launcher/releases/latest">Get the latest release ↗</a><a class="button secondary" href="https://github.com/TheoNotBald/Bald-Launcher/releases" target="_blank" rel="noreferrer">View all releases</a></div></div></div></section></main>
-<footer class="footer"><div class="wrap footer-inner"><div>© <span id="year"></span> Bald Launcher. Not affiliated with Mojang or Microsoft.</div><div class="footer-links"><a href="https://github.com/TheoNotBald/Bald-Launcher" target="_blank" rel="noreferrer">GitHub</a><a href="https://github.com/TheoNotBald/Bald-Launcher/blob/main/LICENSE.md" target="_blank" rel="noreferrer">License</a><a href="https://github.com/TheoNotBald/Bald-Launcher/releases" target="_blank" rel="noreferrer">Releases</a></div></div></footer><script>document.getElementById('year').textContent=new Date().getFullYear();</script></body></html>
+:root {
+  --bg: #090a09;
+  --panel: #111311;
+  --panel2: #171a17;
+  --line: #292d28;
+  --text: #f3f5f1;
+  --muted: #a0a69d;
+  --green: #a3f477;
+  --green2: #5cbf42;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 80px; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button { font: inherit; }
+.wrap { width: min(1160px, calc(100% - 40px)); margin: auto; }
+header {
+  height: 72px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #ffffff0c;
+  background: #090a09eF;
+  backdrop-filter: blur(18px);
+}
+.nav { display:flex; align-items:center; justify-content:space-between; gap:20px; }
+.brand { display:flex; align-items:center; gap:11px; font-weight:800; letter-spacing:-.5px; }
+.logo {
+  display:grid; place-items:center; width:37px; height:37px;
+  border:1px solid #a3f47760; border-radius:11px;
+  color:var(--green); font-weight:900; font-size:19px;
+  background:linear-gradient(145deg,#263823,#111811);
+}
+.links { display:flex; align-items:center; gap:25px; font-size:13px; color:#b6bbb3; }
+.links a:hover { color:var(--green); }
+.btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:9px;
+  min-height:43px; padding:0 17px; border-radius:9px;
+  font-weight:750; font-size:13px; border:1px solid var(--line);
+  transition:transform .18s,border-color .18s,background .18s;
+}
+.btn:hover { transform:translateY(-2px); border-color:#66745f; }
+.btn.primary { color:#11170e; background:var(--green); border-color:var(--green); }
+.btn.primary:hover { background:#b8ff91; }
+.btn.secondary { background:#ffffff06; }
+.hero { padding:100px 0 76px; text-align:center; position:relative; overflow:hidden; }
+.hero:before {
+  content:""; position:absolute; z-index:-1; pointer-events:none;
+  width:750px; height:480px; left:50%; top:-280px; transform:translateX(-50%);
+  background:#7be65b17; filter:blur(80px); border-radius:50%;
+}
+.eyebrow {
+  display:inline-flex; align-items:center; gap:9px; padding:7px 11px;
+  border:1px solid #3a4a35; border-radius:999px;
+  color:#c3e8b5; background:#a3f47709;
+  font-size:11px; letter-spacing:1.5px; font-weight:800; text-transform:uppercase;
+}
+.dot { width:7px; height:7px; background:var(--green); border-radius:50%; }
+h1 { margin:25px auto 18px; max-width:900px; font-size:clamp(42px,7.2vw,82px); letter-spacing:-5px; line-height:.99; }
+h1 span { color:var(--green); }
+.hero p { max-width:660px; margin:0 auto; color:var(--muted); line-height:1.8; font-size:16px; }
+.hero-actions { display:flex; justify-content:center; flex-wrap:wrap; gap:11px; margin-top:28px; }
+.fineprint { margin-top:14px; font-size:11px; color:#73796f; }
+.hero-bottom { display:flex; justify-content:center; flex-wrap:wrap; gap:25px; margin-top:40px; color:#8e958a; font-size:12px; }
+.hero-bottom span:before { content:"✓"; color:var(--green); margin-right:8px; }
+.section { padding:83px 0; border-top:1px solid #ffffff0b; }
+.section-head { max-width:690px; margin-bottom:34px; }
+.kicker { color:var(--green); font-size:11px; letter-spacing:2px; font-weight:850; text-transform:uppercase; }
+h2 { margin:13px 0; font-size:clamp(30px,4vw,47px); line-height:1.08; letter-spacing:-2px; }
+.section-head p,.feature p,.split p { color:var(--muted); line-height:1.8; font-size:14px; }
+.feature-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+.feature {
+  min-height:215px; padding:24px; border:1px solid var(--line);
+  background:linear-gradient(145deg,#151815,#0f100f); border-radius:15px;
+}
+.feature:hover { border-color:#58694f; }
+.feature-icon {
+  width:42px; height:42px; display:grid; place-items:center;
+  border-radius:12px; background:#a3f47712; border:1px solid #a3f47724;
+  color:var(--green); font-size:19px; margin-bottom:23px;
+}
+.feature h3 { font-size:16px; margin:0 0 9px; letter-spacing:-.3px; }
+.feature p { font-size:13px; margin:0; }
+.preview-section { padding:80px 0; background:#0c0e0c; border-block:1px solid #ffffff0c; }
+.preview-intro { display:flex; justify-content:space-between; align-items:end; gap:25px; margin-bottom:24px; }
+.preview-intro .section-head { margin:0; }
+.preview-intro .section-head p { margin-bottom:0; }
+.preview-shell { overflow:hidden; border:1px solid #343a32; border-radius:15px; background:#080908; box-shadow:0 30px 100px #0008; }
+.preview-bar {
+  min-height:46px; padding:12px 16px; display:flex; align-items:center;
+  justify-content:space-between; gap:10px; background:#151715; border-bottom:1px solid #30342e;
+  font-size:11px; color:#aeb5a8;
+}
+.preview-dots { display:flex; gap:6px; }
+.preview-dots i { width:8px; height:8px; border-radius:50%; background:#464b43; }
+.preview-live { color:#c5f6ae; }
+.preview-live:before { content:""; display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); margin-right:7px; }
+.preview-frame { height:min(78vh,820px); min-height:520px; position:relative; }
+.preview-frame iframe { width:100%; height:100%; display:block; border:0; background:#0b0c0b; }
+.preview-fallback { display:none; position:absolute; inset:0; padding:35px; text-align:center; color:var(--muted); background:#0b0c0b; }
+.preview-note { color:#737b70; font-size:11px; margin-top:13px; line-height:1.6; }
+.split { display:grid; grid-template-columns:1fr 1fr; gap:55px; align-items:center; }
+.split h2 { max-width:490px; }
+.points { display:grid; gap:15px; margin-top:24px; }
+.point { display:flex; gap:12px; align-items:flex-start; }
+.check { flex:0 0 22px; height:22px; display:grid; place-items:center; color:var(--green); background:#a3f47712; border-radius:7px; font-size:12px; }
+.point strong { display:block; font-size:13px; margin-bottom:4px; }
+.point small { color:#91988c; line-height:1.6; font-size:12px; }
+.visual-card {
+  padding:25px; min-height:310px; border:1px solid #333a30; border-radius:16px;
+  background:radial-gradient(ellipse at 80% 0%,#46633a25,transparent 55%),#121512;
+}
+.fake-window { border:1px solid #343a31; border-radius:10px; overflow:hidden; background:#0c0e0c; }
+.fake-title { display:flex; align-items:center; gap:8px; padding:13px; font-size:11px; border-bottom:1px solid #2c312a; color:#c5cbbf; }
+.fake-content { padding:18px; }
+.fake-line { height:8px; border-radius:5px; background:#262c24; margin-bottom:10px; }
+.fake-line.short { width:48%; }
+.fake-line.mid { width:72%; }
+.fake-stat { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:18px; }
+.fake-stat div { padding:12px 8px; border:1px solid #30362c; border-radius:8px; color:var(--green); font-size:16px; font-weight:800; }
+.fake-stat small { display:block; color:#818a7a; font-size:9px; font-weight:500; margin-top:6px; }
+.disclaimer { color:#7d8578; font-size:10px; line-height:1.6; margin-top:14px; }
+.cta { padding:76px 0; text-align:center; }
+.cta-panel {
+  padding:60px 25px; border:1px solid #384432; border-radius:20px;
+  background:radial-gradient(ellipse at 50% 0%,#82e65b18,transparent 65%),#101310;
+}
+.cta-panel h2 { max-width:700px; margin:14px auto; }
+.cta-panel p { color:var(--muted); max-width:550px; margin:0 auto; font-size:14px; line-height:1.8; }
+footer { padding:27px 0; border-top:1px solid #ffffff10; color:#747b70; font-size:11px; }
+.footer-inner { display:flex; justify-content:space-between; align-items:center; gap:20px; }
+footer a:hover { color:var(--green); }
+@media(max-width:800px) {
+  .links { gap:14px; }
+  .links .hide-mobile { display:none; }
+  .feature-grid { grid-template-columns:repeat(2,1fr); }
+  .split { grid-template-columns:1fr; gap:28px; }
+  .preview-intro { align-items:start; flex-direction:column; }
+  h1 { letter-spacing:-2.8px; }
+}
+@media(max-width:520px) {
+  .wrap { width:calc(100% - 28px); }
+  .links { gap:10px; font-size:12px; }
+  .links .hide-mobile { display:none; }
+  .hero { padding:75px 0 55px; }
+  .hero p { font-size:14px; }
+  .hero-bottom { gap:12px 18px; }
+  .section { padding:58px 0; }
+  .feature-grid { grid-template-columns:1fr; }
+  .feature { min-height:0; }
+  .preview-frame { height:70vh; min-height:450px; }
+  .visual-card { padding:15px; }
+  .footer-inner { align-items:flex-start; flex-direction:column; }
+}
+</style>
+</head>
+
+<body>
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#home"><span class="logo">B</span><span>Bald Launcher</span></a>
+    <nav class="links">
+      <a class="hide-mobile" href="#features">Features</a>
+      <a href="#preview">Preview</a>
+      <a class="hide-mobile" href="#performance">Performance</a>
+      <a href="https://github.com/TheoNotBald/Bald-Launcher" target="_blank" rel="noopener">GitHub ↗</a>
+      <a class="btn primary" href="https://github.com/TheoNotBald/Bald-Launcher/releases" target="_blank" rel="noopener">Download</a>
+    </nav>
+  </div>
+</header>
+
+<main id="home">
+  <section class="hero">
+    <div class="wrap">
+      <div class="eyebrow"><span class="dot"></span> Your Minecraft, rethought</div>
+      <h1>Everything Minecraft.<br><span>One launcher.</span></h1>
+      <p>
+        Manage your Minecraft profiles, customize your setup, explore server hosting,
+        and edit resource packs — all from one place.
+      </p>
+      <div class="hero-actions">
+        <a class="btn primary" href="https://github.com/TheoNotBald/Bald-Launcher/releases" target="_blank" rel="noopener">↓ &nbsp; Get Bald Launcher</a>
+        <a class="btn secondary" href="#preview">Explore the preview ↘</a>
+      </div>
+      <div class="fineprint">Windows-focused · Open source · Built for Minecraft</div>
+      <div class="hero-bottom">
+        <span>Profiles and versions</span>
+        <span>Mods and resource packs</span>
+        <span>Server management</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="features">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker">One place for your setup</div>
+        <h2>Less juggling.<br>More Minecraft.</h2>
+        <p>
+          Keep your game setup and your tools together instead of hopping between
+          separate applications for every task.
+        </p>
+      </div>
+      <div class="feature-grid">
+        <article class="feature">
+          <div class="feature-icon">▦</div>
+          <h3>Profiles & versions</h3>
+          <p>Organize separate Minecraft installations and configurations for the way you play.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">◇</div>
+          <h3>Mods & loaders</h3>
+          <p>Manage your modded setup and explore compatible loaders and mod configurations.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">⌁</div>
+          <h3>Performance tools</h3>
+          <p>Explore optimization settings and benchmarking tools to help compare configurations.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">▤</div>
+          <h3>Server management</h3>
+          <p>Work with server configurations, console output, files, backups and hosting tools.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">✳</div>
+          <h3>Resource-pack studio</h3>
+          <p>Edit textures and customize resource packs with painting and model-editing tools.</p>
+        </article>
+        <article class="feature">
+          <div class="feature-icon">⚙</div>
+          <h3>More control</h3>
+          <p>Bring your launcher settings, game setup and supporting tools into one workflow.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="preview-section" id="preview">
+    <div class="wrap">
+      <div class="preview-intro">
+        <div class="section-head">
+          <div class="kicker">Take a look around</div>
+          <h2>The actual launcher UI.</h2>
+          <p>Explore the interface in the frame below. No screenshots pretending to be the app.</p>
+        </div>
+        <a class="btn secondary" href="https://github.com/TheoNotBald/Bald-Launcher/blob/main/bald_launcher_v7.html" target="_blank" rel="noopener">View source ↗</a>
+      </div>
+
+      <div class="preview-shell">
+        <div class="preview-bar">
+          <span class="preview-dots"><i></i><i></i><i></i></span>
+          <span>BALD LAUNCHER / LIVE PREVIEW</span>
+          <span class="preview-live">Embedded interface</span>
+        </div>
+        <div class="preview-frame">
+          <iframe
+            id="launcher-preview"
+            title="Bald Launcher actual interface"
+            src="https://htmlpreview.github.io/?https://github.com/TheoNotBald/Bald-Launcher/blob/main/bald_launcher_v7.html"
+            loading="lazy"
+            allow="clipboard-read; clipboard-write"
+          ></iframe>
+          <div class="preview-fallback" id="preview-fallback">
+            <p>The external preview could not be loaded.</p>
+            <a href="https://github.com/TheoNotBald/Bald-Launcher/blob/main/bald_launcher_v7.html" target="_blank" rel="noopener">Open the real launcher HTML on GitHub ↗</a>
+          </div>
+        </div>
+      </div>
+      <p class="preview-note">
+        Browser preview limitations apply: Electron-only actions, local files and launching Minecraft
+        may not work inside a website. The desktop download is the full application.
+      </p>
+    </div>
+  </section>
+
+  <section class="section" id="performance">
+    <div class="wrap split">
+      <div>
+        <div class="kicker">Built around your setup</div>
+        <h2>Your game. Your profiles. Your control.</h2>
+        <p>
+          Keep vanilla and modded profiles separate, experiment with compatible
+          optimizations, and use benchmark tools to compare real runs under consistent conditions.
+        </p>
+        <div class="points">
+          <div class="point"><span class="check">✓</span><div><strong>Keep profiles organized</strong><small>Separate configurations for different versions and ways to play.</small></div></div>
+          <div class="point"><span class="check">✓</span><div><strong>Choose how you play</strong><small>Keep a vanilla experience available while exploring modded setups.</small></div></div>
+          <div class="point"><span class="check">✓</span><div><strong>Measure, don't guess</strong><small>Use comparable benchmarks to evaluate changes instead of relying on promised FPS numbers.</small></div></div>
+        </div>
+      </div>
+      <div class="visual-card" aria-label="Illustrative performance dashboard">
+        <div class="fake-window">
+          <div class="fake-title"><span class="dot"></span> PERFORMANCE CENTER <span style="margin-left:auto;color:#7e8977">OVERVIEW</span></div>
+          <div class="fake-content">
+            <div style="font-size:11px;color:#8e9986;margin-bottom:15px">YOUR CONFIGURATION</div>
+            <div class="fake-line mid"></div>
+            <div class="fake-line short"></div>
+            <div class="fake-stat">
+              <div>FPS<small>Frame rate</small></div>
+              <div>CPU<small>Processor</small></div>
+              <div>GPU<small>Graphics</small></div>
+            </div>
+            <div style="margin-top:19px;font-size:11px;color:#a0a99a">Compare baseline and optimized runs</div>
+            <div style="height:5px;border-radius:4px;background:#293026;margin-top:10px;overflow:hidden"><div style="height:100%;width:68%;background:#a3f477"></div></div>
+          </div>
+        </div>
+        <p class="disclaimer">Illustrative graphic only — not a live benchmark or a claim of guaranteed FPS improvement.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap split">
+      <div class="visual-card">
+        <div class="fake-window">
+          <div class="fake-title">RESOURCE PACK STUDIO <span style="margin-left:auto;color:var(--green)">EDITOR</span></div>
+          <div class="fake-content">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div style="border:1px solid #353c32;border-radius:8px;padding:13px">
+                <div style="font-size:10px;color:#a2ad99;margin-bottom:12px">TEXTURE CANVAS</div>
+                <div style="width:100%;aspect-ratio:1;background-color:#161916;background-image:linear-gradient(45deg,#30372d 25%,transparent 25%),linear-gradient(-45deg,#30372d 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#30372d 75%),linear-gradient(-45deg,transparent 75%,#30372d 75%);background-size:24px 24px;background-position:0 0,0 12px,12px -12px,-12px 0"></div>
+              </div>
+              <div style="border:1px solid #353c32;border-radius:8px;padding:13px">
+                <div style="font-size:10px;color:#a2ad99;margin-bottom:12px">TOOLS</div>
+                <div class="fake-line"></div><div class="fake-line short"></div><div class="fake-line mid"></div>
+                <div style="display:flex;gap:5px;margin-top:18px"><i style="width:18px;height:18px;background:#a3f477;border-radius:4px"></i><i style="width:18px;height:18px;background:#718b5e;border-radius:4px"></i><i style="width:18px;height:18px;background:#3c4737;border-radius:4px"></i></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="disclaimer">Illustrative graphic showing the concept, not an interactive editor.</p>
+      </div>
+      <div>
+        <div class="kicker">Make it yours</div>
+        <h2>More than a way to launch.</h2>
+        <p>
+          The Resource Pack Studio brings texture editing into the launcher,
+          with a canvas-oriented workflow for customizing your Minecraft look.
+          Server and performance tools extend that workspace beyond launching the game.
+        </p>
+        <div class="hero-actions" style="justify-content:flex-start">
+          <a class="btn secondary" href="#preview">Explore the interface ↗</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta">
+    <div class="wrap">
+      <div class="cta-panel">
+        <div class="kicker">Ready to try it?</div>
+        <h2>Bring your Minecraft setup together.</h2>
+        <p>Get Bald Launcher from its GitHub releases, or inspect the source and follow development.</p>
+        <div class="hero-actions">
+          <a class="btn primary" href="https://github.com/TheoNotBald/Bald-Launcher/releases" target="_blank" rel="noopener">↓ &nbsp; Download Bald Launcher</a>
+          <a class="btn secondary" href="https://github.com/TheoNotBald/Bald-Launcher" target="_blank" rel="noopener">View GitHub ↗</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap footer-inner">
+    <a class="brand" href="#home"><span class="logo">B</span><span>Bald Launcher</span></a>
+    <span>Open source Minecraft launcher project.</span>
+    <a href="https://github.com/TheoNotBald/Bald-Launcher" target="_blank" rel="noopener">GitHub ↗</a>
+  </div>
+</footer>
+
+<script>
+  const preview = document.getElementById("launcher-preview");
+  const fallback = document.getElementById("preview-fallback");
+
+  preview.addEventListener("error", () => {
+    fallback.style.display = "grid";
+    fallback.style.placeItems = "center";
+  });
+</script>
+</body>
+</html>
