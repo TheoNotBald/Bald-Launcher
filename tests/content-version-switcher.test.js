@@ -205,23 +205,38 @@ test('profile import emits staged progress and the UI displays a progress dialog
   assert.match(handler, /emitStatus\(`Profile import failed · \$\{message\}`\)/);
   assert.match(preload, /onProfileImportProgress:/);
   assert.match(html, /id="profileImportOverlay"/);
-  assert.match(html, /id="profileImportProgressBar"/);
+  assert.match(html, /id="profileImportProgressBar" role="progressbar"/);
+  assert.match(html, /id="profileImportProgressFill"/);
+  assert.match(html, /profile-import-progress-indeterminate \.profile-import-progress-fill/);
   assert.match(html, /updateProfileImportProgress\(progress\)/);
 });
 
-test('large Modrinth imports stream files with bounded parallelism and avoid synchronous override copies', () => {
+test('large Modrinth imports stream files and extract overrides without buffering or duplicate copies', () => {
   const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
   const importStart = main.indexOf("ipcMain.handle('launcher:import-profile'");
   const importSource = main.slice(importStart, main.indexOf("ipcMain.handle('launcher:backup-profile'", importStart));
-  assert.match(importSource, /runProfileImportDownloads\(\{[\s\S]*?concurrency: 4/);
+  assert.match(importSource, /runProfileImportDownloads\(\{[\s\S]*?concurrency: sourceStats\.size > twoGb \? 2 : 4/);
   assert.match(importSource, /responseType: 'stream'/);
   assert.match(importSource, /await pipeline\(response\.data, meter, fs\.createWriteStream/);
   assert.doesNotMatch(importSource, /responseType:\s*'arraybuffer'/);
   const overridesStart = main.indexOf('async function extractMrpackOverrides');
   const overridesEnd = main.indexOf('\nfunction contentIdentity', overridesStart);
   const overrides = main.slice(overridesStart, overridesEnd);
-  assert.match(overrides, /await fs\.promises\.cp/);
-  assert.doesNotMatch(overrides, /fs\.cpSync/);
+  assert.match(overrides, /capture: false,[\s\S]*?onOutputLine/);
+  assert.match(overrides, /\['-xvf', sourcePath, '-C', staging, 'overrides'\]/);
+  assert.match(overrides, /await moveImportedTree/);
+  const moveStart = main.indexOf('async function moveImportedTree');
+  const moveEnd = main.indexOf('\nasync function extractMrpackOverrides', moveStart);
+  assert.match(main.slice(moveStart, moveEnd), /await fs\.promises\.rename\(source, destination\)/);
+  assert.doesNotMatch(overrides, /fs\.promises\.cp|fs\.cpSync/);
+  assert.match(overrides, /onProgress\(\{ completed: extractedEntries, total: totalEntries, percent \}\)/);
+  const inspectStart = main.indexOf('async function inspectMrpackOverrides');
+  const inspectEnd = main.indexOf('\nasync function extractMrpackOverrides', inspectStart);
+  const inspect = main.slice(inspectStart, inspectEnd);
+  assert.match(inspect, /\['-tvf', sourcePath\]/);
+  assert.match(inspect, /uncompressedBytes \+= size/);
+  assert.match(importSource, /fs\.statfsSync\(createdRoot\)/);
+  assert.match(importSource, /archiveInfo\.uncompressedBytes/);
 });
 
 test('cosmetic editors protect high-resolution capes and asynchronous preview state', () => {
@@ -293,6 +308,19 @@ test('profile recently-used sorting tracks Start clicks rather than profile sele
   assert.doesNotMatch(startHandler, /profile\.updatedAt =/);
   assert.doesNotMatch(activeHandler, /lastUsedAt/);
   assert.match(html.slice(html.indexOf('async function launchClick'), html.indexOf('function handleLaunchButtonClick')), /profile\.lastUsedAt = Date\.now\(\)/);
+});
+
+test('profiles track persistent playtime only while Minecraft is running', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  assert.match(main, /playtimeMs: Math\.max\(0, Number\(profile\?\.playtimeMs\) \|\| 0\)/);
+  assert.match(main, /lastPlayedAt: Number\.isFinite\(Number\(profile\?\.lastPlayedAt\)\)/);
+  assert.match(main, /startProfilePlaytimeTracking\(profile, session\)/);
+  assert.match(main, /stopProfilePlaytimeTracking\(profile\.id\)/);
+  assert.match(main, /recordProfilePlaytime\(profile, session\)/);
+  assert.match(main, /process\.kill\(Number\(session\.pid\), 0\);[\s\S]*?startProfilePlaytimeTracking\(profile, session, Date\.now\(\)\)/);
+  const html = fs.readFileSync(path.join(__dirname, '..', 'bald_launcher_v7.html'), 'utf8');
+  assert.match(html, /formatProfilePlaytime\(p\.playtimeMs\)/);
+  assert.match(html, /formatProfileLastPlayed\(p\.lastPlayedAt\)/);
 });
 
 test('profile launch uses the selected Microsoft account instead of silently falling back', () => {
@@ -456,7 +484,7 @@ test('large Modrinth profile imports use the ZIP64-capable archive path after co
   const importStart = main.indexOf("ipcMain.handle('launcher:import-profile'");
   const importSource = main.slice(importStart, main.indexOf("ipcMain.handle('launcher:backup-profile'", importStart));
   assert.match(importSource, /readMrpackEntry\(sourcePath, 'modrinth\.index\.json'\)/);
-  assert.match(importSource, /extractMrpackOverrides\(sourcePath, createdRoot\)/);
+  assert.match(importSource, /extractMrpackOverrides\(sourcePath, createdRoot, progress =>/);
   assert.doesNotMatch(importSource, /new AdmZip\(sourcePath\)/);
   assert.match(main.slice(0, importStart), /async function readMrpackEntry\(sourcePath, entryPath\)/);
 });

@@ -73,6 +73,10 @@ body{font-family:var(--font-sans);}
 .profile-card-icon{width:100%;height:60px;border-radius:8px;background:#1a1833;display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:700;color:var(--accent-purple);}
 .profile-card-name{font-size:var(--text-md);color:#ccc;font-weight:500;}
 .profile-card-sub{font-size:var(--text-xs);color:var(--text-muted);}
+.profile-card-activity{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:var(--text-xs);color:#9ba0a8;}
+.profile-card-activity-item{display:inline-flex;align-items:center;gap:5px;min-width:0;white-space:nowrap;}
+.profile-card-activity-item svg{width:14px;height:14px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+.profile-card-activity-separator{color:#565a60;}
 .profile-card-badge{display:inline-flex;align-self:flex-start;font-size:var(--text-xs);padding:2px 8px;border-radius:8px;}
 .profile-card-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .profile-card-menu-btn{width:28px;height:28px;border:1px solid var(--ui-border);border-radius:var(--ui-radius-small);background:var(--ui-surface-hover);color:var(--ui-text-secondary);cursor:pointer;}
@@ -93,6 +97,21 @@ body{font-family:var(--font-sans);}
 .notification-list{max-height:60vh;overflow-y:auto;padding:8px;}
 .notification-item{padding:10px;border-bottom:1px solid var(--ui-border);color:var(--ui-text-secondary);font-size:12px;}
 .notification-item strong{display:block;color:var(--ui-text);margin-bottom:3px;}
+.bald-toast-stack{position:fixed;right:20px;bottom:20px;z-index:240;display:grid;gap:10px;width:min(390px,calc(100vw - 32px));pointer-events:none;}
+.bald-toast{display:flex;align-items:flex-start;gap:11px;padding:13px 14px;border:1px solid rgba(143,200,199,.32);border-radius:12px;background:rgba(18,23,24,.96);color:#e5eeee;box-shadow:0 14px 38px rgba(0,0,0,.38);font:12px/1.5 var(--font-sans);pointer-events:auto;touch-action:pan-y;animation:bald-toast-enter .22s ease-out both;transition:transform .24s ease,opacity .24s ease;}
+.bald-toast.error{border-color:rgba(244,94,101,.55);box-shadow:0 14px 38px rgba(0,0,0,.4),inset 3px 0 #f45e65;}
+.bald-toast.error .bald-toast-icon{color:#ff7078;}
+.bald-toast-icon{flex:0 0 auto;color:#8fc8c7;font-size:16px;}
+.bald-toast-copy{min-width:0;flex:1;overflow-wrap:anywhere;}
+.bald-toast-copy strong{display:block;margin-bottom:2px;color:#f2f7f7;font-size:12px;}
+.bald-toast-dismiss{border:0;background:transparent;color:#9aa5a6;font-size:18px;cursor:pointer;line-height:1;}
+.bald-toast.leaving{opacity:0;transform:translateX(120%);}
+.bald-toast.dragging{transition:none;}
+@keyframes bald-toast-enter{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
+.launcher-drop-overlay{position:fixed;inset:10px;z-index:220;display:none;align-items:center;justify-content:center;border:2px dashed rgba(143,200,199,.78);border-radius:18px;background:rgba(7,13,14,.78);backdrop-filter:blur(5px);pointer-events:none;}
+.launcher-drop-overlay.visible{display:flex;}
+.launcher-drop-overlay>div{padding:22px 28px;border:1px solid rgba(143,200,199,.4);border-radius:14px;background:rgba(20,27,28,.95);color:#e6f4f2;text-align:center;font-size:15px;font-weight:650;box-shadow:0 18px 50px rgba(0,0,0,.4);}
+.launcher-drop-overlay small{display:block;margin-top:7px;color:#a4b7b7;font-size:11px;font-weight:400;}
 .badge-vulkan{background:#16350f;color:var(--accent-green);}
 .badge-sodium{background:#1a1833;color:var(--accent-purple);}
 .badge-vanilla{background:var(--bg-surface-2);color:#666;}
@@ -388,6 +407,14 @@ body{font-family:var(--font-sans);}
 .browse-page-btn:disabled{color:#333;cursor:default;}
 .browse-page-gap{color:var(--text-secondary);padding:0 2px;}
 .browse-card{background:var(--bg-surface-2);border:0.5px solid var(--border-strong);border-radius:9px;padding:9px 11px;display:flex;align-items:center;gap:10px;}
+.browse-card-icon{width:52px;height:52px;flex:0 0 52px;overflow:hidden;border:1px solid var(--border-strong);border-radius:8px;background:var(--bg-void);display:grid;place-items:center;color:#8fc8c7;font-size:20px;}
+.browse-card-icon img{display:block;width:100%;height:100%;object-fit:contain;}
+.browse-card-body{min-width:0;flex:1;}
+.browse-card-title{overflow:hidden;color:var(--text-primary);font-size:12px;font-weight:600;text-overflow:ellipsis;white-space:nowrap;}
+.browse-card-meta{overflow:hidden;margin-top:3px;color:var(--text-secondary);font-size:10px;text-overflow:ellipsis;white-space:nowrap;}
+.modpack-result-pagination{display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 0;color:var(--text-secondary);font-size:11px;}
+.cosmetic-library-preview{height:72px;border-radius:6px;background:var(--bg-void);display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:7px;}
+.cosmetic-library-preview img{width:100%;height:100%;object-fit:contain;image-rendering:pixelated;}
 .mod-attribution{display:flex;align-items:center;gap:9px;min-width:0;flex:1;cursor:pointer;}
 .mod-attribution-icon{width:38px;height:38px;flex-shrink:0;border-radius:7px;background:var(--border-strong) center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#888;}
 .mod-attribution-copy{min-width:0;}.mod-attribution-name{color:#ddd;font-size:var(--text-base);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.mod-attribution-meta{color:#777;font-size:var(--text-xs);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.mod-attribution-source{color:#8ad66e;font-size:var(--text-xs);}
@@ -493,20 +520,18 @@ body{font-family:var(--font-sans);}
 .statusbar{height:25px;background:var(--bg-void);border-top:0.5px solid var(--bg-surface-2);display:flex;align-items:center;padding:0 13px;gap:13px;flex-shrink:0;}
 .sb-dot{width:6px;height:6px;border-radius:50%;background:#3b6d11;flex-shrink:0;}
 .sb-txt{font-size:var(--text-xs);color:#333;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.profile-import-overlay{position:fixed;inset:0;z-index:12000;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(4,6,4,.72);backdrop-filter:blur(4px);}
+.profile-import-overlay{position:fixed;inset:0;z-index:12000;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(4,6,4,.72);}
 .profile-import-overlay[hidden]{display:none;}
 .profile-import-card{width:min(440px,100%);padding:26px;background:var(--bg-surface);border:1px solid var(--border-strong);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.45);}
 .profile-import-title{font-size:18px;font-weight:600;color:var(--text-primary);margin-bottom:8px;}
-.profile-import-message{font-size:var(--text-sm);line-height:1.5;color:var(--text-secondary);min-height:22px;overflow-wrap:anywhere;}
+.profile-import-message{font-size:var(--text-sm);line-height:1.5;color:#aaa;min-height:22px;overflow-wrap:anywhere;}
 .profile-import-progress-row{display:flex;align-items:center;gap:12px;margin-top:20px;}
-.profile-import-progress{width:100%;height:9px;appearance:none;border:0;border-radius:99px;overflow:hidden;background:var(--bg-surface-2);}
-.profile-import-progress::-webkit-progress-bar{background:var(--bg-surface-2);border-radius:99px;}
-.profile-import-progress::-webkit-progress-value{background:var(--ui-success);border-radius:99px;transition:width .18s ease;}
-.profile-import-progress::-moz-progress-bar{background:var(--ui-success);border-radius:99px;}
-.profile-import-percent{min-width:42px;text-align:right;font:12px var(--font-mono);color:var(--text-secondary);}
-.profile-import-progress-indeterminate{height:9px;flex:1;overflow:hidden;border-radius:99px;background:var(--bg-surface-2);}
-.profile-import-progress-indeterminate::after{content:"";display:block;width:38%;height:100%;border-radius:99px;background:var(--ui-success);animation:profile-import-sweep 1.25s ease-in-out infinite alternate;}
-@keyframes profile-import-sweep{from{transform:translateX(-10%)}to{transform:translateX(175%)}}
+.profile-import-progress{width:100%;height:12px;overflow:hidden;border-radius:99px;background:#252a25;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);}
+.profile-import-progress-fill{width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#3fa34d,#8bc34a,#d0ed82,#8bc34a,#3fa34d);background-size:200% 100%;box-shadow:0 0 12px rgba(139,195,74,.4);transition:width .18s ease;animation:profile-import-activity 1.4s linear infinite;}
+.profile-import-percent{min-width:42px;text-align:right;font:12px var(--font-mono);color:#aaa;}
+.profile-import-progress-indeterminate .profile-import-progress-fill{width:38%;animation:profile-import-sweep 1.15s ease-in-out infinite alternate;}
+@keyframes profile-import-activity{from{background-position:0 0}to{background-position:200% 0}}
+@keyframes profile-import-sweep{from{transform:translateX(-15%)}to{transform:translateX(175%)}}
 
 i.ti{font-style:normal;display:inline-flex;align-items:center;justify-content:center;line-height:1;min-width:1em;min-height:1em;}
 div[onclick],span[onclick]{outline:none;}
@@ -561,17 +586,6 @@ div[onclick]:focus-visible,span[onclick]:focus-visible{box-shadow:0 0 0 2px var(
   --ui-transition-slow:280ms ease;
   --font-sans:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono:"Cascadia Code", Consolas, monospace;
-}
-
-function appendProfileLog(entry){
-  const profile = getProfile(currentProfileId);
-  const box = document.getElementById('pd-log-live');
-  const logsView = document.getElementById('pd-logs-view');
-  if (!profile || !box || logsView?.style.display !== 'flex' || box.style.display === 'none') return;
-  if (entry.profileId !== profile.id && (entry.profileId || entry.profileName !== profile.name)) return;
-  appendLogLine(box, entry, 2000);
-  const status = document.getElementById('pd-log-status-text');
-  if (status) status.textContent = entry.line;
 }
 
 body{background:var(--ui-bg);color:var(--ui-text);font-size:13px;}
@@ -891,9 +905,9 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
 @media(max-width:980px){.rp-catalog-layout{grid-template-columns:170px minmax(0,1fr)}.rp-catalog-toolbar{align-items:stretch;flex-direction:column}.rp-catalog-toolbar-actions{justify-content:flex-start}}
 @media(max-width:700px){.rp-catalog-layout{grid-template-columns:132px minmax(0,1fr)}.rp-catalog-sidebar-heading{align-items:flex-start;flex-direction:column}.rp-catalog-view .rp-browser{padding:10px}.rp-catalog-view .rp-resource-grid{grid-template-columns:repeat(auto-fill,minmax(90px,1fr))}.rp-catalog-view .rp-editor-bar{align-items:flex-start;flex-direction:column}.rp-resource-editor .rp-editor-bar .rp-toolbar{max-width:100%;overflow-x:auto}.rp-resource-editor .rp-unified-editor{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(280px,1fr) minmax(280px,1fr);overflow:auto}.rp-resource-editor .rp-unified-model{border-right:0;border-bottom:1px solid #414141}.rp-resource-editor .rp-inspector{display:none}}
 .sync-page-shell{max-width:1180px;margin:0 auto;padding:4px 0 32px;}
-.sync-page-intro{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:18px;padding:18px 20px;border:1px solid rgba(126,241,94,.16);border-radius:14px;background:linear-gradient(135deg,rgba(126,241,94,.08),rgba(255,255,255,.02));}
-.sync-page-intro h2{margin:0;color:var(--ui-text);font-size:18px;font-weight:650}.sync-page-intro p{margin:6px 0 0;color:var(--ui-text-secondary);font-size:12px;line-height:1.5}.sync-page-badge{padding:7px 10px;border:1px solid rgba(126,241,94,.25);border-radius:999px;color:#9af381;background:rgba(126,241,94,.08);font-size:10px;white-space:nowrap}
-.sync-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}.sync-card{min-width:0;padding:18px;border:1px solid var(--ui-border);border-radius:14px;background:linear-gradient(180deg,var(--ui-surface),var(--ui-bg-secondary));box-shadow:var(--ui-shadow-small)}.sync-card h2{margin:0;color:var(--ui-text);font-size:14px}.sync-card-help{margin:6px 0 14px;color:var(--ui-text-muted);font-size:11px;line-height:1.45}.sync-section-label{display:block;margin:16px 0 8px;color:var(--ui-text-secondary);font-size:10px;font-weight:650;letter-spacing:.06em;text-transform:uppercase}.sync-category-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:16px}.sync-category-list label,.sync-auto-card{display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid var(--ui-border);border-radius:8px;background:var(--ui-bg-tertiary);color:var(--ui-text-secondary);font-size:11px;cursor:pointer}.sync-category-list label:has(input:checked){border-color:rgba(126,241,94,.45);background:rgba(126,241,94,.08);color:var(--ui-text)}.sync-profile-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}.sync-selection-count{color:var(--ui-text-muted);font-size:11px}.sync-profile-actions{display:flex;gap:6px}.sync-profile-actions button{padding:6px 9px;font-size:10px}.sync-destination-list{display:grid;gap:7px;max-height:330px;overflow:auto;padding-right:3px}.sync-profile-option{display:flex;align-items:center;gap:10px;padding:11px 12px;border:1px solid var(--ui-border);border-radius:10px;background:var(--ui-bg-tertiary);cursor:pointer;transition:border-color .15s,background .15s,transform .15s}.sync-profile-option:hover{border-color:var(--ui-secondary);transform:translateY(-1px)}.sync-profile-option.selected{border-color:rgba(126,241,94,.55);background:linear-gradient(90deg,rgba(126,241,94,.13),rgba(126,241,94,.04))}.sync-profile-option.source{opacity:.55;cursor:not-allowed}.sync-profile-option input{accent-color:#7ef15e}.sync-profile-avatar{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:#233b22;color:#a8f18f;font-weight:700;font-size:12px}.sync-profile-meta{min-width:0;flex:1}.sync-profile-name{display:block;overflow:hidden;color:var(--ui-text);font-size:12px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}.sync-profile-sub{display:block;margin-top:3px;color:var(--ui-text-muted);font-size:10px}.sync-auto-card{margin-top:12px;align-items:flex-start}.sync-auto-card input{margin-top:2px;accent-color:#7ef15e}.sync-actions{display:flex;align-items:center;gap:10px;margin-top:16px;padding:14px 16px;border:1px solid var(--ui-border);border-radius:12px;background:var(--ui-bg-secondary)}.sync-actions .muted{min-width:0}.sync-path-list{display:grid;gap:8px}.sync-path-list label{display:grid;gap:5px;color:var(--ui-text-secondary);font-size:10px}.sync-path-list input{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid var(--ui-border-strong);border-radius:7px;background:var(--ui-bg-tertiary);color:var(--ui-text);font:11px var(--font-mono)}
+.sync-page-intro{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:18px;padding:18px 20px;border:1px solid rgba(143,200,199,.22);border-radius:14px;background:linear-gradient(135deg,rgba(143,200,199,.09),rgba(255,255,255,.02));}
+.sync-page-intro h2{margin:0;color:var(--ui-text);font:600 18px/1.3 var(--font-sans);letter-spacing:-.02em}.sync-page-intro p{margin:6px 0 0;color:var(--ui-text-secondary);font:400 12px/1.6 var(--font-sans)}.sync-page-badge{padding:7px 10px;border:1px solid rgba(143,200,199,.3);border-radius:999px;color:#a8d8d6;background:rgba(143,200,199,.08);font:500 10px/1.3 var(--font-sans);white-space:nowrap}
+.sync-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}.sync-card{min-width:0;padding:18px;border:1px solid var(--ui-border);border-radius:14px;background:linear-gradient(180deg,var(--ui-surface),var(--ui-bg-secondary));box-shadow:var(--ui-shadow-small)}.sync-card h2{margin:0;color:var(--ui-text);font:600 14px/1.4 var(--font-sans);letter-spacing:-.01em}.sync-card-help{margin:6px 0 14px;color:var(--ui-text-muted);font:400 11px/1.55 var(--font-sans)}.sync-section-label{display:block;margin:16px 0 8px;color:var(--ui-text-secondary);font:600 10px/1.4 var(--font-sans);letter-spacing:.06em;text-transform:uppercase}.sync-category-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:16px}.sync-category-list label,.sync-auto-card{display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid var(--ui-border);border-radius:8px;background:var(--ui-bg-tertiary);color:var(--ui-text-secondary);font:400 11px/1.4 var(--font-sans);cursor:pointer}.sync-category-list label:has(input:checked){border-color:rgba(143,200,199,.48);background:rgba(143,200,199,.08);color:var(--ui-text)}.sync-profile-toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}.sync-selection-count{color:var(--ui-text-muted);font-size:11px}.sync-profile-actions{display:flex;gap:6px}.sync-profile-actions button{padding:6px 9px;font-size:10px}.sync-destination-list{display:grid;gap:7px;max-height:330px;overflow:auto;padding-right:3px}.sync-profile-option{display:flex;align-items:center;gap:10px;padding:11px 12px;border:1px solid var(--ui-border);border-radius:10px;background:var(--ui-bg-tertiary);cursor:pointer;transition:border-color .15s,background .15s,transform .15s}.sync-profile-option:hover{border-color:var(--ui-secondary);transform:translateY(-1px)}.sync-profile-option.selected{border-color:rgba(143,200,199,.55);background:linear-gradient(90deg,rgba(143,200,199,.13),rgba(143,200,199,.04))}.sync-profile-option.source{opacity:.55;cursor:not-allowed}.sync-profile-option input,.sync-auto-card input{accent-color:#8fc8c7}.sync-profile-avatar{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:rgba(143,200,199,.12);color:#a8d8d6;font-weight:700;font-size:12px}.sync-profile-meta{min-width:0;flex:1}.sync-profile-name{display:block;overflow:hidden;color:var(--ui-text);font-size:12px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}.sync-profile-sub{display:block;margin-top:3px;color:var(--ui-text-muted);font-size:10px}.sync-auto-card{margin-top:12px;align-items:flex-start}.sync-auto-card input{margin-top:2px}.sync-actions{display:flex;align-items:center;gap:10px;margin-top:16px;padding:14px 16px;border:1px solid var(--ui-border);border-radius:12px;background:var(--ui-bg-secondary)}.sync-actions .muted{min-width:0}.sync-path-list{display:grid;gap:8px}.sync-path-list label{display:grid;gap:5px;color:var(--ui-text-secondary);font-size:10px}.sync-path-list input{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid var(--ui-border-strong);border-radius:7px;background:var(--ui-bg-tertiary);color:var(--ui-text);font:11px var(--font-mono)}
 @media(max-width:820px){.sync-grid{grid-template-columns:1fr}.sync-page-intro{align-items:flex-start;flex-direction:column}.sync-category-list{grid-template-columns:1fr}}
 .modal-overlay{position:fixed;inset:0;box-sizing:border-box;padding:clamp(10px,2vw,24px);overflow:auto;overscroll-behavior:contain;}
 .modal-box{width:min(92vw,560px);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);min-width:0;overflow-x:hidden;overflow-y:auto;}
@@ -922,6 +936,9 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
       <span class="acc-name" id="titlebarName">YourName</span>
       <i class="ti ti-chevron-down" style="font-size:10px;color:#444;" aria-hidden="true"></i>
     </div>
+    <div class="launcher-drop-overlay" id="launcherDropOverlay" aria-hidden="true"><div id="launcherDropMessage">Drop files to copy them into Bald Launcher<small id="launcherDropDestination">Recognized Minecraft content will be routed automatically.</small></div></div>
+    <div class="bald-toast-stack" id="baldToastStack" aria-live="polite" aria-atomic="false"></div>
+    <canvas id="cosmeticThumbnailCanvas" width="96" height="96" aria-hidden="true" style="position:fixed;left:-200px;top:-200px;width:96px;height:96px;visibility:hidden;pointer-events:none;"></canvas>
     <div class="window-controls" aria-label="Window controls">
       <button class="window-control" type="button" data-window-control="minimize" aria-label="Minimize window" title="Minimize">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10"/></svg>
@@ -944,10 +961,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
           <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01M10 7h6M10 17h6"/></svg>
         </button>
         <button class="sidebar-nav-item" id="nav-synchronizations" title="Synchronizations" data-tooltip="Synchronizations" type="button" aria-label="Synchronizations" onclick="showPanel('synchronizations')">
-          <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10l-2.5-2.5M17 17H7l2.5 2.5"/><path d="M17 7a5 5 0 0 1 0 10M7 17A5 5 0 0 1 7 7"/></svg>
-        </button>
-        <button class="sidebar-nav-item" id="nav-accounts" title="Accounts" data-tooltip="Accounts" type="button" aria-label="Accounts" onclick="showPanel('accounts')">
-          <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.2"/><path d="M5.5 20c.7-3.2 3-5 6.5-5s5.8 1.8 6.5 5"/></svg>
+          <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 7h10l-2-2M18 17H8l2 2"/><path d="M16 7a5 5 0 0 1 0 10M8 17A5 5 0 0 1 8 7"/></svg>
         </button>
         <button class="sidebar-nav-item" id="nav-settings" title="Settings" data-tooltip="Settings" type="button" aria-label="Settings" onclick="showPanel('settings')">
           <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.8v2M12 18.2v2M20.2 12h-2M5.8 12h-2M17.8 6.2l-1.4 1.4M7.6 16.4l-1.4 1.4M17.8 17.8l-1.4-1.4M7.6 7.6 6.2 6.2"/><circle cx="12" cy="12" r="3.5"/></svg>
@@ -961,7 +975,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
           <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4a8 8 0 1 0 0 16h1.2a1.8 1.8 0 0 0 0-3.6h-.7a1.8 1.8 0 0 1 0-3.6H16a4 4 0 0 0 4-4A8 8 0 0 0 12 4z"/><circle cx="7.5" cy="10" r=".8" fill="currentColor" stroke="none"/><circle cx="10" cy="7.5" r=".8" fill="currentColor" stroke="none"/><circle cx="14" cy="7.2" r=".8" fill="currentColor" stroke="none"/></svg>
         </button>
         <button class="sidebar-nav-item" id="nav-capes" title="Skins & Capes" data-tooltip="Skins & Capes" type="button" aria-label="Skins & Capes" onclick="showPanel('capes')">
-          <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5 12 4l4 1.5 2 3.5-2.2 1.2v7.3L12 20l-3.8-2.5v-7.3L6 9z"/><path d="M9 7.5 12 9l3-1.5M9 10.5l3 1.5 3-1.5"/></svg>
+          <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5a1.8 1.8 0 1 0-1.8 1.8M12 5.3 4.5 9.4 12 13.2l7.5-3.8L12 5.3ZM8.2 11.3v7.2L12 21l3.8-2.5v-7.2M9.8 7.5l2.2 1.2 2.2-1.2"/></svg>
         </button>
         <button class="sidebar-nav-item" id="nav-resource-packs" title="Resource Pack Studio" data-tooltip="Resource Pack Studio" type="button" aria-label="Resource Pack Studio" onclick="showPanel('resource-packs')">
           <svg class="sidebar-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5.5 12 3l7 2.5v13L12 21l-7-2.5z"/><path d="M5 5.5 12 8l7-2.5M12 8v13M8.5 4.2 15.5 6.8"/></svg>
@@ -1077,11 +1091,13 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
               <div class="server-playit-title">Playit agent</div>
               <div class="server-playit-status neutral" id="serverPlayitStatus">Stopped</div>
               <div class="server-playit-help" id="serverPlayitHelp">The real Playit agent terminal is attached below.</div>
+              <label class="sync-auto-card" style="margin:8px 0 10px;"><input id="playitKeepAliveToggle" type="checkbox" onchange="setPlayitPersistence(this.checked)"><span><strong>Keep the tunnel running after Bald Launcher closes</strong><small style="display:block;margin-top:3px;color:var(--ui-text-muted)">Starts Playit in background mode. Minecraft servers are not stopped by the launcher when it closes.</small></span></label>
               <div class="server-playit-terminal" id="serverPlayitTerminal"></div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;">
                 <button class="server-mini-btn" type="button" onclick="startPlayitAgent()">Start</button>
                 <button class="server-mini-btn" type="button" onclick="stopPlayitAgent()">Stop</button>
-                <button class="server-mini-btn" type="button" onclick="restartPlayitAgent()">Restart</button>
+                <button class="server-mini-btn" type="button" title="Restart Playit to re-establish a broken tunnel" onclick="restartPlayitAgent()">Reset &amp; reconnect</button>
+                <button class="server-mini-btn" type="button" onclick="copyPlayitTerminal()">Copy all output</button>
                 <button class="server-mini-btn" type="button" onclick="clearPlayitTerminal()">Clear terminal</button>
                 <button class="server-mini-btn" type="button" onclick="installPlayitAgent()">Install / update agent</button>
               </div>
@@ -1276,6 +1292,13 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
           <div class="setting-row"><span class="setting-label">JVM profile</span><select class="setting-select" id="jvmProfile" onchange="toggleJvmArgs();syncSettings()"><option value="default">Java defaults (recommended)</option><option value="zgc">ZGC (Java 21+)</option><option value="custom">Custom</option></select></div>
           <div class="setting-row"><span class="setting-label">Custom JVM arguments</span><input class="setting-input" id="customJvmArgs" value="" placeholder="Only when Custom is selected" style="width:260px;" onchange="syncSettings()"/></div>
           <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">The launcher does not edit Minecraft video settings, change process priority, or promise a specific FPS gain.</div>
+        </div>
+        <div class="settings-section"><div class="ss-title">Minecraft in-game menus</div>
+          <label class="setting-row"><span class="setting-label">Use Bald Minecraft menus</span><input type="checkbox" id="minecraftMenuEnabled" onchange="syncSettings()"/></label>
+          <label class="setting-row"><span class="setting-label">Show Performance in Bald menus</span><input type="checkbox" id="minecraftPerformanceButtonEnabled" onchange="syncSettings()"/></label>
+          <label class="setting-row"><span class="setting-label">Show Bald in-game button</span><input type="checkbox" id="minecraftInGameButtonEnabled" onchange="syncSettings()"/></label>
+          <label class="setting-row"><span class="setting-label">Show performance HUD</span><input type="checkbox" id="minecraftPerformanceHudEnabled" onchange="syncSettings()"/></label>
+          <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">The menus and in-game button are on by default; the optional FPS, frame-time, ping, and memory HUD is off by default. Open the compact in-game settings from the Bald button or Right Alt+B (change it under Options &gt; Controls). Button/HUD choices can also be changed in-game and persist with this profile. Support currently targets Fabric 1.21.11; other profiles launch unchanged. Bald Launcher adds or updates only its own client mod in the profile's mods folder.</div>
         </div>
         <div class="settings-section"><div class="ss-title">Diagnostics</div>
           <button class="modal-btn" type="button" onclick="loadDiagnostics()"><i class="ti ti-terminal-2" aria-hidden="true"></i> Refresh diagnostics</button>
@@ -1615,7 +1638,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
       <div class="profile-import-title" id="profileImportTitle">Importing profile</div>
       <div class="profile-import-message" id="profileImportMessage" aria-live="polite">Preparing import…</div>
       <div class="profile-import-progress-row">
-        <progress class="profile-import-progress" id="profileImportProgressBar" max="100" value="0" aria-label="Profile import progress"></progress>
+        <div class="profile-import-progress" id="profileImportProgressBar" role="progressbar" aria-label="Profile import progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="profile-import-progress-fill" id="profileImportProgressFill"></div></div>
         <span class="profile-import-percent" id="profileImportPercent">0%</span>
       </div>
     </div>
@@ -1754,7 +1777,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
       <div class="content-search-row">
         <div class="search-wrap">
           <i class="ti ti-search search-icon" aria-hidden="true"></i>
-          <input class="search-box" id="modpackSearch" placeholder="Search Modrinth..." oninput="debouncedModpackSearch()" onkeydown="if(event.key==='Enter'){event.preventDefault();runModpackSearch()}">
+          <input class="search-box" id="modpackSearch" placeholder="Search Modrinth..." oninput="debouncedModpackSearch()" onkeydown="if(event.key==='Enter'){event.preventDefault();modpackPage=1;runModpackSearch()}">
         </div>
       </div>
       <div class="modpack-target-tabs">
@@ -1765,11 +1788,11 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
       </div>
       <div class="modpack-target-panel" id="modpackExistingPanel">
         <label class="modal-label" for="modpackServerSelect">Install to existing server</label>
-        <select class="modal-input" id="modpackServerSelect" onchange="runModpackSearch()"></select>
+        <select class="modal-input" id="modpackServerSelect" onchange="modpackPage=1;runModpackSearch()"></select>
       </div>
       <div class="modpack-target-panel" id="modpackExistingProfilePanel" style="display:none;">
         <label class="modal-label" for="modpackProfileSelect">Add to existing profile</label>
-        <select class="modal-input" id="modpackProfileSelect" onchange="runModpackSearch()"></select>
+        <select class="modal-input" id="modpackProfileSelect" onchange="modpackPage=1;runModpackSearch()"></select>
         <div class="modal-help">Existing mods and files stay in place. New modpack mods receive a Modpack badge.</div>
       </div>
       <div class="modpack-target-panel" id="modpackCreatePanel" style="display:none;">
@@ -1855,6 +1878,17 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
 <script src="src/servers/server-stats.js"></script>
 <script src="src/content/dependency-installer.js"></script>
 <script>
+function appendProfileLog(entry){
+  const profile = getProfile(currentProfileId);
+  const box = document.getElementById('pd-log-live');
+  const logsView = document.getElementById('pd-logs-view');
+  if (!profile || !box || logsView?.style.display !== 'flex' || box.style.display === 'none') return;
+  if (entry.profileId !== profile.id && (entry.profileId || entry.profileName !== profile.name)) return;
+  appendLogLine(box, entry, 2000);
+  const status = document.getElementById('pd-log-status-text');
+  if (status) status.textContent = entry.line;
+}
+
 function showInputModal(title, defaultValue = '') {
   return new Promise(resolve => {
     let modal = document.getElementById('globalLauncherInputModal');
@@ -1977,12 +2011,18 @@ let modpackDebounce = null;
 let modpackRequestId = 0;
 let modpackTarget = 'existing';
 let modpackContext = 'server';
+let modpackPage = 1;
+let modpackTotalPages = 1;
+let modpackTotalHits = 0;
 const modpackByKey = {};
 
 function modpackServers(){
   return (state?.servers || []).filter(server => ['fabric','forge','neoforge','quilt'].includes(String(server.serverType || server.loader || '').toLowerCase()));
 }
 function openModpackInstaller(context = 'server', serverId = currentServerId){
+  modpackPage = 1;
+  modpackTotalPages = 1;
+  modpackTotalHits = 0;
   modpackContext = context === 'profile' ? 'profile' : 'server';
   const modal = document.getElementById('modpackInstallerModal');
   const select = document.getElementById('modpackServerSelect');
@@ -2005,6 +2045,7 @@ function openModpackInstaller(context = 'server', serverId = currentServerId){
   runModpackSearch();
 }
 function setModpackTarget(target){
+  modpackPage = 1;
   modpackTarget = modpackContext === 'profile'
     ? (['existing-profile', 'profile'].includes(target) ? target : 'existing-profile')
     : (['server','existing'].includes(target) ? target : 'existing');
@@ -2027,8 +2068,22 @@ function renderModpackSources(){
   document.getElementById('modpackSourceRow').innerHTML = ['modrinth','curseforge'].map(source =>
     `<button class="chip ${modpackSource === source ? 'active' : ''}" onclick="setModpackSource('${source}')">${source === 'modrinth' ? 'Modrinth' : 'CurseForge'}</button>`).join('');
 }
-function setModpackSource(source){ modpackSource = source === 'curseforge' ? 'curseforge' : 'modrinth'; renderModpackSources(); runModpackSearch(); }
-function debouncedModpackSearch(){ clearTimeout(modpackDebounce); modpackDebounce = setTimeout(runModpackSearch, 500); }
+function setModpackSource(source){ modpackSource = source === 'curseforge' ? 'curseforge' : 'modrinth'; modpackPage = 1; renderModpackSources(); runModpackSearch(); }
+function debouncedModpackSearch(){ clearTimeout(modpackDebounce); modpackPage = 1; modpackDebounce = setTimeout(runModpackSearch, 500); }
+function renderModpackPagination(){
+  const host = document.getElementById('modpackPagination');
+  if (!host) return;
+  host.className = 'modpack-result-pagination';
+  host.innerHTML = modpackTotalHits > 0
+    ? `<button class="browse-page-btn" type="button" ${modpackPage <= 1 ? 'disabled' : ''} onclick="setModpackPage(${modpackPage - 1})">‹</button><span>Page ${modpackPage} of ${modpackTotalPages} · ${modpackTotalHits.toLocaleString()} modpacks</span><button class="browse-page-btn" type="button" ${modpackPage >= modpackTotalPages ? 'disabled' : ''} onclick="setModpackPage(${modpackPage + 1})">›</button>`
+    : '';
+}
+function setModpackPage(page){
+  const targetPage = Number(page);
+  if (!Number.isInteger(targetPage) || targetPage < 1 || targetPage > modpackTotalPages || targetPage === modpackPage) return;
+  modpackPage = targetPage;
+  return runModpackSearch();
+}
 async function runModpackSearch(){
   const requestId = ++modpackRequestId;
   const server = getServer(document.getElementById('modpackServerSelect')?.value);
@@ -2041,14 +2096,30 @@ async function runModpackSearch(){
   const targetLoader = modpackContext === 'profile' ? ((selectedProfile || profile)?.loader || 'fabric') : (server?.loader || server?.serverType || 'fabric');
   status.textContent = `Searching ${modpackSource === 'curseforge' ? 'CurseForge' : 'Modrinth'} modpacks...`;
   results.innerHTML = '<div class="empty-state">Loading modpacks...</div>';
-  const response = await launcherBridge.searchModpacks({
-    query: document.getElementById('modpackSearch').value.trim(),
-    source: modpackSource, mcVersion: targetVersion, loader: targetLoader,
-  });
+  let response;
+  try {
+    response = await launcherBridge.searchModpacks({
+      query: document.getElementById('modpackSearch').value.trim(),
+      source: modpackSource, page: modpackPage, mcVersion: targetVersion, loader: targetLoader,
+    });
+  } catch (error) {
+    if (requestId !== modpackRequestId) return;
+    status.textContent = error instanceof Error ? error.message : String(error);
+    results.innerHTML = '<div class="empty-state">Unable to load modpacks.</div>';
+    document.getElementById('modpackPagination').innerHTML = '';
+    return;
+  }
   if (requestId !== modpackRequestId) return;
-  if (!response?.ok) { status.textContent = response?.error || 'Modpack search failed.'; results.innerHTML = '<div class="empty-state">Unable to load modpacks.</div>'; return; }
+  if (!response?.ok) { status.textContent = response?.error || 'Modpack search failed.'; results.innerHTML = '<div class="empty-state">Unable to load modpacks.</div>'; document.getElementById('modpackPagination').innerHTML = ''; return; }
   const hits = Array.isArray(response.hits) ? response.hits : [];
-  status.textContent = `${hits.length} modpack${hits.length === 1 ? '' : 's'} for ${targetVersion} ${targetLoader}`;
+  modpackTotalHits = Math.max(0, Number(response.totalHits) || 0);
+  modpackTotalPages = Math.max(1, Math.ceil(modpackTotalHits / 20));
+  if (modpackPage > modpackTotalPages) {
+    modpackPage = modpackTotalPages;
+    return runModpackSearch();
+  }
+  status.textContent = `${hits.length} modpack${hits.length === 1 ? '' : 's'} on this page · ${modpackTotalHits.toLocaleString()} found for ${targetVersion} ${targetLoader}`;
+  renderModpackPagination();
   results.innerHTML = hits.length ? hits.map(hit => {
     const key = `${hit.source}:${hit.id}`;
     modpackByKey[key] = hit;
@@ -2056,7 +2127,7 @@ async function runModpackSearch(){
     const sideLabel = modpackContext === 'server' ? 'Server compatibility checked during install' : 'Client profile pack';
     const projectUrl = /^https?:\/\//i.test(String(hit.projectUrl || '')) ? hit.projectUrl : '#';
     return `<div class="browse-card"><div class="browse-card-icon">${hit.iconUrl ? `<img src="${escapeHtml(hit.iconUrl)}" alt="" loading="lazy" decoding="async" onerror="this.hidden=true;this.nextElementSibling.hidden=false;"><i class="ti ti-package" aria-hidden="true" hidden></i>` : '<i class="ti ti-package" aria-hidden="true"></i>'}</div><div class="browse-card-body"><div class="browse-card-title">${escapeHtml(hit.name)}</div><div class="browse-card-meta">${escapeHtml(hit.desc || 'Modpack')} · ${Number(hit.downloads || 0).toLocaleString()} downloads</div><div class="browse-card-meta">${sideLabel}</div><div class="browse-card-actions"><button class="modal-btn primary" onclick="installSelectedModpack('${escapeInlineHandlerArg(key)}')">${actionLabel}</button><a class="modal-btn" href="${escapeHtml(projectUrl)}" target="_blank" rel="noopener">View project</a></div></div></div>`;
-  }).join('') : '<div class="empty-state">No compatible modpacks found for this server.</div>';
+  }).join('') : `<div class="empty-state">No compatible modpacks found for this ${modpackContext === 'profile' ? 'profile' : 'server'}.</div>`;
 }
 async function installSelectedModpack(key){
   const hit = modpackByKey[key];
@@ -2163,6 +2234,30 @@ function profileModeLabel(profile){
 }
 function capitalize(s){ return String(s||'').charAt(0).toUpperCase()+String(s||'').slice(1); }
 function formatDownloads(n){ if(!n) return '0'; if(n>1e6) return (n/1e6).toFixed(1)+'M'; if(n>1e3) return (n/1e3).toFixed(1)+'K'; return String(n); }
+function formatProfilePlaytime(value){
+  const minutes=Math.floor(Math.max(0,Number(value)||0)/60000);
+  if (minutes < 1) return '0 hours';
+  if (minutes < 60) return `${minutes} min`;
+  const hours=Math.floor(minutes/60);
+  return `${hours} ${hours===1?'hour':'hours'}`;
+}
+function formatProfileLastPlayed(value, now=Date.now()){
+  const timestamp=Number(value);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return 'Never played';
+  const elapsed=Math.max(0,now-timestamp);
+  const minutes=Math.floor(elapsed/60000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes} ${minutes===1?'minute':'minutes'} ago`;
+  const hours=Math.floor(minutes/60);
+  if (hours < 24) return `${hours} ${hours===1?'hour':'hours'} ago`;
+  const days=Math.floor(hours/24);
+  if (days < 30) return `${days} ${days===1?'day':'days'} ago`;
+  const months=Math.floor(days/30);
+  if (months < 12) return `${months} ${months===1?'month':'months'} ago`;
+  const years=Math.floor(days/365);
+  if (years < 1) return `${months} months ago`;
+  return `${years} ${years===1?'year':'years'} ago`;
+}
 
 // ---------------- Profiles grid ----------------
 function getProfile(profileId){
@@ -2189,10 +2284,15 @@ function renderProfileGrid(){
     return;
   }
   grid.innerHTML = visible.map(p => `
-    <div class="profile-card" onclick="openProfile('${escapeHtml(escapeJsString(p.id))}')" oncontextmenu="openProfileActionMenu(event,'${escapeHtml(escapeJsString(p.id))}');return false;">
+    <div class="profile-card" data-profile-id="${escapeHtml(p.id)}" onclick="openProfile('${escapeHtml(escapeJsString(p.id))}')" oncontextmenu="openProfileActionMenu(event,'${escapeHtml(escapeJsString(p.id))}');return false;">
       <div class="profile-card-icon">${escapeHtml(p.icon || p.name.slice(0,1).toUpperCase())}</div>
       <div class="profile-card-footer"><div class="profile-card-name">${escapeHtml(p.name)}</div><button class="profile-card-menu-btn" type="button" title="Profile actions" aria-label="Profile actions" onclick="event.stopPropagation();openProfileActionMenu(event,'${escapeHtml(escapeJsString(p.id))}')"><i class="ti ti-dots-vertical" aria-hidden="true"></i></button></div>
       <div class="profile-card-sub">${escapeHtml(p.mcVersion)} · ${escapeHtml(capitalize(p.loader))}</div>
+      <div class="profile-card-activity" aria-label="Profile play history">
+        <span class="profile-card-activity-item"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l2.5 1.5M9 2h6"></path></svg>${escapeHtml(formatProfilePlaytime(p.playtimeMs))}</span>
+        <span class="profile-card-activity-separator" aria-hidden="true">·</span>
+        <span class="profile-card-activity-item"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>${escapeHtml(formatProfileLastPlayed(p.lastPlayedAt))}</span>
+      </div>
       <span class="profile-card-badge ${escapeHtml(badgeClass(p.optimizationKind==='sodium'?'sodium':p.rendererMode))}">${escapeHtml(profileModeLabel(p))}</span>
     </div>`).join('');
 }
@@ -3738,16 +3838,20 @@ function showProfileImportProgress(progress={}){
 function updateProfileImportProgress(progress={}){
   const message=document.getElementById('profileImportMessage');
   const bar=document.getElementById('profileImportProgressBar');
+  const fill=document.getElementById('profileImportProgressFill');
   const percentLabel=document.getElementById('profileImportPercent');
   if (message && progress.message) message.textContent=String(progress.message);
   if (bar) {
     if (Number.isFinite(progress.percent)) {
-      bar.value=Math.max(0,Math.min(100,progress.percent));
+      const percent=Math.max(0,Math.min(100,progress.percent));
+      bar.setAttribute('aria-valuenow',String(Math.round(percent)));
       bar.classList.remove('profile-import-progress-indeterminate');
-      if (percentLabel) percentLabel.textContent=`${Math.round(bar.value)}%`;
+      if (fill) fill.style.width=`${percent}%`;
+      if (percentLabel) percentLabel.textContent=`${Math.round(percent)}%`;
     } else {
-      bar.removeAttribute('value');
+      bar.removeAttribute('aria-valuenow');
       bar.classList.add('profile-import-progress-indeterminate');
+      if (fill) fill.style.width='';
       if (percentLabel) percentLabel.textContent='…';
     }
   }
@@ -3756,10 +3860,12 @@ function hideProfileImportProgress(){
   const overlay=document.getElementById('profileImportOverlay');
   if (overlay) overlay.hidden=true;
   const bar=document.getElementById('profileImportProgressBar');
+  const fill=document.getElementById('profileImportProgressFill');
   if (bar) {
-    bar.value=0;
+    bar.setAttribute('aria-valuenow','0');
     bar.classList.remove('profile-import-progress-indeterminate');
   }
+  if (fill) fill.style.width='0';
 }
 async function backupCurrentProfile(){
   if (!currentProfileId || !launcherBridge?.backupProfile) return;
@@ -3861,7 +3967,95 @@ function safeCosmeticFileSource(entry){
   return String(entry.image || entry.url || '');
 }
 
+const cosmeticThumbnailCache = new Map();
+let cosmeticThumbnailRequests = new Map();
+let cosmeticThumbnailRequestId = 0;
+let cosmeticThumbnailRenderer = null;
+let cosmeticThumbnailId = 0;
+
+function cosmeticThumbnailKey(kind, item){
+  return `${kind}|${String(item?.id || item?.name || '')}|${String(item?.filePath || item?.url || item?.image || '')}|${Number(item?.version || 0)}`;
+}
+
+function updateCosmeticThumbnail(key, image, label){
+  for (const preview of document.querySelectorAll('[data-cosmetic-thumbnail]')) {
+    if (preview.dataset.cosmeticThumbnail === key) {
+      preview.innerHTML = `<img src="${image}" alt="${escapeHtml(label)} 3D preview">`;
+    }
+  }
+}
+
+function markCosmeticThumbnailUnavailable(key, kind, item, cosmetics){
+  const message = '3D preview unavailable. Check or re-import this texture.';
+  for (const preview of document.querySelectorAll('[data-cosmetic-thumbnail]')) {
+    if (preview.dataset.cosmeticThumbnail === key) {
+      preview.textContent = message;
+      preview.title = message;
+    }
+  }
+  const selected = kind === 'skin' ? cosmetics.skin : cosmetics.cape;
+  if (selected?.filePath && selected.filePath === item?.filePath) {
+    const selectedPreview = document.getElementById(kind === 'skin' ? 'selectedSkinPreview' : 'selectedCapePreview');
+    if (selectedPreview) selectedPreview.textContent = message;
+  }
+}
+
+async function renderCosmeticLibraryThumbnails(){
+  const requestId = ++cosmeticThumbnailRequestId;
+  const cosmetics = getAccountCosmeticsSnapshot();
+  const canvas = document.getElementById('cosmeticThumbnailCanvas');
+  if (!canvas) return;
+  const work = [...cosmeticThumbnailRequests.entries()];
+  if (!work.length) return;
+  if (!window.MinecraftPlayerPreview) {
+    window.setTimeout(() => {
+      if (requestId === cosmeticThumbnailRequestId) void renderCosmeticLibraryThumbnails();
+    }, 50);
+    return;
+  }
+  try {
+    cosmeticThumbnailRenderer ||= new window.MinecraftPlayerPreview(canvas);
+    cosmeticThumbnailRenderer.viewer.animation = null;
+    cosmeticThumbnailRenderer.viewer.zoom = 1.38;
+    cosmeticThumbnailRenderer.setVisible(true);
+    for (const [key, entry] of work) {
+      if (requestId !== cosmeticThumbnailRequestId) return;
+      if (cosmeticThumbnailCache.has(key)) {
+        updateCosmeticThumbnail(key, cosmeticThumbnailCache.get(key), entry.item?.name || capitalize(entry.kind));
+        continue;
+      }
+      const skin = entry.kind === 'skin' ? entry.item : cosmetics.skin;
+      const cape = entry.kind === 'cape' ? entry.item : null;
+      if (!skin?.filePath || (entry.kind === 'cape' && !cape?.filePath)) continue;
+      const appearance = { ...skin, model: skin.model || cosmetics.model || 'classic' };
+      try {
+        await cosmeticThumbnailRenderer.setAppearance(appearance, cape || null);
+        if (requestId !== cosmeticThumbnailRequestId) return;
+        cosmeticThumbnailRenderer.viewer.playerObject.rotation.y = entry.kind === 'cape' ? Math.PI : 0;
+        cosmeticThumbnailRenderer.viewer.render();
+        cosmeticThumbnailCache.set(key, canvas.toDataURL('image/png'));
+        updateCosmeticThumbnail(key, cosmeticThumbnailCache.get(key), entry.item?.name || capitalize(entry.kind));
+        if (cosmeticThumbnailCache.size > 100) cosmeticThumbnailCache.delete(cosmeticThumbnailCache.keys().next().value);
+      } catch (error) {
+        if (requestId !== cosmeticThumbnailRequestId) return;
+        markCosmeticThumbnailUnavailable(key, entry.kind, entry.item, cosmetics);
+        console.warn(`Could not render ${entry.kind} cosmetic preview:`, error);
+      }
+    }
+    cosmeticThumbnailRenderer.setVisible(false);
+    const skinImage = cosmetics.skin && cosmeticThumbnailCache.get(cosmeticThumbnailKey('skin', cosmetics.skin));
+    const capeImage = cosmetics.cape && cosmeticThumbnailCache.get(cosmeticThumbnailKey('cape', cosmetics.cape));
+    if (skinImage) document.getElementById('selectedSkinPreview').innerHTML = `<img src="${skinImage}" alt="Front view of selected skin" style="width:100%;height:100%;object-fit:contain;image-rendering:pixelated;">`;
+    if (capeImage) document.getElementById('selectedCapePreview').innerHTML = `<img src="${capeImage}" alt="Back view of selected cape" style="width:100%;height:100%;object-fit:contain;image-rendering:pixelated;">`;
+  } catch (error) {
+    console.error('Minecraft cosmetic thumbnail rendering failed:', error);
+    cosmeticThumbnailRenderer?.setVisible(false);
+  }
+}
+
 function renderCosmeticsPanel(){
+  cosmeticThumbnailRequests = new Map();
+  cosmeticThumbnailId = 0;
   const skinPreview = document.getElementById('selectedSkinPreview');
   const skinName = document.getElementById('selectedSkinName');
   const skinSource = document.getElementById('selectedSkinSource');
@@ -3911,10 +4105,13 @@ function renderCosmeticsPanel(){
     const src = safeCosmeticFileSource(item);
     const active = kind === 'skin' ? cosmetics.skin?.id === item.id : cosmetics.cape?.id === item.id;
     const label = `${item?.name || `${capitalize(kind)} asset`}`;
+    const thumbnailKey = cosmeticThumbnailKey(kind, item);
+    cosmeticThumbnailRequests.set(thumbnailKey, { kind, item });
+    const thumbnailToken = `cosmetic-thumbnail-${++cosmeticThumbnailId}`;
     const encoded = escapeHtml(JSON.stringify(item));
     const localActions = item?.source === 'created' ? `<div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;"><button class="modal-btn" type="button" style="padding:3px 5px;font-size:9px;" onclick="event.stopPropagation();editCosmeticAsset('${kind}', ${encoded})">Edit</button><button class="modal-btn" type="button" style="padding:3px 5px;font-size:9px;" onclick="event.stopPropagation();exportCosmeticAsset(${encoded})">Export</button><button class="modal-btn" type="button" style="padding:3px 5px;font-size:9px;" onclick="event.stopPropagation();renameCosmeticAsset(${encoded})">Rename</button><button class="modal-btn" type="button" style="padding:3px 5px;font-size:9px;" onclick="event.stopPropagation();showCosmeticVersions(${encoded})">Versions</button><button class="danger-btn" type="button" style="padding:3px 5px;font-size:9px;" onclick="event.stopPropagation();deleteCosmeticAsset(${encoded})">Delete</button></div>` : '';
-    return `<div style="border:0.5px solid ${active ? 'var(--accent-green)' : 'var(--border)'};border-radius:8px;padding:8px;background:var(--bg-surface-2);cursor:pointer;" onclick="applyAccountCosmetic('${kind}', ${encoded})">
-      <div style="height:72px;border-radius:6px;background:var(--bg-void);display:flex;align-items:center;justify-content:center;overflow:hidden;margin-bottom:7px;">${src ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(label)}" style="width:100%;height:100%;object-fit:contain;image-rendering:pixelated;" />` : `<span style="font-size:11px;color:var(--text-secondary);">${escapeHtml(label)}</span>`}</div>
+    return `<div style="border:0.5px solid ${active ? '#8fc8c7' : 'var(--border)'};border-radius:8px;padding:8px;background:var(--bg-surface-2);cursor:pointer;" onclick="applyAccountCosmetic('${kind}', ${encoded})">
+      <div class="cosmetic-library-preview" id="${thumbnailToken}" data-cosmetic-thumbnail="${escapeHtml(thumbnailKey)}">${src ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(label)} texture preview" />` : `<span style="font-size:11px;color:var(--text-secondary);">${escapeHtml(label)}</span>`}</div>
       <div style="font-size:10px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(label)}">${escapeHtml(label)}</div>${item?.source === 'created' ? `<div style="font-size:9px;color:var(--text-secondary);margin-top:3px;">Created · v${item.version || 1}</div>` : ''}${localActions}
     </div>`;
   };
@@ -3945,6 +4142,7 @@ function renderCosmeticsPanel(){
     else capeLibrary.innerHTML = capeItems.map(item => renderLibraryCard('cape', item)).join('');
   }
   if (capeLibraryEmpty) capeLibraryEmpty.style.display = capeItems.length ? 'none' : 'block';
+  void renderCosmeticLibraryThumbnails();
 }
 
 function editCosmeticAsset(kind, item){ openCosmeticStudio(kind, item); }
@@ -4096,6 +4294,38 @@ async function setActiveAccount(id){
   renderAccounts();
   await refreshAccountCosmetics(true);
 }
+
+const minecraftMenuActionsInProgress = new Set();
+async function handleMinecraftMenuAction(action){
+  if (!action || typeof action !== 'object') return;
+  if (action.action === 'open-cosmetics'){
+    showPanel('capes');
+    await refreshAccountCosmetics(true);
+    return;
+  }
+  if (action.action !== 'switch-account' || minecraftMenuActionsInProgress.has(action.profileId)) return;
+  const account = state.accounts.find(item => item.id === action.accountId);
+  const profile = state.profiles.find(item => item.id === action.profileId);
+  if (!account || !profile || !launcherBridge?.stop || !launcherBridge?.launch || !launcherBridge?.setActiveAccount){
+    alert('Bald Launcher could not resolve the requested account or profile. Please select it in the launcher and try again.');
+    return;
+  }
+
+  minecraftMenuActionsInProgress.add(action.profileId);
+  try {
+    const stopped = await launcherBridge.stop(action.profileId);
+    if (!stopped?.ok) throw new Error(stopped?.error || 'Minecraft could not be closed safely.');
+    state = await launcherBridge.setActiveAccount(account.id);
+    renderAccounts();
+    const launched = await launcherBridge.launch({ profileId: profile.id, accountId: account.id });
+    if (!launched?.ok) throw new Error(launched?.error || 'Minecraft could not be restarted with that account.');
+  } catch (error) {
+    alert(error instanceof Error ? error.message : 'Could not switch Minecraft accounts.');
+  } finally {
+    minecraftMenuActionsInProgress.delete(action.profileId);
+  }
+}
+
 async function addOfflineAccount(){
   document.getElementById('offlineAccountName').value = '';
   document.getElementById('offlineSkinLabel').textContent = 'No skin selected';
@@ -4153,6 +4383,10 @@ function syncSettings(){
     jvmProfile: valueOf('jvmProfile', 'default'),
     customJvmArgs: valueOf('customJvmArgs', ''),
     optimizationModsEnabled: document.getElementById('optimizationModsEnabled')?.checked === true,
+    minecraftMenuEnabled: document.getElementById('minecraftMenuEnabled')?.checked !== false,
+    minecraftPerformanceButtonEnabled: document.getElementById('minecraftPerformanceButtonEnabled')?.checked !== false,
+    minecraftInGameButtonEnabled: document.getElementById('minecraftInGameButtonEnabled')?.checked !== false,
+    minecraftPerformanceHudEnabled: document.getElementById('minecraftPerformanceHudEnabled')?.checked === true,
   };
   state.settings = { ...(state.settings || {}), ...settings };
   if (launcherBridge?.syncState) launcherBridge.syncState(state);
@@ -4201,6 +4435,7 @@ function addNotification(title, message, kind = 'info'){
   notificationHistory.push({ id: `notification-${Date.now()}-${Math.random()}`, title, message, kind, createdAt: new Date().toISOString() });
   while (notificationHistory.length > 100) notificationHistory.shift();
   persistNotifications(); renderNotifications();
+  showBaldToast(title, message, kind);
 }
 function renderNotifications(){
   const list = document.getElementById('notificationList');
@@ -4218,6 +4453,192 @@ function closeNotificationCenter(){
   if (center) center.style.display = 'none';
 }
 function clearNotifications(){ notificationHistory.splice(0); persistNotifications(); renderNotifications(); }
+
+const baldToastTimers = new WeakMap();
+function playErrorDing(){
+  try {
+    const AudioContextType = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextType) return;
+    const context = new AudioContextType();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(880, context.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(1180, context.currentTime + 0.09);
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.07, context.currentTime + 0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.16);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.17);
+    oscillator.onended = () => context.close();
+  } catch (error) {
+    console.warn('Could not play the error notification sound:', error);
+  }
+}
+
+function dismissBaldToast(toast){
+  if (!toast || toast.classList.contains('leaving')) return;
+  clearTimeout(baldToastTimers.get(toast));
+  toast.classList.add('leaving');
+  window.setTimeout(() => toast.remove(), 260);
+}
+
+function showBaldToast(title, message, kind = 'info'){
+  const stack = document.getElementById('baldToastStack');
+  if (!stack) return;
+  const toast = document.createElement('div');
+  toast.className = `bald-toast${kind === 'error' ? ' error' : ''}`;
+  toast.innerHTML = `<span class="bald-toast-icon" aria-hidden="true">${kind === 'error' ? '<i class="ti ti-alert-circle"></i>' : '<i class="ti ti-bell"></i>'}</span><div class="bald-toast-copy"><strong></strong><span></span></div><button class="bald-toast-dismiss" type="button" aria-label="Dismiss notification">&times;</button>`;
+  toast.querySelector('.bald-toast-copy strong').textContent = String(title || 'Bald Launcher');
+  toast.querySelector('.bald-toast-copy span').textContent = String(message || '');
+  toast.querySelector('.bald-toast-dismiss').addEventListener('click', () => dismissBaldToast(toast));
+  let dragStart = null;
+  toast.addEventListener('pointerdown', event => {
+    if (event.target.closest('button')) return;
+    dragStart = { x: event.clientX, y: event.clientY };
+    toast.classList.add('dragging');
+    toast.setPointerCapture(event.pointerId);
+  });
+  toast.addEventListener('pointerup', event => {
+    if (!dragStart) return;
+    const deltaX = event.clientX - dragStart.x;
+    const deltaY = event.clientY - dragStart.y;
+    toast.classList.remove('dragging');
+    dragStart = null;
+    if (Math.abs(deltaX) > 78 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      toast.style.transform = `translateX(${deltaX < 0 ? '-120%' : '120%'})`;
+      toast.style.opacity = '0';
+      window.setTimeout(() => dismissBaldToast(toast), 230);
+    }
+  });
+  toast.addEventListener('pointercancel', () => {
+    dragStart = null;
+    toast.classList.remove('dragging');
+  });
+  stack.appendChild(toast);
+  baldToastTimers.set(toast, window.setTimeout(() => dismissBaldToast(toast), 10000));
+  if (kind === 'error') playErrorDing();
+}
+
+window.alert = message => {
+  const text = String(message || 'An unexpected error occurred.');
+  const isError = /\b(error|failed|failure|unable|cannot|could not|couldn['’]t|can't|invalid|missing|not found|unavailable|denied|crash|not supported|required)\b/i.test(text);
+  addNotification(isError ? 'Bald Launcher error' : 'Bald Launcher', text, isError ? 'error' : 'info');
+  if (!isError) return;
+  return undefined;
+};
+
+let fileDragDepth = 0;
+function isFileDrag(event){
+  return Array.from(event.dataTransfer?.types || []).includes('Files');
+}
+
+function describeDropDestination(target){
+  const serverPanel = document.getElementById('serverFilesPanel');
+  const serverDetail = document.getElementById('panel-server-detail');
+  const profileCard = target?.closest?.('.profile-card[data-profile-id]');
+  if (profileCard) {
+    const profile = getProfile(profileCard.dataset.profileId);
+    return { type: 'profile', profileId: profile?.id, label: profile ? `Copy recognized Minecraft files into ${profile.name}.` : 'The selected profile is unavailable.' };
+  }
+  if (serverPanel?.classList.contains('active') && serverDetail?.style.display !== 'none') {
+    const server = getServer(currentServerId);
+    const relativePath = normalizeServerPath(serverFileBrowserState[server?.id]?.currentPath || '.');
+    return { type: 'server', serverId: server?.id, path: relativePath, label: `Copy any files and folders into ${server?.name || 'server'} / ${relativePath === '.' ? 'root' : relativePath}.` };
+  }
+  const profile = getProfile(currentProfileId) || getProfile(state?.activeProfileId);
+  return { type: 'profile', profileId: profile?.id, label: profile ? `Copy recognized Minecraft files into ${profile.name}.` : 'Create or select a profile first.' };
+}
+
+function showDropOverlay(target){
+  const overlay = document.getElementById('launcherDropOverlay');
+  const message = document.getElementById('launcherDropMessage');
+  const destination = describeDropDestination(target);
+  if (!overlay || !message) return;
+  message.firstChild.textContent = destination.type === 'server' ? 'Drop files to copy into the open server folder' : 'Drop files to copy into this profile';
+  document.getElementById('launcherDropDestination').textContent = destination.label;
+  overlay.classList.add('visible');
+  overlay.setAttribute('aria-hidden', 'false');
+}
+
+function hideDropOverlay(){
+  const overlay = document.getElementById('launcherDropOverlay');
+  overlay?.classList.remove('visible');
+  overlay?.setAttribute('aria-hidden', 'true');
+}
+
+async function handleLauncherFileDrop(event){
+  if (!isFileDrag(event)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  fileDragDepth = 0;
+  hideDropOverlay();
+  const paths = launcherBridge?.getDroppedFilePaths?.(event.dataTransfer.files) || [];
+  if (!paths.length) {
+    addNotification('File drop failed', 'Bald Launcher could not read the dropped file paths.', 'error');
+    return;
+  }
+  const destination = describeDropDestination(event.target);
+  if (destination.type === 'server') {
+    if (!destination.serverId) {
+      addNotification('File drop failed', 'Open a server file browser before dropping files.', 'error');
+      return;
+    }
+    const response = await launcherBridge.dropServerFiles({ serverId: destination.serverId, path: destination.path, sourcePaths: paths });
+    if (!response?.ok) {
+      addNotification('Server files were not copied', response?.error || 'Unable to copy files into this server folder.', 'error');
+      return;
+    }
+    const copied = response.results.filter(item => item.ok).length;
+    const failures = response.results.filter(item => !item.ok);
+    const details = failures.map(item => `${item.sourcePath.split(/[\\/]/).pop()}: ${item.error}`).join('; ');
+    addNotification('Server file drop complete', `${copied} of ${response.results.length} item(s) copied to ${destination.path === '.' ? 'the server root' : destination.path}.${details ? ` Not copied: ${details}` : ''}`, failures.length ? 'error' : 'success');
+    renderServerFiles();
+    return;
+  }
+  if (!destination.profileId) {
+    addNotification('File drop failed', 'Select or create a profile before dropping Minecraft content.', 'error');
+    return;
+  }
+  const response = await launcherBridge.dropProfileFiles({ profileId: destination.profileId, sourcePaths: paths });
+  if (!response?.ok) {
+    addNotification('Profile files were not copied', response?.error || 'Unable to copy content into this profile.', 'error');
+    return;
+  }
+  const successful = response.results.filter(item => item.ok);
+  const failed = response.results.filter(item => !item.ok);
+  const destinations = [...new Set(successful.map(item => item.type === 'world' || item.type === 'world-archive' ? 'saves' : item.type === 'resourcepack' ? 'resourcepacks' : item.type === 'shader' ? 'shaderpacks' : 'mods'))];
+  const failures = failed.map(item => `${String(item.sourcePath).split(/[\\/]/).pop()}: ${item.error}`).join('; ');
+  const issueKind = failed.some(item => item.type !== 'unknown') ? 'error' : failed.length ? 'warning' : 'success';
+  addNotification('Profile file drop complete', `${successful.length} of ${response.results.length} item(s) copied${destinations.length ? ` to ${destinations.join(', ')}` : ''}.${failures ? ` Not copied: ${failures}` : ''}`, issueKind);
+  renderProfileGrid();
+}
+
+window.addEventListener('dragenter', event => {
+  if (!isFileDrag(event)) return;
+  event.preventDefault();
+  fileDragDepth++;
+  showDropOverlay(event.target);
+});
+window.addEventListener('dragover', event => {
+  if (!isFileDrag(event)) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+  showDropOverlay(event.target);
+});
+window.addEventListener('dragleave', event => {
+  if (!isFileDrag(event)) return;
+  fileDragDepth = Math.max(0, fileDragDepth - 1);
+  if (fileDragDepth === 0 && !event.relatedTarget) hideDropOverlay();
+});
+window.addEventListener('drop', event => {
+  void handleLauncherFileDrop(event).catch(error => {
+    hideDropOverlay();
+    addNotification('File drop failed', error instanceof Error ? error.message : String(error), 'error');
+  });
+});
 
 let commandPaletteResults = [];
 let commandPaletteSelection = 0;
@@ -5267,10 +5688,10 @@ function ensurePlayitTerminal() {
   playitTerminal = new Terminal({
     convertEol: false,
     cursorBlink: true,
-    scrollback: 5000,
+    scrollback: 50000,
     fontFamily: 'var(--font-mono)',
     fontSize: 12,
-    theme: { background: '#050505', foreground: '#d9d9d9', cursor: '#7ef15e', selectionBackground: '#3a3a3a' },
+    theme: { background: '#050505', foreground: '#d9d9d9', cursor: '#8fc8c7', selectionBackground: '#3a3a3a' },
     allowProposedApi: false,
   });
   playitFitAddon = new FitAddon.FitAddon();
@@ -5296,11 +5717,22 @@ async function renderServerPlayit() {
   if (!statusElement || !terminal || !launcherBridge?.getPlayitStatus) return;
   const result = await launcherBridge.getPlayitStatus();
   const playit = result?.playit || {};
-  const labels = { starting: 'Starting', running: 'Running', stopping: 'Stopping', stopped: 'Stopped', crashed: 'Crashed', exited: 'Exited' };
+  const keepAliveToggle = document.getElementById('playitKeepAliveToggle');
+  if (keepAliveToggle) keepAliveToggle.checked = state?.settings?.playitKeepRunningOnClose === true;
+  const labels = { starting: 'Starting', running: 'Running', stopping: 'Stopping', stopped: 'Stopped', crashed: 'Crashed', exited: 'Exited', unverified: 'Unverified' };
   const status = String(playit.status || 'stopped');
   statusElement.textContent = labels[status] || status;
-  statusElement.className = `server-playit-status ${status === 'running' ? 'running' : status === 'crashed' ? 'error' : status === 'starting' || status === 'stopping' ? 'waiting' : 'neutral'}`;
-  helpElement.textContent = status === 'crashed' ? 'The real Playit process exited unexpectedly. Review the terminal output and restart it.' : 'The real Playit agent terminal is attached below.';
+  statusElement.className = `server-playit-status ${status === 'running' ? 'running' : status === 'crashed' || status === 'unverified' ? 'error' : status === 'starting' || status === 'stopping' ? 'waiting' : 'neutral'}`;
+  if (playitTerminal) playitTerminal.options.disableStdin = playit.persistent === true;
+  helpElement.textContent = playit.error
+    ? playit.error
+    : status === 'crashed'
+    ? 'The real Playit process exited unexpectedly. Review the terminal output and use Restart to recover.'
+    : playit.persistent
+      ? 'Playit is running as a background process. Its tunnel remains active after Bald Launcher closes; terminal input is disabled.'
+      : state?.settings?.playitKeepRunningOnClose
+        ? 'Background mode is enabled for the next start. Restart Playit to move the current session into background mode.'
+        : 'The real Playit agent terminal is attached below.';
   if (playit.output && !playitTerminalHydrated) {
     terminal.write(playit.output);
     playitTerminalHydrated = true;
@@ -5336,12 +5768,51 @@ async function restartPlayitAgent() {
   renderServerPlayit();
 }
 
+async function setPlayitPersistence(enabled){
+  const toggle = document.getElementById('playitKeepAliveToggle');
+  const result = await launcherBridge?.setPlayitPersistence?.(enabled);
+  if (!result?.ok) {
+    if (toggle) toggle.checked = !enabled;
+    alert(result?.error || 'Unable to save the Playit background setting.');
+    return;
+  }
+  state.settings = { ...state.settings, playitKeepRunningOnClose: result.keepRunningOnClose === true };
+  if (result.restartRequired) {
+    addNotification('Playit background mode enabled', 'This setting applies when Playit next starts. Use Restart only when you are ready for a brief tunnel reconnect.', 'info');
+  } else {
+    addNotification('Playit setting saved', enabled ? 'New Playit starts will run in the background.' : 'Playit will stop when Bald Launcher closes.', 'success');
+  }
+  renderServerPlayit();
+}
+
+async function copyPlayitTerminal(){
+  const buffer = playitTerminal?.buffer?.active;
+  let text = '';
+  if (buffer) {
+    const lastRow = Math.max(0, buffer.baseY + buffer.cursorY);
+    text = Array.from({ length: lastRow + 1 }, (_, index) => buffer.getLine(index)?.translateToString(true) || '').join('\n');
+  }
+  if (!text.trim() && launcherBridge?.getPlayitStatus) {
+    const result = await launcherBridge.getPlayitStatus();
+    text = String(result?.playit?.output || '');
+  }
+  if (!text.trim()) {
+    addNotification('Nothing to copy', 'The Playit terminal has no output yet.', 'warning');
+    return;
+  }
+  const copied = launcherBridge?.copyText ? launcherBridge.copyText(text) : (await navigator.clipboard.writeText(text), true);
+  if (copied) addNotification('Playit output copied', 'The available Playit terminal history was copied to the clipboard.', 'success');
+}
+
 async function clearPlayitTerminal() {
+  if (launcherBridge?.clearPlayitTerminal) {
+    const result = await launcherBridge.clearPlayitTerminal();
+    if (!result?.ok) alert(result?.error || 'Unable to clear the Playit terminal.');
+  }
   if (playitTerminal) {
     playitTerminal.clear();
     playitTerminalHydrated = true;
   }
-  if (launcherBridge?.clearPlayitTerminal) await launcherBridge.clearPlayitTerminal();
 }
 
 async function copyServerConsole() {
@@ -6366,9 +6837,14 @@ async function boot(){
   renderProfileGrid();
   renderServers();
   renderAccounts();
+  if (launcherBridge?.onGameAction) launcherBridge.onGameAction(handleMinecraftMenuAction);
   bindProfileLaunchButton();
   const settings = state.settings || {};
   document.getElementById('optimizationModsEnabled').checked = settings.optimizationModsEnabled === true;
+  document.getElementById('minecraftMenuEnabled').checked = settings.minecraftMenuEnabled !== false;
+  document.getElementById('minecraftPerformanceButtonEnabled').checked = settings.minecraftPerformanceButtonEnabled !== false;
+  document.getElementById('minecraftInGameButtonEnabled').checked = settings.minecraftInGameButtonEnabled !== false;
+  document.getElementById('minecraftPerformanceHudEnabled').checked = settings.minecraftPerformanceHudEnabled === true;
   document.getElementById('memoryMaxAuto').checked = settings.memoryMaxAuto === true;
   if (settings.memoryMax) {
     document.getElementById('ramSlider').value = settings.memoryMax;

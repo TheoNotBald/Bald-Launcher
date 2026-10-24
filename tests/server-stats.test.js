@@ -93,7 +93,7 @@ test('Spark worker-pool log lines contain parseable TPS and tick-duration readin
     '[23:37:32] [spark-worker-pool-1-thread-3/INFO]: [⚡]  0.2/0.4/0.8/1.0;  0.2/0.4/1.2/98.3',
   ];
   const handlerStart = main.indexOf('function normalizeServerTpsLine(');
-  const handlerEnd = main.indexOf('\nlet lastLaunchArguments', handlerStart);
+  const handlerEnd = main.indexOf('\nfunction cloneDefaultState()', handlerStart);
   assert.ok(handlerStart >= 0 && handlerEnd > handlerStart, 'server output handler should exist');
   const output = [];
   const pollResults = [];

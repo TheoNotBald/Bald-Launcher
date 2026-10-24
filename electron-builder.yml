@@ -25,6 +25,9 @@ files:
   - patches/**/*
   - src/**/*
   - package.json
+extraResources:
+  - from: minecraft-mod/build/libs/bald-launcher-client-0.1.0.jar
+    to: baldlauncher/bald-launcher-client.jar
 publish:
   provider: github
   owner: TheoNotBald

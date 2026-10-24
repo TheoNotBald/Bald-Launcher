@@ -22,6 +22,8 @@ test('profile cards render profile-supplied text as escaped text', () => {
         mcVersion: '<img src=y>',
         loader: 'vanilla',
         rendererMode: 'vanilla',
+        playtimeMs: 0,
+        lastPlayedAt: null,
       }],
     },
     document: {
@@ -46,6 +48,8 @@ test('profile cards render profile-supplied text as escaped text', () => {
     capitalize: value => String(value).charAt(0).toUpperCase() + String(value).slice(1),
     badgeClass: () => 'vanilla',
     badgeLabel: () => 'Vanilla',
+    formatProfilePlaytime: () => '0 hours',
+    formatProfileLastPlayed: () => 'Never played',
     profileModeLabel: profile => profile.optimizationKind === 'vanilla-fallback'
       ? 'True Vanilla'
       : profile.optimizationKind === 'sodium'
@@ -57,8 +61,26 @@ test('profile cards render profile-supplied text as escaped text', () => {
   assert.match(grid.innerHTML, /&lt;img src=x onerror=window\.name=1&gt;/);
   assert.match(grid.innerHTML, /&lt;svg\/onload=window\.name=2&gt;/);
   assert.match(grid.innerHTML, /&lt;img src=y&gt;/);
+  assert.match(grid.innerHTML, /profile-card-activity/);
+  assert.match(grid.innerHTML, /0 hours/);
+  assert.match(grid.innerHTML, /Never played/);
   assert.doesNotMatch(grid.innerHTML, /<img src=/);
   assert.equal(count.textContent, '1 of 1 profile');
+});
+
+test('profile activity formatting reports cumulative hours and relative last-played time', () => {
+  const start = html.indexOf('function formatProfilePlaytime');
+  const end = html.indexOf('\n\n// ---------------- Profiles grid', start);
+  assert.ok(start >= 0 && end > start, 'profile activity formatters should exist');
+  const context = { Date };
+  vm.runInNewContext(`${html.slice(start, end)}\nthis.formatProfilePlaytime=formatProfilePlaytime;this.formatProfileLastPlayed=formatProfileLastPlayed;`, context);
+
+  assert.equal(context.formatProfilePlaytime(206 * 60 * 60 * 1000), '206 hours');
+  assert.equal(context.formatProfilePlaytime(60 * 60 * 1000), '1 hour');
+  assert.equal(context.formatProfilePlaytime(45 * 60 * 1000), '45 min');
+  assert.equal(context.formatProfileLastPlayed(null), 'Never played');
+  assert.equal(context.formatProfileLastPlayed(Date.now() - 6 * 24 * 60 * 60 * 1000), '6 days ago');
+  assert.equal(context.formatProfileLastPlayed(Date.now() - 360 * 24 * 60 * 60 * 1000), '12 months ago');
 });
 
 test('server cards render server-supplied text as escaped text', () => {

@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils, clipboard } = require('electron');
 const { generateThemeCss } = require('./src/shared/theme-css');
 
 contextBridge.exposeInMainWorld('launcherAPI', {
@@ -38,6 +38,8 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   exportProfile: profileId => ipcRenderer.invoke('launcher:export-profile', profileId),
   exportModpack: payload => ipcRenderer.invoke('launcher:export-modpack', payload),
   importProfile: () => ipcRenderer.invoke('launcher:import-profile'),
+  dropProfileFiles: payload => ipcRenderer.invoke('launcher:drop-profile-files', payload),
+  getDroppedFilePaths: files => Array.from(files || []).map(file => webUtils.getPathForFile(file)),
   backupProfile: profileId => ipcRenderer.invoke('launcher:backup-profile', profileId),
   restoreProfile: profileId => ipcRenderer.invoke('launcher:restore-profile', profileId),
   revealProfile: profileId => ipcRenderer.invoke('launcher:reveal-profile', profileId),
@@ -111,12 +113,14 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   createServerFolder: params => ipcRenderer.invoke('server:create-folder', params),
   createServerFile: params => ipcRenderer.invoke('server:create-file', params),
   uploadServerFile: params => ipcRenderer.invoke('server:upload-file', params),
+  dropServerFiles: params => ipcRenderer.invoke('server:drop-files', params),
   downloadServerFile: params => ipcRenderer.invoke('server:download-file', params),
   downloadServerArchive: params => ipcRenderer.invoke('server:download-archive', params),
   revealServerPath: params => ipcRenderer.invoke('server:reveal-path', params),
   writeServerSettings: params => ipcRenderer.invoke('server:write-settings', params),
   uploadServerIcon: params => ipcRenderer.invoke('server:upload-icon', params),
   getPlayitStatus: () => ipcRenderer.invoke('server:playit-status'),
+  setPlayitPersistence: enabled => ipcRenderer.invoke('server:playit-persistence', enabled === true),
   installPlayitAgent: () => ipcRenderer.invoke('server:playit-install'),
   startPlayitAgent: () => ipcRenderer.invoke('server:playit-start'),
   stopPlayitAgent: () => ipcRenderer.invoke('server:playit-stop'),
@@ -124,6 +128,10 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   writePlayitInput: data => ipcRenderer.invoke('server:playit-input', data),
   resizePlayit: (cols, rows) => ipcRenderer.invoke('server:playit-resize', { cols, rows }),
   clearPlayitTerminal: () => ipcRenderer.invoke('server:playit-clear'),
+  copyText: text => {
+    clipboard.writeText(String(text || ''));
+    return true;
+  },
   openPlayitLink: url => ipcRenderer.invoke('server:playit-open-link', url),
   openExternalUrl: url => ipcRenderer.invoke('launcher:open-external-url', url),
   applyUpdate: () => ipcRenderer.invoke('launcher:apply-update'),
@@ -170,6 +178,11 @@ contextBridge.exposeInMainWorld('launcherAPI', {
     const handler = (_event, state) => callback(state);
     ipcRenderer.on('launcher:process-state', handler);
     return () => ipcRenderer.removeListener('launcher:process-state', handler);
+  },
+  onGameAction: callback => {
+    const handler = (_event, action) => callback(action);
+    ipcRenderer.on('launcher:game-action', handler);
+    return () => ipcRenderer.removeListener('launcher:game-action', handler);
   },
   onUpdateAvailable: callback => {
     const handler = (_event, update) => callback(update);

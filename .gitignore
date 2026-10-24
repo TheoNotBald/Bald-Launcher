@@ -3,6 +3,9 @@ dist/
 build-release/
 build-*/
 release/
+minecraft-mod/.gradle/
+minecraft-mod/build/
+minecraft-mod/bin/
 .env
 .env.*
 *.log

@@ -59,3 +59,37 @@ test('Playit restart does not spawn another agent if the old process fails to st
   assert.equal(result.ok, false);
   assert.equal(result.pid, 12345);
 });
+
+test('Playit background mode records a detached process and leaves it running on launcher detach', async t => {
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'bald-playit-background-'));
+  t.after(() => fs.rmSync(userData, { recursive: true, force: true }));
+  const executablePath = path.join(userData, 'playit', 'playit.exe');
+  fs.mkdirSync(path.dirname(executablePath), { recursive: true });
+  fs.writeFileSync(executablePath, '');
+  const child = new EventEmitter();
+  child.pid = 54321;
+  child.exitCode = null;
+  child.unref = () => {};
+  child.kill = () => { child.exitCode = 0; };
+  const manager = createPlayitManager({
+    app: { getPath: () => userData },
+    shell: { openExternal: async () => {} },
+    emit: () => {},
+    spawnProcess: () => child,
+    isProcessAlive: pid => pid === child.pid && child.exitCode == null,
+  });
+  const started = manager.start({ keepRunningOnClose: true });
+  assert.equal(started.ok, true);
+  assert.equal(started.persistent, true);
+  assert.equal(started.pid, child.pid);
+  assert.equal(manager.write('help').ok, false);
+
+  const detached = manager.detach();
+  assert.equal(detached.ok, true);
+  assert.equal(detached.persistent, true);
+  assert.equal(detached.pid, child.pid);
+  assert.equal(child.exitCode, null);
+
+  child.exitCode = 0;
+  child.emit('exit', 0, null);
+});

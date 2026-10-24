@@ -1,0 +1,11 @@
+{
+  "providers": [
+    {
+      "type": "ttf",
+      "file": "baldlauncher:lato-regular.ttf",
+      "shift": [0, 0],
+      "size": 11,
+      "oversample": 3
+    }
+  ]
+}

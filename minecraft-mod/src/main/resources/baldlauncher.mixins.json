@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "com.baldlauncher.client.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ScreenAccessor",
+    "TitleScreenMixin",
+    "PauseScreenMixin",
+    "MouseMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

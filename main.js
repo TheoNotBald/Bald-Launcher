@@ -4,6 +4,7 @@ const net = require('net');
 const zlib = require('zlib');
 const { Transform } = require('stream');
 const { pipeline } = require('stream/promises');
+const { StringDecoder } = require('string_decoder');
 const fs = require('fs');
 const path = require('path');
 process.on('uncaughtException', (err) => {
@@ -21,6 +22,8 @@ const pidusage = require('pidusage');
 const MCLC = require('minecraft-launcher-core');
 const { autoUpdater } = require('electron-updater');
 const { createPlayitManager } = require('./playit-manager');
+const { classifyProfileDrop, copyDropItems, copyPathWithoutOverwrite, extractWorldArchive } = require('./drop-routing');
+const { shouldPromptForStaleWorldLock } = require('./src/servers/world-lock-policy');
 const { createStateStore } = require('./src/shared/state-store');
 const { createSecureStateCodec } = require('./src/shared/secure-state-codec');
 const { commitStagedFiles } = require('./src/shared/file-transaction');
@@ -36,6 +39,15 @@ const { ensureLauncherProfilesFile } = require('./src/shared/launcher-profiles')
 const { getLoaderJvmArguments, getLoaderLibraryPaths } = require('./src/shared/loader-jvm-arguments');
 const { refreshMicrosoftAuthorization } = require('./src/shared/launch-authorization');
 const { runProfileImportDownloads } = require('./src/shared/profile-import');
+const { recordProfilePlaytime } = require('./src/shared/profile-playtime');
+const { selectForgeVersion } = require('./src/shared/forge-version');
+const {
+  buildBaldMenuConfig,
+  createBaldMenuBridge,
+  installBaldMenuMod,
+  isSupportedBaldMenuTarget,
+  normalizeBaldMenuSettings,
+} = require('./src/shared/bald-menu-integration');
 const {
   areProfileRootsIsolated,
   canCreateOptimizationProfile,
@@ -626,6 +638,11 @@ const DEFAULT_STATE = {
     jvmProfile: 'default',
     customJvmArgs: '',
     optimizationModsEnabled: false,
+    minecraftMenuEnabled: true,
+    minecraftPerformanceButtonEnabled: true,
+    minecraftInGameButtonEnabled: true,
+    minecraftPerformanceHudEnabled: false,
+    playitKeepRunningOnClose: false,
   },
   themes: {
     '1': createBuiltInTheme('Bald Dark'),
@@ -695,6 +712,7 @@ const launcherStateStore = createStateStore({
   onPersistError: error => console.error('State persistence error:', error),
 });
 const runningProcesses = new Map();
+const profilePlaytimeIntervals = new Map();
 const serverProcesses = new Map();
 const serverStartupTasks = new Map();
 const serverStartedAt = new Map();
@@ -2540,6 +2558,16 @@ function emitProfileImportProgress(progress) {
   }
 }
 
+function emitBaldMenuAction(action) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    throw new Error('Bald Launcher is not available to handle the in-game request.');
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  mainWindow.webContents.send('launcher:game-action', action);
+}
+
 function emitProcessState(running, profile = null, pid = null, details = {}) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('launcher:process-state', {
@@ -2550,6 +2578,47 @@ function emitProcessState(running, profile = null, pid = null, details = {}) {
       ...details,
     });
   }
+}
+
+function emitLauncherStateChanged() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('launcher:state-changed', launcherState);
+  }
+}
+
+function accountProfilePlaytime(profileId) {
+  const profile = launcherState.profiles.find(item => item.id === profileId);
+  const session = getSession(profileId);
+  const elapsed = recordProfilePlaytime(profile, session);
+  if (elapsed > 0) {
+    scheduleStateWrite();
+    emitLauncherStateChanged();
+  }
+}
+
+function startProfilePlaytimeTracking(profile, session, startedAt = Date.now()) {
+  if (!profile || !session) return;
+  if (!Number.isFinite(Number(session.playtimeStartedAt))) {
+    session.playtimeStartedAt = startedAt;
+  }
+  if (!Number.isFinite(Number(session.playtimeLastAccountedAt))) {
+    session.playtimeLastAccountedAt = session.playtimeStartedAt;
+  }
+  profile.lastPlayedAt = Number(profile.lastPlayedAt) || startedAt;
+  const existing = profilePlaytimeIntervals.get(profile.id);
+  if (existing) clearInterval(existing);
+  const interval = setInterval(() => accountProfilePlaytime(profile.id), 15000);
+  interval.unref?.();
+  profilePlaytimeIntervals.set(profile.id, interval);
+  scheduleStateWrite();
+  emitLauncherStateChanged();
+}
+
+function stopProfilePlaytimeTracking(profileId) {
+  accountProfilePlaytime(profileId);
+  const interval = profilePlaytimeIntervals.get(profileId);
+  if (interval) clearInterval(interval);
+  profilePlaytimeIntervals.delete(profileId);
 }
 
 function getSession(profileId) {
@@ -2612,6 +2681,10 @@ function normalizeProfile(profile) {
     createdAt: Number(profile?.createdAt || Date.now()),
     updatedAt: Number(profile?.updatedAt || profile?.createdAt || Date.now()),
     lastUsedAt: Number(profile?.lastUsedAt || profile?.updatedAt || profile?.createdAt || Date.now()),
+    playtimeMs: Math.max(0, Number(profile?.playtimeMs) || 0),
+    lastPlayedAt: Number.isFinite(Number(profile?.lastPlayedAt)) && Number(profile.lastPlayedAt) > 0
+      ? Number(profile.lastPlayedAt)
+      : null,
     mcVersion,
     loader,
     rendererMode,
@@ -2719,15 +2792,48 @@ function readResourcePackIcon(filePath) {
   }
 }
 
-function runArchiveCommand(args, { capture = true } = {}) {
+function runArchiveCommand(args, { capture = true, onOutputLine = null } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn('tar.exe', args, { windowsHide: true });
     const chunks = [];
+    const decoder = onOutputLine ? new StringDecoder('utf8') : null;
+    let outputBuffer = '';
     let stderr = '';
-    child.stdout?.on('data', chunk => { if (capture) chunks.push(chunk); });
-    child.stderr?.on('data', chunk => { stderr += chunk.toString(); });
-    child.on('error', reject);
+    let callbackError = null;
+    const handleLine = line => {
+      const normalized = line.replace(/\r$/, '');
+      if (!normalized) return;
+      try {
+        onOutputLine?.(normalized);
+      } catch (error) {
+        callbackError = error;
+        child.kill();
+      }
+    };
+    child.stdout?.on('data', chunk => {
+      if (capture) chunks.push(chunk);
+      if (decoder) {
+        outputBuffer += decoder.write(chunk);
+        let newline;
+        while ((newline = outputBuffer.indexOf('\n')) !== -1) {
+          handleLine(outputBuffer.slice(0, newline));
+          outputBuffer = outputBuffer.slice(newline + 1);
+        }
+      }
+    });
+    child.stderr?.on('data', chunk => {
+      stderr = `${stderr}${chunk.toString()}`.slice(-65536);
+    });
+    child.on('error', error => reject(callbackError || error));
     child.on('close', code => {
+      if (decoder) {
+        outputBuffer += decoder.end();
+        if (outputBuffer) handleLine(outputBuffer);
+      }
+      if (callbackError) {
+        reject(callbackError);
+        return;
+      }
       if (code !== 0) reject(new Error(stderr.trim() || `Archive command failed with exit code ${code}.`));
       else resolve(capture ? Buffer.concat(chunks) : Buffer.alloc(0));
     });
@@ -2738,28 +2844,104 @@ async function readMrpackEntry(sourcePath, entryPath) {
   return runArchiveCommand(['-xOf', sourcePath, entryPath]);
 }
 
-async function extractMrpackOverrides(sourcePath, destinationRoot) {
-  const listing = (await runArchiveCommand(['-tf', sourcePath])).toString('utf8');
-  const entries = listing.split(/\r?\n/).map(entry => entry.trim()).filter(Boolean);
-  const unsafe = entries.find(entry => {
-    const normalized = entry.replace(/\\/g, '/');
-    return normalized.startsWith('/') || normalized.split('/').includes('..');
+async function pathExists(filePath) {
+  try {
+    await fs.promises.lstat(filePath);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+async function moveImportedTree(source, destination) {
+  const sourceStat = await fs.promises.lstat(source);
+  const destinationStat = await fs.promises.lstat(destination).catch(error => {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
   });
-  if (unsafe) throw new Error(`The profile import contains an unsafe archive path: ${unsafe}`);
-  if (!entries.some(entry => entry === 'overrides/' || entry.startsWith('overrides/'))) return;
+  if (sourceStat.isDirectory() && !sourceStat.isSymbolicLink()
+      && destinationStat?.isDirectory() && !destinationStat.isSymbolicLink()) {
+    const entries = await fs.promises.readdir(source, { withFileTypes: true });
+    for (const entry of entries) {
+      await moveImportedTree(path.join(source, entry.name), path.join(destination, entry.name));
+    }
+    await fs.promises.rmdir(source);
+    return;
+  }
+  if (destinationStat) await fs.promises.rm(destination, { recursive: true, force: true });
+  await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+  await fs.promises.rename(source, destination);
+}
+
+async function inspectMrpackOverrides(sourcePath, onProgress = () => {}) {
+  let unsafeEntry = '';
+  let totalEntries = 0;
+  let uncompressedBytes = 0;
+  let scannedEntries = 0;
+  let lastScanReportAt = 0;
+  await runArchiveCommand(['-tvf', sourcePath], {
+    capture: false,
+    onOutputLine: line => {
+      scannedEntries += 1;
+      const fields = line.trim().split(/\s+/);
+      const entry = fields.slice(8).join(' ');
+      const normalized = entry.replace(/\\/g, '/');
+      if (normalized.startsWith('/') || /^[a-z]:/i.test(normalized)
+          || normalized.split('/').some(segment => segment === '..' || segment === '.')) {
+        unsafeEntry ||= entry || line;
+      } else if (normalized === 'overrides/' || normalized.startsWith('overrides/')) {
+        const size = Number(fields[4]);
+        if (!Number.isSafeInteger(size) || size < 0) {
+          throw new Error(`Could not determine the uncompressed size of archive entry: ${entry}`);
+        }
+        totalEntries += 1;
+        uncompressedBytes += size;
+      }
+      const now = Date.now();
+      if (now - lastScanReportAt >= 500) {
+        lastScanReportAt = now;
+        onProgress({ phase: 'scan', scanned: scannedEntries, percent: null });
+      }
+    },
+  });
+  if (unsafeEntry) throw new Error(`The profile import contains an unsafe archive path: ${unsafeEntry}`);
+  return { totalEntries, uncompressedBytes };
+}
+
+async function extractMrpackOverrides(sourcePath, destinationRoot, onProgress = () => {}, archiveInfo = null) {
+  const { totalEntries } = archiveInfo || await inspectMrpackOverrides(sourcePath, onProgress);
+  if (!totalEntries) return;
   const staging = path.join(destinationRoot, '.bald-import-overrides');
-  fs.mkdirSync(staging, { recursive: true });
-  await runArchiveCommand(['-xf', sourcePath, '-C', staging, 'overrides'], { capture: false });
+  await fs.promises.mkdir(staging, { recursive: true });
   const extractedRoot = path.join(staging, 'overrides');
   try {
-    if (!fs.existsSync(extractedRoot)) return;
-    const entries = await fs.promises.readdir(extractedRoot);
-    for (const entry of entries) {
-      await fs.promises.cp(path.join(extractedRoot, entry), path.join(destinationRoot, entry), {
-        recursive: true,
-        force: true,
-      });
+    let extractedEntries = 0;
+    let lastReportAt = 0;
+    let lastPercent = 0;
+    onProgress({ completed: 0, total: totalEntries, percent: 0 });
+    await runArchiveCommand(['-xvf', sourcePath, '-C', staging, 'overrides'], {
+      capture: false,
+      onOutputLine: line => {
+        const entry = line.replace(/^x\s+/, '').replace(/\\/g, '/');
+        if (entry !== 'overrides' && entry !== 'overrides/' && !entry.startsWith('overrides/')) return;
+        extractedEntries = Math.min(totalEntries, extractedEntries + 1);
+        const percent = Math.min(99, Math.floor((extractedEntries / totalEntries) * 100));
+        const now = Date.now();
+        if (percent > lastPercent && (now - lastReportAt >= 150 || extractedEntries === totalEntries)) {
+          lastReportAt = now;
+          lastPercent = percent;
+          onProgress({ completed: extractedEntries, total: totalEntries, percent });
+        }
+      },
+    });
+    if (await pathExists(extractedRoot)) {
+      const entries = await fs.promises.readdir(extractedRoot);
+      for (const entry of entries) {
+        await moveImportedTree(path.join(extractedRoot, entry), path.join(destinationRoot, entry));
+      }
     }
+    onProgress({ completed: totalEntries, total: totalEntries, percent: 100 });
   } finally {
     await fs.promises.rm(staging, { recursive: true, force: true });
   }
@@ -2884,6 +3066,8 @@ function normalizeSettings(settings) {
     jvmProfile: ['default', 'zgc', 'custom'].includes(settings?.jvmProfile) ? settings.jvmProfile : 'default',
     customJvmArgs: String(settings?.customJvmArgs || ''),
     optimizationModsEnabled: isOptimizationOptedIn(settings),
+    playitKeepRunningOnClose: settings?.playitKeepRunningOnClose === true,
+    ...normalizeBaldMenuSettings(settings),
   };
 }
 
@@ -3949,8 +4133,7 @@ async function installLoader(profile) {
       : 'https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml';
     const metadata = (await axios.get(metadataUrl, { timeout: 15000 })).data;
     if (loader === 'forge') {
-      const versions = metadata?.versions || [];
-      loaderVersion = versions.reverse().find(version => version.startsWith(`${mcVersion}-`));
+      loaderVersion = selectForgeVersion(metadata, mcVersion);
       if (!loaderVersion) throw new Error(`No Forge version is available for Minecraft ${mcVersion}`);
       installerUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${loaderVersion}/forge-${loaderVersion}-installer.jar`;
       installerArgs = ['--installClient', rootPath];
@@ -4111,9 +4294,22 @@ ipcMain.handle('server:playit-install', async (_event, payload) => {
   }
 });
 
-ipcMain.handle('server:playit-start', async () => playitManager.start());
+ipcMain.handle('server:playit-start', async () => playitManager.start({
+  keepRunningOnClose: launcherState.settings?.playitKeepRunningOnClose === true,
+}));
 ipcMain.handle('server:playit-stop', async () => playitManager.stop());
-ipcMain.handle('server:playit-restart', async () => playitManager.restart());
+ipcMain.handle('server:playit-restart', async () => playitManager.restart({
+  keepRunningOnClose: launcherState.settings?.playitKeepRunningOnClose === true,
+}));
+ipcMain.handle('server:playit-persistence', async (_event, enabled) => {
+  launcherState.settings = { ...launcherState.settings, playitKeepRunningOnClose: enabled === true };
+  scheduleStateWrite();
+  return {
+    ok: true,
+    keepRunningOnClose: launcherState.settings.playitKeepRunningOnClose,
+    restartRequired: launcherState.settings.playitKeepRunningOnClose && Boolean(playitManager.state().pid) && !playitManager.state().persistent,
+  };
+});
 ipcMain.handle('server:playit-input', async (_event, data) => playitManager.write(data));
 ipcMain.handle('server:playit-resize', async (_event, payload) => playitManager.resize(payload?.cols, payload?.rows));
 ipcMain.handle('server:playit-clear', async () => playitManager.clear());
@@ -4201,7 +4397,10 @@ async function cacheOfficialTexture(account, kind, metadata, force = false) {
   const extension = kind === 'cape' ? 'cape' : 'skin';
   const filePath = path.join(root, `${extension}-${String(metadata.id || 'current').replace(/[^a-zA-Z0-9._-]/g, '_')}.png`);
   const library = createCosmeticLibrary({ appDataDir: app.getPath('userData') });
-  if (!force && fs.existsSync(filePath)) return filePath;
+  if (!force && fs.existsSync(filePath)) {
+    const cachedCheck = library.validatePngBuffer(fs.readFileSync(filePath));
+    if (cachedCheck.ok) return filePath;
+  }
   const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 15000, maxContentLength: 5 * 1024 * 1024 });
   const buffer = Buffer.from(response.data);
   const pngCheck = library.validatePngBuffer(buffer);
@@ -4232,7 +4431,16 @@ async function getOfficialMinecraftAppearance(account, force = false) {
     return { ok: false, requiresRelink: true, accountId: account.id, error: cosmetics.official.error, cosmetics };
   }
   const cachedAt = Number(cosmetics.official?.fetchedAt || 0);
-  if (!force && cosmetics.official?.status === 'ready' && cachedAt && Date.now() - cachedAt < 10 * 60 * 1000 && cosmetics.official.skin?.filePath) {
+  const officialCacheRoot = `${path.resolve(getOfficialCosmeticCacheRoot(account))}${path.sep}`.toLowerCase();
+  const isUsableOfficialTexture = texture => {
+    const filePath = path.resolve(String(texture?.filePath || ''));
+    return path.extname(filePath).toLowerCase() === '.png'
+      && filePath.toLowerCase().startsWith(officialCacheRoot)
+      && fs.existsSync(filePath);
+  };
+  const hasUsableOfficialTextures = isUsableOfficialTexture(cosmetics.official?.skin)
+    && (!cosmetics.official?.cape || isUsableOfficialTexture(cosmetics.official.cape));
+  if (!force && cosmetics.official?.status === 'ready' && cachedAt && Date.now() - cachedAt < 10 * 60 * 1000 && hasUsableOfficialTextures) {
     return { ok: true, accountId: account.id, username: account.name, uuid: account.uuid, cosmetics };
   }
   try {
@@ -5278,26 +5486,13 @@ ipcMain.handle('launcher:import-profile', async () => {
     const isMrpack = path.extname(sourcePath).toLowerCase() === '.mrpack';
     if (isMrpack) {
       const sourceStats = fs.statSync(sourcePath);
-      const freeBytes = fs.statfsSync ? (() => {
-        try {
-          const stats = fs.statfsSync(app.getPath('userData'));
-          return stats.bsize * stats.bavail;
-        } catch (error) {
-          console.warn('[Profile import] Could not determine free disk space.', error);
-          return null;
-        }
-      })() : null;
-      const importBudget = Math.ceil(sourceStats.size * 1.1);
-      if (freeBytes !== null && freeBytes < importBudget) {
-        throw new Error(`Not enough free disk space for this import. It needs approximately ${(importBudget / 1024 ** 3).toFixed(1)} GB; ${(freeBytes / 1024 ** 3).toFixed(1)} GB is available.`);
-      }
       const twoGb = 2 * 1024 * 1024 * 1024;
       if (sourceStats.size > twoGb) {
         const confirmation = await dialog.showMessageBox(mainWindow, {
           type: 'warning',
           title: 'Large profile import',
           message: 'This profile import file is larger than 2 GB.',
-          detail: `The selected file is ${(sourceStats.size / 1024 ** 3).toFixed(2)} GB. Opening it may use substantial memory and disk space. Do you want to proceed?`,
+          detail: `The selected file is ${(sourceStats.size / 1024 ** 3).toFixed(2)} GB. Extracted files can require substantially more disk space than the archive. Progress will count files, not bytes. Do you want to proceed?`,
           buttons: ['Proceed', 'Cancel'],
           defaultId: 0,
           cancelId: 1,
@@ -5330,6 +5525,39 @@ ipcMain.handle('launcher:import-profile', async () => {
       imported.folderName = getProfileFolderName(imported.name, imported.id);
       createdRoot = getMinecraftRootFor(imported);
       ensureLauncherGameFolders(createdRoot);
+      const files = Array.isArray(index.files) ? index.files : [];
+      emitProfileImportProgress({ phase: 'extract-scan', message: 'Scanning archive and estimating disk space', percent: null });
+      const archiveInfo = await inspectMrpackOverrides(sourcePath, progress => {
+        emitProfileImportProgress({
+          phase: 'extract-scan',
+          message: `Scanning archive · ${progress.scanned.toLocaleString()} entries checked`,
+          percent: null,
+        });
+      });
+      let expectedDownloadBytes = 0;
+      let unknownDownloadSizes = 0;
+      for (const file of files) {
+        const size = Number(file.fileSize);
+        if (Number.isSafeInteger(size) && size >= 0) {
+          expectedDownloadBytes += size;
+          if (!Number.isSafeInteger(expectedDownloadBytes)) throw new Error('The modpack declares an invalid total download size.');
+        }
+        else unknownDownloadSizes += 1;
+      }
+      const unknownSizeAllowance = unknownDownloadSizes ? sourceStats.size : 0;
+      const requiredBytes = Math.ceil((archiveInfo.uncompressedBytes + expectedDownloadBytes + unknownSizeAllowance) * 1.1);
+      let freeBytes = null;
+      if (fs.statfsSync) {
+        try {
+          const stats = fs.statfsSync(createdRoot);
+          freeBytes = stats.bsize * stats.bavail;
+        } catch (error) {
+          console.warn('[Profile import] Could not determine destination disk space.', error);
+        }
+      }
+      if (freeBytes !== null && freeBytes < requiredBytes) {
+        throw new Error(`Not enough free disk space for this import. It may need approximately ${(requiredBytes / 1024 ** 3).toFixed(1)} GB; ${(freeBytes / 1024 ** 3).toFixed(1)} GB is available.`);
+      }
       const warnings = [];
       const projectCache = new Map();
       const getProject = async projectId => {
@@ -5342,12 +5570,11 @@ ipcMain.handle('launcher:import-profile', async () => {
         }
         return projectCache.get(projectId);
       };
-      const files = Array.isArray(index.files) ? index.files : [];
       emitStatus(`Importing profile · downloading 0/${files.length} files`);
       const downloadResults = await runProfileImportDownloads({
         files,
         destinationRoot: createdRoot,
-        concurrency: 4,
+        concurrency: sourceStats.size > twoGb ? 2 : 4,
         onProgress: progress => {
           const percent = Math.min(88, Math.floor(4 + ((progress.percent / 100) * 84)));
           const fileLabel = progress.currentFile ? ` · ${path.basename(progress.currentFile)}` : '';
@@ -5435,8 +5662,26 @@ ipcMain.handle('launcher:import-profile', async () => {
       await Promise.all(metadataWorkers);
       imported.mods.push(...importedModEntries);
       emitStatus('Importing profile · extracting included files...');
-      emitProfileImportProgress({ phase: 'extract', message: 'Extracting included files · this may take a little while', percent: null });
-      await extractMrpackOverrides(sourcePath, createdRoot);
+      emitProfileImportProgress({ phase: 'extract', message: 'Extracting included files · progress counts archive entries', percent: 88 });
+      await extractMrpackOverrides(sourcePath, createdRoot, progress => {
+        if (progress.phase === 'scan') {
+          emitProfileImportProgress({
+            phase: 'extract-scan',
+            message: `Scanning archive · ${progress.scanned.toLocaleString()} entries checked`,
+            percent: null,
+          }, archiveInfo);
+          return;
+        }
+        const percent = Math.min(95, 88 + Math.floor((progress.percent / 100) * 7));
+        emitProfileImportProgress({
+          phase: 'extract',
+          message: `Extracting included files · ${progress.completed.toLocaleString()}/${progress.total.toLocaleString()} archive entries`,
+          percent,
+          completed: progress.completed,
+          total: progress.total,
+        });
+        emitStatus(`Importing profile · extracting ${progress.completed}/${progress.total} entries`);
+      });
       emitProfileImportProgress({ phase: 'finalize', message: 'Finishing profile setup', percent: 96 });
       launcherState.profiles.push(imported);
       launcherState.activeProfileId = imported.id;
@@ -5702,6 +5947,57 @@ ipcMain.handle('launcher:restore-profile', async (_event, profileId) => {
     if (fs.existsSync(restoredProfilePath)) fs.rmSync(restoredProfilePath, { force: true });
     scheduleStateWrite();
     return { ok: true, path: latest, state: launcherState };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('launcher:drop-profile-files', async (_event, payload = {}) => {
+  try {
+    const profile = launcherState.profiles.find(item => item.id === String(payload?.profileId || ''));
+    if (!profile) throw new Error('Profile not found.');
+    const sourcePaths = Array.isArray(payload?.sourcePaths) ? payload.sourcePaths : [];
+    if (!sourcePaths.length) throw new Error('No files were provided.');
+    if (sourcePaths.length > 50) throw new Error('Drop at most 50 items into a profile at a time.');
+    const rootPath = getMinecraftRootFor(profile);
+    const results = [];
+    for (const sourcePath of sourcePaths) {
+      const classification = classifyProfileDrop(String(sourcePath || ''));
+      if (classification.type === 'unknown') {
+        results.push({ sourcePath, ok: false, error: classification.reason, type: 'unknown' });
+        continue;
+      }
+      try {
+        const folderByType = {
+          mods: 'mods',
+          resourcepack: 'resourcepacks',
+          shader: 'shaderpacks',
+          world: 'saves',
+          'world-archive': 'saves',
+        };
+        const destinationDirectory = path.join(rootPath, folderByType[classification.type]);
+        fs.mkdirSync(rootPath, { recursive: true });
+        fs.mkdirSync(destinationDirectory, { recursive: true });
+        const rootRealPath = fs.realpathSync(rootPath);
+        const destinationRealPath = fs.realpathSync(destinationDirectory);
+        const relativeDestination = path.relative(rootRealPath, destinationRealPath);
+        if (relativeDestination && (relativeDestination.startsWith('..') || path.isAbsolute(relativeDestination))) {
+          throw new Error('The profile destination resolves outside the profile folder.');
+        }
+        const copies = classification.type === 'world-archive'
+          ? [{ ok: true, destinationPath: extractWorldArchive(classification.sourcePaths[0], destinationDirectory) }]
+          : classification.sourcePaths.map(item => ({ ok: true, destinationPath: copyPathWithoutOverwrite(item, destinationDirectory) }));
+        results.push({
+          sourcePath,
+          type: classification.type,
+          ok: true,
+          destinations: copies.map(copy => path.relative(rootPath, copy.destinationPath).split(path.sep).join('/')),
+        });
+      } catch (error) {
+        results.push({ sourcePath, type: classification.type, ok: false, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return { ok: true, results };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -6066,7 +6362,9 @@ async function startServerProcess(server, startupTask = null) {
   ensureServerTypeFolders(server);
   const serverType = String(server?.serverType || 'paper').toLowerCase();
   if (server.networkingMode === 'playit') {
-    const playitResult = playitManager.start();
+    const playitResult = playitManager.start({
+      keepRunningOnClose: launcherState.settings?.playitKeepRunningOnClose === true,
+    });
     if (!playitResult?.ok) {
       emitServerConsole(server.id, 'warn', playitResult?.error || 'Playit agent could not be started. The server will remain local-only.');
     }
@@ -6227,6 +6525,7 @@ async function startServerProcess(server, startupTask = null) {
     cwd: rootPath,
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true,
+    detached: launcherState.settings?.playitKeepRunningOnClose === true,
   });
   runtime.pid = processInfo.pid || null;
   runtime.processStartTime = Date.now();
@@ -6520,7 +6819,7 @@ async function startServerById(serverId) {
         server: adopted || getServerById(server.id),
       };
     }
-    if (hasWorldSessionLock(server)) {
+    if (hasWorldSessionLock(server) && shouldPromptForStaleWorldLock(server.runtime)) {
       const worldPath = path.join(getServerRoot(server.id), server.worldName || 'world');
       const lockPath = path.join(worldPath, 'session.lock');
       const decision = await dialog.showMessageBox(mainWindow, {
@@ -7060,6 +7359,33 @@ ipcMain.handle('server:upload-file', async (_event, payload) => {
     const destination = resolveServerScopedPath(serverId, path.join(path.relative(getServerRoot(serverId), folderPath), path.basename(sourcePath)));
     fs.copyFileSync(sourcePath, destination);
     return { ok: true, path: path.relative(getServerRoot(serverId), destination).split(path.sep).join('/') };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('server:drop-files', async (_event, payload = {}) => {
+  try {
+    const serverId = String(payload?.serverId || '');
+    if (!getServerById(serverId)) throw new Error('Server not found.');
+    const sourcePaths = Array.isArray(payload?.sourcePaths) ? payload.sourcePaths : [];
+    if (!sourcePaths.length) throw new Error('No files were provided.');
+    if (sourcePaths.length > 100) throw new Error('Drop at most 100 items into a server folder at a time.');
+    const destinationDirectory = resolveServerScopedPath(serverId, payload?.path || '.');
+    if (!fs.statSync(destinationDirectory).isDirectory()) throw new Error('The selected server destination is not a folder.');
+    const serverRootRealPath = fs.realpathSync(getServerRoot(serverId));
+    const destinationRealPath = fs.realpathSync(destinationDirectory);
+    const relativeDestination = path.relative(serverRootRealPath, destinationRealPath);
+    if (relativeDestination && (relativeDestination.startsWith('..') || path.isAbsolute(relativeDestination))) {
+      throw new Error('The selected server destination resolves outside the server folder.');
+    }
+    const results = copyDropItems(sourcePaths, destinationDirectory).map(result => ({
+      ...result,
+      destinationPath: result.ok
+        ? path.relative(getServerRoot(serverId), result.destinationPath).split(path.sep).join('/')
+        : undefined,
+    }));
+    return { ok: true, results };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -10327,6 +10653,8 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
   const requestedProfileId = payload?.profileId || null;
   const requestedAccountId = payload?.accountId || null;
   let launchProfileId = requestedProfileId;
+  let baldMenuBridge = null;
+  let baldMenuConfigPath = null;
   try {
     const account = launcherState.accounts.find(item => item.id === requestedAccountId) || getActiveAccount();
     if (!account) throw new Error('No account selected');
@@ -10387,6 +10715,27 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       : Math.min(32, Math.max(1, Number(settings.memoryMax) || 6));
     const minecraftRoot = getMinecraftRootFor(profile.id);
     ensureLauncherGameFolders(minecraftRoot);
+    const baldMenuSettings = normalizeBaldMenuSettings(settings);
+    const baldMenuRequested = baldMenuSettings.minecraftMenuEnabled
+      || baldMenuSettings.minecraftPerformanceButtonEnabled;
+    let baldMenuModInstalled = false;
+    if (baldMenuRequested && isSupportedBaldMenuTarget(profile)) {
+      const profileRootStat = fs.lstatSync(minecraftRoot);
+      if (!profileRootStat.isDirectory() || profileRootStat.isSymbolicLink()) {
+        throw new Error('The profile folder must be a real directory before installing the Bald in-game menu.');
+      }
+      const modPath = app.isPackaged
+        ? path.join(process.resourcesPath, 'baldlauncher', 'bald-launcher-client.jar')
+        : path.join(__dirname, 'minecraft-mod', 'build', 'libs', 'bald-launcher-client-0.1.0.jar');
+      if (!fs.existsSync(modPath)) {
+        throw new Error('The Bald in-game menu mod is missing. Rebuild Bald Launcher with its Minecraft mod target.');
+      }
+      installBaldMenuMod({ sourceJar: modPath, modsDirectory: path.join(minecraftRoot, 'mods') });
+      baldMenuModInstalled = true;
+      emitLog(profile.name, 'info', 'Bald in-game menus are enabled for Fabric 1.21.11.', profile.id);
+    } else if (baldMenuRequested) {
+      emitLog(profile.name, 'info', 'Bald in-game menus currently support Fabric 1.21.11 only; this profile will launch unchanged.', profile.id);
+    }
     const sharedCacheRoot = getSharedCacheRoot();
     fs.mkdirSync(path.join(sharedCacheRoot, 'assets'), { recursive: true });
     fs.mkdirSync(path.join(sharedCacheRoot, 'libraries'), { recursive: true });
@@ -10443,6 +10792,26 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
         versionName: versionNumber,
       },
     );
+    const baldMenuJvmArguments = [];
+    if (baldMenuModInstalled) {
+      baldMenuBridge = await createBaldMenuBridge({
+        profileId: profile.id,
+        accounts: launcherState.accounts,
+        onAction: emitBaldMenuAction,
+      });
+      const runtimeDirectory = path.join(app.getPath('userData'), 'bald-menu-runtime');
+      fs.mkdirSync(runtimeDirectory, { recursive: true });
+      baldMenuConfigPath = path.join(runtimeDirectory, `${crypto.randomUUID()}.json`);
+      const baldMenuConfig = buildBaldMenuConfig({
+        profileId: profile.id,
+        settings: baldMenuSettings,
+        activeAccountId: account.id,
+        accounts: launcherState.accounts,
+        bridge: baldMenuBridge,
+      });
+      fs.writeFileSync(baldMenuConfigPath, JSON.stringify(baldMenuConfig), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+      baldMenuJvmArguments.push(`-Dbaldlauncher.config=${baldMenuConfigPath}`);
+    }
     const child = await profileLauncher.launch({
       root: minecraftRoot,
       version: versionNumber === profile.mcVersion
@@ -10450,7 +10819,7 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
         : { number: profile.mcVersion, type: 'custom', custom: versionNumber },
       memory: { min: '1G', max: `${Math.min(32, Math.max(1, memoryMax))}G` },
       javaPath: javaExecutable,
-      customArgs: [...jvmArguments, ...loaderJvmArguments],
+      customArgs: [...jvmArguments, ...loaderJvmArguments, ...baldMenuJvmArguments],
       authorization,
       overrides: {
         gameDirectory: minecraftRoot,
@@ -10472,9 +10841,12 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
         jvmArguments,
         memoryMaxGb: memoryMax,
         versionNumber,
+        baldMenuBridge,
+        baldMenuConfigPath,
       });
       session.pid = child.pid || null;
       session.running = true;
+      startProfilePlaytimeTracking(profile, session);
       scheduleStateWrite();
       emitLog(profile.name, 'info', `Java ${getRequiredJavaVersion(profile.mcVersion)}: ${javaExecutable}`, profile.id);
       emitLog(profile.name, 'info', `JVM arguments: ${jvmArguments.join(' ') || 'Java defaults'}`, profile.id);
@@ -10483,6 +10855,19 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       child.stdout?.on('data', data => String(data).split(/\r?\n/).forEach(line => emitLog(profile.name, 'normal', line, profile.id)));
       child.stderr?.on('data', data => String(data).split(/\r?\n/).forEach(line => emitLog(profile.name, 'warn', line, profile.id)));
       child.on('exit', (code, signal) => {
+        stopProfilePlaytimeTracking(profile.id);
+        if (baldMenuBridge) {
+          baldMenuBridge.close().catch(error => console.error('[Bald Menu] Could not close the local bridge:', error));
+          baldMenuBridge = null;
+        }
+        if (baldMenuConfigPath) {
+          try {
+            fs.unlinkSync(baldMenuConfigPath);
+          } catch (error) {
+            if (error.code !== 'ENOENT') console.error('[Bald Menu] Could not remove temporary menu configuration:', error);
+          }
+          baldMenuConfigPath = null;
+        }
         runningProcesses.delete(profile.id);
         session.running = false;
         session.pid = null;
@@ -10520,6 +10905,16 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
 
     return { ok: true, profileId: profile.id, profileName: profile.name, version: versionNumber, accountName: account.name, pid: child?.pid || null };
   } catch (error) {
+    if (baldMenuBridge) {
+      await baldMenuBridge.close().catch(closeError => console.error('[Bald Menu] Could not close the local bridge after launch failure:', closeError));
+    }
+    if (baldMenuConfigPath) {
+      try {
+        fs.unlinkSync(baldMenuConfigPath);
+      } catch (cleanupError) {
+        if (cleanupError.code !== 'ENOENT') console.error('[Bald Menu] Could not remove temporary menu configuration:', cleanupError);
+      }
+    }
     const message = error instanceof Error ? error.message : String(error);
     const failedSession = launchProfileId && getSession(launchProfileId);
     if (failedSession && !runningProcesses.has(launchProfileId)) {
@@ -10567,7 +10962,9 @@ ipcMain.handle('launcher:stop', async (_event, payload) => {
     console.error('Failed to stop Minecraft:', error);
   }
   runningProcesses.delete(profileId);
+  stopProfilePlaytimeTracking(profileId);
   if (session) { session.running = false; session.pid = null; scheduleStateWrite(); }
+  emitLauncherStateChanged();
   emitProcessState(false, profile, pid);
   emitStatus('Ready');
   return { ok: true, running: false };
@@ -10578,7 +10975,10 @@ function restoreRunningSessions() {
     if (!session.running || !session.pid) continue;
     try {
       process.kill(Number(session.pid), 0);
+      const profile = launcherState.profiles.find(item => item.id === session.profileId);
+      if (profile) startProfilePlaytimeTracking(profile, session, Date.now());
     } catch {
+      stopProfilePlaytimeTracking(session.profileId);
       session.running = false;
       session.pid = null;
     }
@@ -10689,7 +11089,12 @@ let playitShutdownPending = false;
 app.on('before-quit', event => {
   launcherStateStore.clearWriteTimer();
   if (writeStatePending) flushStateWrite();
-  if (quittingAfterPlayitStop || !playitManager.state().pid) return;
+  const playitState = playitManager.state();
+  if (quittingAfterPlayitStop || !playitState.pid) return;
+  if (launcherState.settings?.playitKeepRunningOnClose === true && playitState.persistent) {
+    playitManager.detach();
+    return;
+  }
   event.preventDefault();
   if (playitShutdownPending) return;
   playitShutdownPending = true;
