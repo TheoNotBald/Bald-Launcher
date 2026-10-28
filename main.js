@@ -66,6 +66,7 @@ const {
   validateRendererBundleSelection,
 } = require('./src/shared/performance-runtime');
 const { configureUpdaterFeed } = require('./src/shared/updater-feed');
+const { createStateSafetySnapshot } = require('./src/shared/update-snapshot');
 const { normalizeAccountCosmetics, getAccountCosmetics, setAccountSelection, pushRecentItem } = require('./src/cosmetics/account/cosmetic-state');
 const { createCosmeticLibrary } = require('./src/cosmetics/library/cosmetic-library');
 const { resolveCustomSkinLoader } = require('./src/cosmetics/custom-skin-loader/resolver');
@@ -4329,11 +4330,7 @@ ipcMain.handle('launcher:apply-update', async () => {
   }
   try {
     const backupRoot = path.join(app.getPath('userData'), 'update-backups');
-    fs.mkdirSync(backupRoot, { recursive: true });
-    const backupPath = path.join(backupRoot, `launcher-state-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
-    if (stateFilePath && fs.existsSync(stateFilePath)) fs.copyFileSync(stateFilePath, backupPath);
-    const backups = fs.readdirSync(backupRoot).sort().reverse();
-    for (const oldBackup of backups.slice(10)) fs.rmSync(path.join(backupRoot, oldBackup), { force: true });
+    createStateSafetySnapshot({ stateFilePath, backupRoot });
   } catch (error) {
     console.error('[Updater] Could not create state safety snapshot:', error);
     return { ok: false, error: 'Could not create a safety snapshot of launcher data. The update was not started.' };
