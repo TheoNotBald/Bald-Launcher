@@ -14,6 +14,7 @@ nsis:
   createStartMenuShortcut: true
 files:
   - main.js
+  - drop-routing.js
   - preload.js
   - playit-manager.js
   - bald_launcher_v7.html

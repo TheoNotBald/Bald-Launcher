@@ -430,6 +430,18 @@ test('launcher uses its dark draggable titlebar instead of the Windows white tit
   assert.doesNotMatch(html, /class="sidebar-brand-mark"/);
 });
 
+test('Windows release packages every root module required by the main process', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  const builder = fs.readFileSync(path.join(__dirname, '..', 'electron-builder.yml'), 'utf8');
+
+  for (const match of main.matchAll(/require\(['"]\.\/([^'"]+)['"]\)/g)) {
+    if (match[1].includes('/')) continue;
+    const dependency = `${match[1]}.js`;
+    assert.ok(fs.existsSync(path.join(__dirname, '..', dependency)), `missing main-process module ${dependency}`);
+    assert.ok(builder.includes(`- ${dependency}`), `electron-builder must package ${dependency}`);
+  }
+});
+
 test('resource pack cards recover pack icons from imported archives', () => {
   const studio = fs.readFileSync(path.join(__dirname, '..', 'src', 'resource-packs', 'resource-pack-studio.js'), 'utf8');
   assert.match(studio, /function getPackIconDataUrl\(entry\)/);
