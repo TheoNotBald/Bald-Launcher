@@ -18,7 +18,6 @@ public final class BaldUi {
     public static final int TEXT = 0xFFF0F5F4;
     public static final int MUTED = 0xFFB1C0BE;
     private static final Identifier GLASS_TEXTURE_ID = Identifier.of("baldlauncher", "ui/glass_snapshot");
-    private static final int PANEL = 0x70141B20;
     private static final int BORDER = 0x738FC8C7;
     private static final int BORDER_HIGHLIGHT = 0xC3E4F8F5;
     private static GlassFramebufferTexture glassTexture;
@@ -35,6 +34,8 @@ public final class BaldUi {
 
     public static void captureBackground(int screenWidth, int screenHeight,
                                          int x, int y, int width, int height) {
+        glassRegionWidth = 0;
+        glassRegionHeight = 0;
         MinecraftClient client = MinecraftClient.getInstance();
         Framebuffer framebuffer = client.getFramebuffer();
         GpuTexture source = framebuffer.getColorAttachment();
@@ -89,8 +90,9 @@ public final class BaldUi {
     public static void drawPanel(DrawContext context, int x, int y, int width, int height) {
         int right = x + width;
         int bottom = y + height;
+        drawGlassSample(context, x + 8, y + 8, width - 16, height - 16, 0);
         rounded(context, x - 1, y + 2, right + 1, bottom + 4, 14, 0x35000000);
-        rounded(context, x, y, right, bottom, 12, PANEL);
+        rounded(context, x, y, right, bottom, 12, 0xA0141B20);
         outline(context, x, y, right, bottom, 12, BORDER);
         rounded(context, x + 1, y + 1, right - 1, y + 3, 11, 0x16FFFFFF);
     }
@@ -105,7 +107,6 @@ public final class BaldUi {
                 : blendColor(prominent ? 0x2299C7C3 : 0x1899BDB9,
                 prominent ? 0x3CC8E7E2 : 0x30B8D9D5, hover);
         rounded(context, x - 1, y + 1, right + 1, bottom + 3, radius + 1, 0x18000000);
-        drawGlassSample(context, x, y, width, height, radius, hover);
         rounded(context, x, y, right, bottom, radius, fill);
         outline(context, x, y, right, bottom, radius,
                 !active ? 0x408FC8C7 : blendColor(BORDER, BORDER_HIGHLIGHT, hover));
@@ -121,38 +122,21 @@ public final class BaldUi {
     }
 
     private static void drawGlassSample(DrawContext context, int x, int y, int width, int height,
-                                       int radius, float hover) {
-        if (glassTexture == null || x < glassOriginX || y < glassOriginY
+                                       float hover) {
+        if (width <= 0 || height <= 0 || glassTexture == null || glassScaleX <= 0 || glassScaleY <= 0
+                || x < glassOriginX || y < glassOriginY
                 || x + width > glassOriginX + glassRegionWidth / glassScaleX
                 || y + height > glassOriginY + glassRegionHeight / glassScaleY) {
             return;
         }
-
-        int rows = Math.max(6, Math.min(10, height / 4));
-        int columns = 3;
-        for (int row = 0; row < rows; row++) {
-            int rowTop = y + row * height / rows;
-            int rowBottom = y + (row + 1) * height / rows;
-            int inset = cornerInset(rowTop - y, height, radius);
-            int left = x + inset;
-            int right = x + width - inset;
-            if (right <= left) continue;
-
-            for (int column = 0; column < columns; column++) {
-                int cellLeft = left + (right - left) * column / columns;
-                int cellRight = left + (right - left) * (column + 1) / columns;
-                float refractX = column == 0 ? -2.5f : column == columns - 1 ? 2.5f : 0;
-                float refractY = row < 2 ? -2.5f : row >= rows - 2 ? 2.5f : 0;
-                float u = (cellLeft + refractX) * glassScaleX;
-                float v = (rowTop + refractY) * glassScaleY;
-                int sampleWidth = Math.max(1, Math.round((cellRight - cellLeft) * glassScaleX));
-                int sampleHeight = Math.max(1, Math.round((rowBottom - rowTop) * glassScaleY));
-                int tint = blendColor(0xCFE8F1EE, 0xE8F4F8F6, hover);
-                context.drawTexture(RenderPipelines.GUI_TEXTURED, GLASS_TEXTURE_ID,
-                        cellLeft, rowTop, u, v, cellRight - cellLeft, rowBottom - rowTop,
-                        sampleWidth, sampleHeight, glassTextureWidth, glassTextureHeight, tint);
-            }
-        }
+        float u = x * glassScaleX;
+        float v = y * glassScaleY;
+        int sampleWidth = Math.max(1, Math.round(width * glassScaleX));
+        int sampleHeight = Math.max(1, Math.round(height * glassScaleY));
+        int tint = blendColor(0x66DDE9E6, 0x80F4F8F6, hover);
+        context.drawTexture(RenderPipelines.GUI_TEXTURED, GLASS_TEXTURE_ID,
+                x, y, u, v, width, height, sampleWidth, sampleHeight,
+                glassTextureWidth, glassTextureHeight, tint);
     }
 
     public static int blendColor(int from, int to, float amount) {

@@ -10,7 +10,10 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.GameMenuScreen;
+import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
+import net.minecraft.client.gui.Element;
+import net.minecraft.client.gui.widget.ClickableWidget;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
@@ -26,6 +29,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public final class BaldLauncherClient implements ClientModInitializer {
@@ -106,6 +110,7 @@ public final class BaldLauncherClient implements ClientModInitializer {
     private static final HttpClient HTTP = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(2))
             .build();
+    private static boolean clientModEnabled = true;
     private static boolean enabled;
     private static boolean performanceButtonEnabled;
     private static boolean inGameButtonEnabled = true;
@@ -122,6 +127,7 @@ public final class BaldLauncherClient implements ClientModInitializer {
     private static boolean launcherButtonSetting = true;
     private static boolean launcherHudSetting;
     private static boolean launcherConfigurationLoaded;
+    private static boolean initialized;
     private static boolean hudCardStyleEnabled = true;
     private static int hudAccentIndex;
     private static final int[] HUD_ACCENT_COLORS = {
@@ -140,10 +146,14 @@ public final class BaldLauncherClient implements ClientModInitializer {
     private static int clickTimestampIndex;
 
     @Override
-    public void onInitializeClient() {
+    public synchronized void onInitializeClient() {
+        if (initialized) return;
+        initialized = true;
         loadConfiguration();
         loadProfilePreferences();
-        KeyBinding.Category category = KeyBinding.Category.create(Identifier.of("baldlauncher", "general"));
+        if (!clientModEnabled) return;
+        KeyBinding.Category category = KeyBinding.Category.create(
+                Identifier.of("baldlauncher", "client_controls"));
         openSettingsKey = KeyBindingHelper.registerKeyBinding(
                 new KeyBinding(
                         "key.baldlauncher.open_settings",
@@ -204,12 +214,11 @@ public final class BaldLauncherClient implements ClientModInitializer {
         if (configFile.isEmpty()) return;
         try {
             JsonObject config = JsonParser.parseString(Files.readString(Path.of(configFile))).getAsJsonObject();
-            enabled = config.get("enabled").getAsBoolean();
-            performanceButtonEnabled = config.get("performanceButtonEnabled").getAsBoolean();
-            inGameButtonEnabled = config.has("inGameButtonEnabled")
-                    ? config.get("inGameButtonEnabled").getAsBoolean() : true;
-            performanceHudEnabled = config.has("performanceHudEnabled")
-                    && config.get("performanceHudEnabled").getAsBoolean();
+            clientModEnabled = readConfigBoolean(config, "clientModEnabled", true);
+            enabled = readConfigBoolean(config, "enabled", false);
+            performanceButtonEnabled = readConfigBoolean(config, "performanceButtonEnabled", false);
+            inGameButtonEnabled = readConfigBoolean(config, "inGameButtonEnabled", true);
+            performanceHudEnabled = readConfigBoolean(config, "performanceHudEnabled", false);
             launcherMenuSetting = enabled;
             launcherPerformanceButtonSetting = performanceButtonEnabled;
             launcherButtonSetting = inGameButtonEnabled;
@@ -227,12 +236,23 @@ public final class BaldLauncherClient implements ClientModInitializer {
             accounts = List.copyOf(loadedAccounts);
             launcherConfigurationLoaded = true;
         } catch (Exception error) {
+            clientModEnabled = false;
             enabled = false;
             performanceButtonEnabled = false;
             inGameButtonEnabled = false;
             performanceHudEnabled = false;
             System.err.println("[Bald Launcher] Could not read menu integration settings: " + error.getMessage());
         }
+    }
+
+    private static boolean readConfigBoolean(JsonObject config, String key, boolean fallback) {
+        if (!config.has(key) || config.get(key).isJsonNull()) return fallback;
+        if (!config.get(key).isJsonPrimitive() || !config.getAsJsonPrimitive(key).isBoolean()) {
+            System.err.println("[Bald Launcher] Invalid boolean in launcher config for "
+                    + key + "; using the safe default.");
+            return fallback;
+        }
+        return config.get(key).getAsBoolean();
     }
 
     private static Path getPreferencesPath() {
@@ -244,30 +264,30 @@ public final class BaldLauncherClient implements ClientModInitializer {
         if (!Files.exists(preferencesPath)) return;
         try {
             JsonObject preferences = JsonParser.parseString(Files.readString(preferencesPath)).getAsJsonObject();
-            boolean previousLauncherButton = preferences.has("launcherButtonSetting")
-                    ? preferences.get("launcherButtonSetting").getAsBoolean() : launcherButtonSetting;
-            boolean previousLauncherHud = preferences.has("launcherHudSetting")
-                    ? preferences.get("launcherHudSetting").getAsBoolean() : launcherHudSetting;
-            boolean previousLauncherMenu = preferences.has("launcherMenuSetting")
-                    ? preferences.get("launcherMenuSetting").getAsBoolean() : launcherMenuSetting;
-            boolean previousLauncherPerformanceButton = preferences.has("launcherPerformanceButtonSetting")
-                    ? preferences.get("launcherPerformanceButtonSetting").getAsBoolean()
-                    : launcherPerformanceButtonSetting;
-            if (preferences.has("menuEnabled")
-                    && (!launcherConfigurationLoaded || previousLauncherMenu == launcherMenuSetting)) {
+            boolean previousLauncherButton = preferenceBoolean(preferences, "launcherButtonSetting", false);
+            boolean previousLauncherHud = preferenceBoolean(preferences, "launcherHudSetting", false);
+            boolean previousLauncherMenu = preferenceBoolean(preferences, "launcherMenuSetting", false);
+            boolean previousLauncherPerformanceButton =
+                    preferenceBoolean(preferences, "launcherPerformanceButtonSetting", false);
+            if (hasBooleanPreference(preferences, "menuEnabled")
+                    && (!launcherConfigurationLoaded || hasBooleanPreference(preferences, "launcherMenuSetting")
+                    && previousLauncherMenu == launcherMenuSetting)) {
                 enabled = preferences.get("menuEnabled").getAsBoolean();
             }
-            if (preferences.has("performanceButtonEnabled")
+            if (hasBooleanPreference(preferences, "performanceButtonEnabled")
                     && (!launcherConfigurationLoaded
-                    || previousLauncherPerformanceButton == launcherPerformanceButtonSetting)) {
+                    || hasBooleanPreference(preferences, "launcherPerformanceButtonSetting")
+                    && previousLauncherPerformanceButton == launcherPerformanceButtonSetting)) {
                 performanceButtonEnabled = preferences.get("performanceButtonEnabled").getAsBoolean();
             }
-            if (preferences.has("inGameButtonEnabled")
-                    && (!launcherConfigurationLoaded || previousLauncherButton == launcherButtonSetting)) {
+            if (hasBooleanPreference(preferences, "inGameButtonEnabled")
+                    && (!launcherConfigurationLoaded || hasBooleanPreference(preferences, "launcherButtonSetting")
+                    && previousLauncherButton == launcherButtonSetting)) {
                 inGameButtonEnabled = preferences.get("inGameButtonEnabled").getAsBoolean();
             }
-            if (preferences.has("performanceHudEnabled")
-                    && (!launcherConfigurationLoaded || previousLauncherHud == launcherHudSetting)) {
+            if (hasBooleanPreference(preferences, "performanceHudEnabled")
+                    && (!launcherConfigurationLoaded || hasBooleanPreference(preferences, "launcherHudSetting")
+                    && previousLauncherHud == launcherHudSetting)) {
                 performanceHudEnabled = preferences.get("performanceHudEnabled").getAsBoolean();
             }
             fpsHudEnabled = preferenceBoolean(preferences, "fpsHudEnabled", fpsHudEnabled);
@@ -289,7 +309,19 @@ public final class BaldLauncherClient implements ClientModInitializer {
     }
 
     private static boolean preferenceBoolean(JsonObject preferences, String key, boolean fallback) {
-        return preferences.has(key) ? preferences.get(key).getAsBoolean() : fallback;
+        if (!preferences.has(key) || preferences.get(key).isJsonNull()) return fallback;
+        if (!preferences.get(key).isJsonPrimitive()
+                || !preferences.getAsJsonPrimitive(key).isBoolean()) {
+            System.err.println("[Bald Launcher] Invalid in-game preference for " + key
+                    + "; using the safe default.");
+            return fallback;
+        }
+        return preferences.get(key).getAsBoolean();
+    }
+
+    private static boolean hasBooleanPreference(JsonObject preferences, String key) {
+        return preferences.has(key) && preferences.get(key).isJsonPrimitive()
+                && preferences.getAsJsonPrimitive(key).isBoolean();
     }
 
     public static void saveVisualPreferences(VisualPreferences value) throws Exception {
@@ -325,6 +357,10 @@ public final class BaldLauncherClient implements ClientModInitializer {
         coordinatesHudEnabled = value.coordinatesHudEnabled();
         cpsHudEnabled = value.cpsHudEnabled();
         keystrokesHudEnabled = value.keystrokesHudEnabled();
+        if (!performanceHudEnabled || !cpsHudEnabled) {
+            Arrays.fill(CLICK_TIMESTAMPS, 0L);
+            clickTimestampIndex = 0;
+        }
     }
 
     public static synchronized void saveHudAppearance(boolean cardStyleEnabled, int accentIndex) throws Exception {
@@ -397,7 +433,8 @@ public final class BaldLauncherClient implements ClientModInitializer {
 
     public static void registerMouseClick(int button) {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player != null && client.currentScreen == null
+        if (isPerformanceHudEnabled() && isCpsHudEnabled()
+                && client.player != null && client.currentScreen == null
                 && (button == GLFW.GLFW_MOUSE_BUTTON_LEFT || button == GLFW.GLFW_MOUSE_BUTTON_RIGHT)) {
             CLICK_TIMESTAMPS[clickTimestampIndex] = System.nanoTime();
             clickTimestampIndex = (clickTimestampIndex + 1) % CLICK_TIMESTAMPS.length;
@@ -439,7 +476,8 @@ public final class BaldLauncherClient implements ClientModInitializer {
 
     public static boolean handleInGameButtonClick(double mouseX, double mouseY) {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (!inGameButtonEnabled || client.player == null || client.world == null || client.currentScreen != null) {
+        if (!isInGameButtonEnabled() || client.player == null || client.world == null
+                || client.currentScreen != null) {
             return false;
         }
         BaldHudRenderer.HudWidget button = BaldHudRenderer.getInGameButtonWidget();
@@ -450,54 +488,103 @@ public final class BaldLauncherClient implements ClientModInitializer {
     }
 
     public static boolean isEnabled() {
-        return enabled;
+        return clientModEnabled && enabled;
     }
 
     public static boolean shouldReplaceTitleMenu() {
-        return enabled;
+        return clientModEnabled && enabled;
     }
 
     public static boolean shouldReplacePauseMenu() {
-        return enabled;
+        return clientModEnabled && enabled;
     }
 
     public static boolean shouldAddPerformanceButton() {
-        return !enabled && performanceButtonEnabled;
+        return clientModEnabled && !enabled && performanceButtonEnabled;
+    }
+
+    public static void refreshMenuAfterToggle() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        boolean useBaldMenus = clientModEnabled && enabled;
+        if (client.player != null && client.world != null) {
+            client.setScreen(useBaldMenus
+                    ? new BaldPauseScreen()
+                    : new GameMenuScreen(true));
+        } else {
+            client.setScreen(useBaldMenus ? new BaldMainMenuScreen() : new TitleScreen());
+        }
+    }
+
+    public static void addPerformanceButton(Screen screen) {
+        if (!shouldAddPerformanceButton() || screen.width < 100 || screen.height < 32) return;
+        List<Element> children = ((com.baldlauncher.client.mixin.ScreenAccessor) screen).bald$getChildren();
+        if (children.stream().anyMatch(BaldClientButtonWidget.class::isInstance)) return;
+
+        int buttonWidth = Math.min(142, screen.width - 16);
+        int buttonHeight = 24;
+        int right = screen.width - buttonWidth - 8;
+        int bottom = screen.height - buttonHeight - 8;
+        int[][] candidates = {
+                {right, 8}, {8, 8}, {right, bottom}, {8, bottom},
+                {(screen.width - buttonWidth) / 2, 8}
+        };
+        String label = screen.width < 220 ? "Bald UI" : "Bald Performance";
+        for (int[] candidate : candidates) {
+            int x = candidate[0];
+            int y = candidate[1];
+            boolean occupied = false;
+            for (Element child : children) {
+                if (child instanceof ClickableWidget widget
+                        && x < widget.getX() + widget.getWidth()
+                        && x + buttonWidth > widget.getX()
+                        && y < widget.getY() + widget.getHeight()
+                        && y + buttonHeight > widget.getY()) {
+                    occupied = true;
+                    break;
+                }
+            }
+            if (occupied) continue;
+            ((com.baldlauncher.client.mixin.ScreenAccessor) screen).bald$addDrawableChild(
+                    new BaldClientButtonWidget(x, y, buttonWidth, buttonHeight, Text.literal(label),
+                            true, true, () -> MinecraftClient.getInstance().setScreen(
+                            new BaldPerformanceScreen(screen))));
+            return;
+        }
     }
 
     public static boolean isPerformanceButtonEnabled() {
-        return performanceButtonEnabled;
+        return clientModEnabled && performanceButtonEnabled;
     }
 
     public static boolean isInGameButtonEnabled() {
-        return inGameButtonEnabled;
+        return clientModEnabled && inGameButtonEnabled;
     }
 
     public static boolean isPerformanceHudEnabled() {
-        return performanceHudEnabled;
+        return clientModEnabled && performanceHudEnabled;
     }
 
     public static boolean isFpsHudEnabled() {
-        return fpsHudEnabled;
+        return isPerformanceHudEnabled() && fpsHudEnabled;
     }
 
     public static boolean isFrameTimeHudEnabled() {
-        return frameTimeHudEnabled;
+        return isPerformanceHudEnabled() && frameTimeHudEnabled;
     }
 
     public static boolean isPingHudEnabled() {
-        return pingHudEnabled;
+        return isPerformanceHudEnabled() && pingHudEnabled;
     }
 
     public static boolean isMemoryHudEnabled() {
-        return memoryHudEnabled;
+        return isPerformanceHudEnabled() && memoryHudEnabled;
     }
 
-    public static boolean isCoordinatesHudEnabled() { return coordinatesHudEnabled; }
+    public static boolean isCoordinatesHudEnabled() { return isPerformanceHudEnabled() && coordinatesHudEnabled; }
 
-    public static boolean isCpsHudEnabled() { return cpsHudEnabled; }
+    public static boolean isCpsHudEnabled() { return isPerformanceHudEnabled() && cpsHudEnabled; }
 
-    public static boolean isKeystrokesHudEnabled() { return keystrokesHudEnabled; }
+    public static boolean isKeystrokesHudEnabled() { return isPerformanceHudEnabled() && keystrokesHudEnabled; }
 
     public static String getSettingsKeyName() {
         return openSettingsKey.getBoundKeyLocalizedText().getString();

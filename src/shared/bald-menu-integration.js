@@ -16,6 +16,7 @@ function isSupportedBaldMenuTarget(profile) {
 
 function normalizeBaldMenuSettings(settings) {
   return {
+    minecraftClientModEnabled: settings?.minecraftClientModEnabled !== false,
     minecraftMenuEnabled: settings?.minecraftMenuEnabled !== false,
     minecraftPerformanceButtonEnabled: settings?.minecraftPerformanceButtonEnabled !== false,
     minecraftInGameButtonEnabled: settings?.minecraftInGameButtonEnabled !== false,
@@ -26,11 +27,16 @@ function normalizeBaldMenuSettings(settings) {
 function buildBaldMenuConfig({ profileId, settings, activeAccountId, accounts, bridge }) {
   if (!profileId || typeof profileId !== 'string') throw new TypeError('A profile ID is required.');
   if (!bridge?.url || !bridge?.token) throw new TypeError('A local launcher bridge is required.');
+  const normalized = normalizeBaldMenuSettings(settings);
   return {
-    enabled: normalizeBaldMenuSettings(settings).minecraftMenuEnabled,
-    performanceButtonEnabled: normalizeBaldMenuSettings(settings).minecraftPerformanceButtonEnabled,
-    inGameButtonEnabled: normalizeBaldMenuSettings(settings).minecraftInGameButtonEnabled,
-    performanceHudEnabled: normalizeBaldMenuSettings(settings).minecraftPerformanceHudEnabled,
+    clientModEnabled: normalized.minecraftClientModEnabled,
+    enabled: normalized.minecraftClientModEnabled && normalized.minecraftMenuEnabled,
+    performanceButtonEnabled: normalized.minecraftClientModEnabled
+      && normalized.minecraftPerformanceButtonEnabled,
+    inGameButtonEnabled: normalized.minecraftClientModEnabled
+      && normalized.minecraftInGameButtonEnabled,
+    performanceHudEnabled: normalized.minecraftClientModEnabled
+      && normalized.minecraftPerformanceHudEnabled,
     profileId,
     activeAccountId: String(activeAccountId || ''),
     accounts: (Array.isArray(accounts) ? accounts : [])
@@ -100,6 +106,45 @@ function installBaldMenuMod({ sourceJar, modsDirectory, fsImpl = fs }) {
     }
     throw error;
   }
+}
+
+function removeBaldMenuMod({ modsDirectory, fsImpl = fs }) {
+  const destinationDirectory = path.resolve(modsDirectory);
+  let directoryStat;
+  try {
+    directoryStat = fsImpl.lstatSync(destinationDirectory);
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    throw error;
+  }
+  if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) {
+    throw new Error('The profile mods folder must be a real directory.');
+  }
+
+  const destination = path.join(destinationDirectory, MOD_FILENAME);
+  if (path.dirname(path.resolve(destination)) !== destinationDirectory) {
+    throw new Error('The managed mod path is outside the profile mods folder.');
+  }
+  let existing;
+  try {
+    existing = fsImpl.lstatSync(destination);
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    throw error;
+  }
+  if (!existing.isFile() || existing.isSymbolicLink()) {
+    throw new Error('The existing Bald Launcher mod path is not a regular file.');
+  }
+  fsImpl.unlinkSync(destination);
+  return true;
+}
+
+function reconcileBaldMenuMod({ enabled, supportedTarget, sourceJar, modsDirectory, fsImpl = fs }) {
+  if (enabled && supportedTarget) {
+    installBaldMenuMod({ sourceJar, modsDirectory, fsImpl });
+    return { installed: true, removed: false };
+  }
+  return { installed: false, removed: removeBaldMenuMod({ modsDirectory, fsImpl }) };
 }
 
 function createBaldMenuBridge({ profileId, accounts, onAction, host = '127.0.0.1' }) {
@@ -213,4 +258,6 @@ module.exports = {
   installBaldMenuMod,
   isSupportedBaldMenuTarget,
   normalizeBaldMenuSettings,
+  reconcileBaldMenuMod,
+  removeBaldMenuMod,
 };

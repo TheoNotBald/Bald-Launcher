@@ -44,9 +44,9 @@ const { selectForgeVersion } = require('./src/shared/forge-version');
 const {
   buildBaldMenuConfig,
   createBaldMenuBridge,
-  installBaldMenuMod,
   isSupportedBaldMenuTarget,
   normalizeBaldMenuSettings,
+  reconcileBaldMenuMod,
 } = require('./src/shared/bald-menu-integration');
 const {
   areProfileRootsIsolated,
@@ -638,6 +638,7 @@ const DEFAULT_STATE = {
     jvmProfile: 'default',
     customJvmArgs: '',
     optimizationModsEnabled: false,
+    minecraftClientModEnabled: true,
     minecraftMenuEnabled: true,
     minecraftPerformanceButtonEnabled: true,
     minecraftInGameButtonEnabled: true,
@@ -10714,27 +10715,48 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       ? recommendMinecraftMemoryGb(os.totalmem(), os.freemem())
       : Math.min(32, Math.max(1, Number(settings.memoryMax) || 6));
     const minecraftRoot = getMinecraftRootFor(profile.id);
+    fs.mkdirSync(minecraftRoot, { recursive: true });
+    const profileRootStat = fs.lstatSync(minecraftRoot);
+    if (!profileRootStat.isDirectory() || profileRootStat.isSymbolicLink()) {
+      throw new Error('The profile folder must be a real directory before reconciling the Bald Client mod.');
+    }
+    const modsDirectory = path.join(minecraftRoot, 'mods');
+    if (fs.existsSync(modsDirectory)) {
+      const modsDirectoryStat = fs.lstatSync(modsDirectory);
+      if (!modsDirectoryStat.isDirectory() || modsDirectoryStat.isSymbolicLink()) {
+        throw new Error('The profile mods folder must be a real directory before reconciling the Bald Client mod.');
+      }
+    }
     ensureLauncherGameFolders(minecraftRoot);
     const baldMenuSettings = normalizeBaldMenuSettings(settings);
-    const baldMenuRequested = baldMenuSettings.minecraftMenuEnabled
-      || baldMenuSettings.minecraftPerformanceButtonEnabled;
     let baldMenuModInstalled = false;
-    if (baldMenuRequested && isSupportedBaldMenuTarget(profile)) {
-      const profileRootStat = fs.lstatSync(minecraftRoot);
-      if (!profileRootStat.isDirectory() || profileRootStat.isSymbolicLink()) {
-        throw new Error('The profile folder must be a real directory before installing the Bald in-game menu.');
-      }
-      const modPath = app.isPackaged
-        ? path.join(process.resourcesPath, 'baldlauncher', 'bald-launcher-client.jar')
-        : path.join(__dirname, 'minecraft-mod', 'build', 'libs', 'bald-launcher-client-0.1.0.jar');
+    const baldMenuSupported = isSupportedBaldMenuTarget(profile);
+    const modPath = app.isPackaged
+      ? path.join(process.resourcesPath, 'baldlauncher', 'bald-launcher-client.jar')
+      : path.join(__dirname, 'minecraft-mod', 'build', 'libs', 'bald-launcher-client-0.1.0.jar');
+    if (baldMenuSettings.minecraftClientModEnabled && baldMenuSupported) {
       if (!fs.existsSync(modPath)) {
         throw new Error('The Bald in-game menu mod is missing. Rebuild Bald Launcher with its Minecraft mod target.');
       }
-      installBaldMenuMod({ sourceJar: modPath, modsDirectory: path.join(minecraftRoot, 'mods') });
-      baldMenuModInstalled = true;
-      emitLog(profile.name, 'info', 'Bald in-game menus are enabled for Fabric 1.21.11.', profile.id);
-    } else if (baldMenuRequested) {
-      emitLog(profile.name, 'info', 'Bald in-game menus currently support Fabric 1.21.11 only; this profile will launch unchanged.', profile.id);
+    }
+    const modReconciliation = reconcileBaldMenuMod({
+      enabled: baldMenuSettings.minecraftClientModEnabled,
+      supportedTarget: baldMenuSupported,
+      sourceJar: baldMenuSettings.minecraftClientModEnabled && baldMenuSupported ? modPath : undefined,
+      modsDirectory,
+    });
+    baldMenuModInstalled = modReconciliation.installed;
+    if (baldMenuModInstalled) {
+      emitLog(profile.name, 'info', 'Bald Client is enabled for Fabric 1.21.11.', profile.id);
+    } else {
+      if (modReconciliation.removed) {
+        emitLog(profile.name, 'info', 'Removed only Bald Launcher’s managed client mod; it will not load on this launch.', profile.id);
+      }
+      if (!baldMenuSettings.minecraftClientModEnabled) {
+        emitLog(profile.name, 'info', 'Bald Client is disabled for this profile. This applies to this launch; an already-running Minecraft process cannot unload mods.', profile.id);
+      } else if (!baldMenuSupported) {
+        emitLog(profile.name, 'info', 'Bald Client currently supports Fabric 1.21.11 only; this profile will launch without the managed Bald Client mod.', profile.id);
+      }
     }
     const sharedCacheRoot = getSharedCacheRoot();
     fs.mkdirSync(path.join(sharedCacheRoot, 'assets'), { recursive: true });

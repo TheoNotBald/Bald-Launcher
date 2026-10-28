@@ -1294,11 +1294,12 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
           <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">The launcher does not edit Minecraft video settings, change process priority, or promise a specific FPS gain.</div>
         </div>
         <div class="settings-section"><div class="ss-title">Minecraft in-game menus</div>
+          <label class="setting-row"><span class="setting-label">Enable Bald Client mod on supported launches</span><input type="checkbox" id="minecraftClientModEnabled" onchange="syncSettings()"/></label>
           <label class="setting-row"><span class="setting-label">Use Bald Minecraft menus</span><input type="checkbox" id="minecraftMenuEnabled" onchange="syncSettings()"/></label>
           <label class="setting-row"><span class="setting-label">Show Performance in Bald menus</span><input type="checkbox" id="minecraftPerformanceButtonEnabled" onchange="syncSettings()"/></label>
           <label class="setting-row"><span class="setting-label">Show Bald in-game button</span><input type="checkbox" id="minecraftInGameButtonEnabled" onchange="syncSettings()"/></label>
           <label class="setting-row"><span class="setting-label">Show performance HUD</span><input type="checkbox" id="minecraftPerformanceHudEnabled" onchange="syncSettings()"/></label>
-          <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">The menus and in-game button are on by default; the optional FPS, frame-time, ping, and memory HUD is off by default. Open the compact in-game settings from the Bald button or Right Alt+B (change it under Options &gt; Controls). Button/HUD choices can also be changed in-game and persist with this profile. Support currently targets Fabric 1.21.11; other profiles launch unchanged. Bald Launcher adds or updates only its own client mod in the profile's mods folder.</div>
+          <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">This launcher-wide master setting applies to each profile when launched. Turning it off removes only Bald Launcher’s managed client JAR from the selected profile so it will not load on that launch; a running Minecraft JVM cannot unload it. Custom menus, the performance shortcut, the in-game button, and the performance HUD are independent. The optional HUD is off by default. Button/HUD choices can also be changed in-game and persist in Minecraft config. Support currently targets Fabric 1.21.11; unsupported profiles launch without the managed Bald Client mod.</div>
         </div>
         <div class="settings-section"><div class="ss-title">Diagnostics</div>
           <button class="modal-btn" type="button" onclick="loadDiagnostics()"><i class="ti ti-terminal-2" aria-hidden="true"></i> Refresh diagnostics</button>
@@ -4383,6 +4384,7 @@ function syncSettings(){
     jvmProfile: valueOf('jvmProfile', 'default'),
     customJvmArgs: valueOf('customJvmArgs', ''),
     optimizationModsEnabled: document.getElementById('optimizationModsEnabled')?.checked === true,
+    minecraftClientModEnabled: document.getElementById('minecraftClientModEnabled')?.checked !== false,
     minecraftMenuEnabled: document.getElementById('minecraftMenuEnabled')?.checked !== false,
     minecraftPerformanceButtonEnabled: document.getElementById('minecraftPerformanceButtonEnabled')?.checked !== false,
     minecraftInGameButtonEnabled: document.getElementById('minecraftInGameButtonEnabled')?.checked !== false,
@@ -6841,6 +6843,7 @@ async function boot(){
   bindProfileLaunchButton();
   const settings = state.settings || {};
   document.getElementById('optimizationModsEnabled').checked = settings.optimizationModsEnabled === true;
+  document.getElementById('minecraftClientModEnabled').checked = settings.minecraftClientModEnabled !== false;
   document.getElementById('minecraftMenuEnabled').checked = settings.minecraftMenuEnabled !== false;
   document.getElementById('minecraftPerformanceButtonEnabled').checked = settings.minecraftPerformanceButtonEnabled !== false;
   document.getElementById('minecraftInGameButtonEnabled').checked = settings.minecraftInGameButtonEnabled !== false;

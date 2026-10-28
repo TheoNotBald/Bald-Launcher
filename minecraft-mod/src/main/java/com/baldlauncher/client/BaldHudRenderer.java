@@ -35,7 +35,13 @@ public final class BaldHudRenderer {
             drawLauncherButton(context, client);
         }
         if (BaldLauncherClient.isPerformanceHudEnabled()) {
-            renderWidgets(context, false, null);
+            if (hasEnabledHudWidgets()) {
+                renderWidgets(context, false, null);
+            } else {
+                previousFrameNanos = 0;
+            }
+        } else {
+            previousFrameNanos = 0;
         }
     }
 
@@ -47,9 +53,12 @@ public final class BaldHudRenderer {
         MinecraftClient client = MinecraftClient.getInstance();
         List<HudWidget> widgets = new ArrayList<>();
         if (client.player == null || client.world == null) return widgets;
-        updateWidgetValues();
-        widgets.add(getInGameButtonWidget(client));
+        if (BaldLauncherClient.isInGameButtonEnabled()) widgets.add(getInGameButtonWidget(client));
+        if (BaldLauncherClient.isPerformanceHudEnabled() && hasEnabledHudWidgets()) {
+            updateWidgetValues();
+        }
         for (WidgetValue value : WIDGETS) {
+            if (!BaldLauncherClient.isPerformanceHudEnabled() || !isWidgetEnabled(value.id)) continue;
             int textWidth = client.textRenderer.getWidth(BaldText.label(value.value));
             int width = Math.max(42, (textWidth + 18));
             int height = client.textRenderer.fontHeight + 8;
@@ -68,13 +77,13 @@ public final class BaldHudRenderer {
     private static void renderWidgets(DrawContext context, boolean editorPreview, String selectedId) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || client.world == null) return;
-        updateWidgetValues();
+        if (BaldLauncherClient.isPerformanceHudEnabled() && hasEnabledHudWidgets()) updateWidgetValues();
         HudWidget button = getInGameButtonWidget(client);
-        if (editorPreview) {
-            drawLauncherButton(context, client, button, selectedId.equals(IN_GAME_BUTTON_ID));
+        if (editorPreview && BaldLauncherClient.isInGameButtonEnabled()) {
+            drawLauncherButton(context, client, button, IN_GAME_BUTTON_ID.equals(selectedId));
         }
         for (WidgetValue value : WIDGETS) {
-            if (!editorPreview && !isWidgetEnabled(value.id)) continue;
+            if (!BaldLauncherClient.isPerformanceHudEnabled() || !isWidgetEnabled(value.id)) continue;
             HudWidget widget = findWidget(value.id, value.label, value.value, client);
             boolean selected = editorPreview && value.id.equals(selectedId);
             drawWidgetSurface(context, widget);
@@ -176,6 +185,13 @@ public final class BaldHudRenderer {
             case "keystrokes" -> BaldLauncherClient.isKeystrokesHudEnabled();
             default -> false;
         };
+    }
+
+    private static boolean hasEnabledHudWidgets() {
+        return BaldLauncherClient.isFpsHudEnabled() || BaldLauncherClient.isFrameTimeHudEnabled()
+                || BaldLauncherClient.isPingHudEnabled() || BaldLauncherClient.isMemoryHudEnabled()
+                || BaldLauncherClient.isCoordinatesHudEnabled() || BaldLauncherClient.isCpsHudEnabled()
+                || BaldLauncherClient.isKeystrokesHudEnabled();
     }
 
     private static void drawLauncherButton(DrawContext context, MinecraftClient client) {

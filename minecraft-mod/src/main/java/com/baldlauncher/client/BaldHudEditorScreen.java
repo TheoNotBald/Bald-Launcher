@@ -24,6 +24,10 @@ public final class BaldHudEditorScreen extends BaldLauncherScreen {
 
     @Override
     protected void init() {
+        List<BaldHudRenderer.HudWidget> widgets = BaldHudRenderer.getWidgets();
+        if (widgets.stream().noneMatch(widget -> widget.id().equals(selectedId))) {
+            selectedId = widgets.isEmpty() ? null : widgets.getFirst().id();
+        }
         int buttonY = height - 44;
         int gap = 6;
         int buttonWidth = Math.min(116, (width - 32 - gap * 3) / 4);
@@ -42,6 +46,10 @@ public final class BaldHudEditorScreen extends BaldLauncherScreen {
     }
 
     private void changeScale(float difference) {
+        if (selectedId == null) {
+            feedback = "Enable a HUD element or the Bald button first";
+            return;
+        }
         float scale = Math.max(0.75f, Math.min(2.0f, BaldHudLayout.getScale(selectedId) + difference));
         try {
             BaldHudRenderer.HudWidget widget = findSelected();
@@ -53,6 +61,10 @@ public final class BaldHudEditorScreen extends BaldLauncherScreen {
     }
 
     private void resetSelected() {
+        if (selectedId == null) {
+            feedback = "There are no enabled widgets to reset";
+            return;
+        }
         try {
             BaldHudLayout.reset(selectedId);
             feedback = "Widget restored";
@@ -62,6 +74,9 @@ public final class BaldHudEditorScreen extends BaldLauncherScreen {
     }
 
     private BaldHudRenderer.HudWidget findSelected() {
+        if (selectedId == null) {
+            throw new IllegalStateException("No enabled HUD widget is available.");
+        }
         return BaldHudRenderer.getWidgets().stream()
                 .filter(widget -> widget.id().equals(selectedId))
                 .findFirst().orElseThrow(() -> new IllegalStateException("Selected HUD widget is unavailable."));
@@ -178,6 +193,7 @@ public final class BaldHudEditorScreen extends BaldLauncherScreen {
     }
 
     private String selectedLabel() {
+        if (selectedId == null) return "NO ENABLED WIDGETS";
         return switch (selectedId) {
             case BaldHudRenderer.IN_GAME_BUTTON_ID -> "BALD BUTTON";
             case "fps" -> "FPS";

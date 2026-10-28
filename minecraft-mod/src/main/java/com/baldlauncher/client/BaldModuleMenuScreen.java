@@ -17,6 +17,7 @@ public final class BaldModuleMenuScreen extends BaldLauncherScreen {
     private TextFieldWidget search;
     private String searchText = "";
     private String feedback = "";
+    private int entryPage;
 
     public BaldModuleMenuScreen(Screen parent) {
         super(Text.literal("Bald Modules"));
@@ -25,23 +26,28 @@ public final class BaldModuleMenuScreen extends BaldLauncherScreen {
 
     @Override
     protected void init() {
-        int panelWidth = Math.min(560, width - 24);
+        int panelWidth = Math.max(0, Math.min(560, width - 16));
+        int panelHeight = panelHeight();
         int panelX = (width - panelWidth) / 2;
-        int panelY = Math.max(8, (height - 390) / 2);
-        search = new TextFieldWidget(textRenderer, panelX + 14, panelY + 50,
-                panelWidth - 28, 22, Text.literal("Search modules"));
+        int panelY = (height - panelHeight) / 2;
+        boolean compact = compactLayout();
+        int inset = compact ? 10 : 14;
+        int searchY = panelY + (compact ? 38 : 50);
+        search = new TextFieldWidget(textRenderer, panelX + inset, searchY,
+                panelWidth - inset * 2, compact ? 20 : 22, Text.literal("Search modules"));
         search.setPlaceholder(Text.literal("Search modules"));
         search.setMaxLength(64);
         search.setText(searchText);
         addDrawableChild(search);
 
-        int tabY = panelY + 80;
-        int tabGap = 6;
-        int tabWidth = (panelWidth - 28 - tabGap * 2) / 3;
+        int tabY = panelY + (compact ? 65 : 80);
+        int tabGap = compact ? 4 : 6;
+        int tabWidth = (panelWidth - inset * 2 - tabGap * 2) / 3;
         Category[] categories = Category.values();
         for (int index = 0; index < categories.length; index++) {
             Category value = categories[index];
-            addButton(value.label, panelX + 14 + index * (tabWidth + tabGap), tabY, tabWidth, 26,
+            addButton(value.label, panelX + inset + index * (tabWidth + tabGap), tabY,
+                    tabWidth, compact ? 22 : 26,
                     value == category, () -> {
                         searchText = search.getText();
                         category = value;
@@ -50,34 +56,71 @@ public final class BaldModuleMenuScreen extends BaldLauncherScreen {
         }
 
         List<Entry> matches = matchingEntries();
-        int columns = 2;
-        int gap = 6;
-        int cardWidth = (panelWidth - 28 - gap) / columns;
-        int firstY = panelY + 116;
-        for (int index = 0; index < matches.size() && index < 8; index++) {
+        int columns = panelWidth < 360 ? 1 : 2;
+        int gap = compact ? 4 : 6;
+        int cardWidth = (panelWidth - inset * 2 - gap * (columns - 1)) / columns;
+        int firstY = panelY + (compact ? 116 : 116);
+        int rowStep = compact ? 25 : 34;
+        int cardHeight = compact ? 22 : 28;
+        int footerY = panelY + panelHeight - (compact ? 32 : 36);
+        int availableRows = Math.max(1, (footerY - firstY - 6) / rowStep);
+        int pageCapacity = availableRows * columns;
+        int pageCount = Math.max(1, (matches.size() + pageCapacity - 1) / pageCapacity);
+        entryPage = Math.max(0, Math.min(entryPage, pageCount - 1));
+        int startIndex = entryPage * pageCapacity;
+        int endIndex = Math.min(matches.size(), startIndex + pageCapacity);
+        for (int index = startIndex; index < endIndex; index++) {
             Entry entry = matches.get(index);
-            int row = index / columns;
-            int column = index % columns;
-            int x = panelX + 14 + column * (cardWidth + gap);
-            int y = firstY + row * 34;
+            int pageIndex = index - startIndex;
+            int row = pageIndex / columns;
+            int column = pageIndex % columns;
+            int x = panelX + inset + column * (cardWidth + gap);
+            int y = firstY + row * rowStep;
             if (entry.action() == null) {
                 boolean value = entry.enabled().apply(BaldLauncherClient.getVisualPreferences());
-                addButton(entry.name() + "  ·  " + (value ? "ON" : "OFF"), x, y, cardWidth, 28,
+                addButton(entry.name() + "  ·  " + (value ? "ON" : "OFF"), x, y,
+                        cardWidth, cardHeight,
                         value, () -> toggle(entry));
             } else {
-                addButton(entry.name(), x, y, cardWidth, 28, false, entry.action());
+                addButton(entry.name(), x, y, cardWidth, cardHeight, false, entry.action());
             }
         }
 
-        int footerY = panelY + 330;
-        int footerGap = 6;
-        int footerWidth = (panelWidth - 28 - footerGap * 2) / 3;
-        addButton("Edit HUD", panelX + 14, footerY, footerWidth, 28, true,
+        if (pageCount > 1) {
+            int navY = panelY + (compact ? 92 : 108);
+            int navWidth = 24;
+            int center = panelX + panelWidth / 2;
+            addButton("<", center - navWidth - 34, navY, navWidth, compact ? 18 : 20,
+                    false, () -> changePage(-1));
+            addButton(">", center + 10, navY, navWidth, compact ? 18 : 20,
+                    false, () -> changePage(1));
+        }
+
+        int footerGap = compact ? 4 : 6;
+        int footerColumns = BaldLauncherClient.isPerformanceButtonEnabled() ? 3 : 2;
+        int footerWidth = (panelWidth - inset * 2 - footerGap * (footerColumns - 1)) / footerColumns;
+        int footerHeight = compact ? 22 : 28;
+        addButton("Edit HUD", panelX + inset, footerY, footerWidth, footerHeight, true,
                 () -> client.setScreen(new BaldHudEditorScreen(this)));
-        addButton("Performance & UI", panelX + 14 + footerWidth + footerGap, footerY,
-                footerWidth, 28, false, () -> client.setScreen(new BaldPerformanceScreen(this)));
-        addButton("Done", panelX + 14 + (footerWidth + footerGap) * 2, footerY,
-                footerWidth, 28, false, () -> client.setScreen(parent));
+        if (BaldLauncherClient.isPerformanceButtonEnabled()) {
+            addButton("Performance & UI", panelX + inset + footerWidth + footerGap, footerY,
+                    footerWidth, footerHeight, false, () -> client.setScreen(new BaldPerformanceScreen(this)));
+        }
+        addButton("Done", panelX + inset + (footerWidth + footerGap) * (footerColumns - 1), footerY,
+                footerWidth, footerHeight, false, () -> client.setScreen(parent));
+    }
+
+    private int panelHeight() {
+        return Math.max(0, Math.min(390, height - 16));
+    }
+
+    private boolean compactLayout() {
+        return width < 580 || height < 430;
+    }
+
+    private void changePage(int amount) {
+        entryPage += amount;
+        clearAndInit();
     }
 
     private List<Entry> matchingEntries() {
@@ -129,8 +172,10 @@ public final class BaldModuleMenuScreen extends BaldLauncherScreen {
                 null, null, () -> client.setScreen(new VideoOptionsScreen(this, client, client.options))));
         entries.add(new Entry("HUD editor", "Move and resize live Bald HUD widgets",
                 null, null, () -> client.setScreen(new BaldHudEditorScreen(this))));
-        entries.add(new Entry("Performance & UI", "Bald HUD controls and Minecraft options",
-                null, null, () -> client.setScreen(new BaldPerformanceScreen(this))));
+        if (BaldLauncherClient.isPerformanceButtonEnabled()) {
+            entries.add(new Entry("Performance & UI", "Bald HUD controls and Minecraft options",
+                    null, null, () -> client.setScreen(new BaldPerformanceScreen(this))));
+        }
         return entries;
     }
 
@@ -142,10 +187,18 @@ public final class BaldModuleMenuScreen extends BaldLauncherScreen {
     }
 
     private void toggle(Entry entry) {
+        BaldLauncherClient.VisualPreferences current = BaldLauncherClient.getVisualPreferences();
+        BaldLauncherClient.VisualPreferences updated = entry.update().apply(current);
+        boolean menuChanged = current.menuEnabled() != updated.menuEnabled();
+        boolean performanceButtonChanged =
+                current.performanceButtonEnabled() != updated.performanceButtonEnabled();
         try {
-            BaldLauncherClient.saveVisualPreferences(entry.update().apply(
-                    BaldLauncherClient.getVisualPreferences()));
+            BaldLauncherClient.saveVisualPreferences(updated);
             feedback = "Saved to this game profile";
+            if (menuChanged || performanceButtonChanged) {
+                BaldLauncherClient.refreshMenuAfterToggle();
+                return;
+            }
             clearAndInit();
         } catch (Exception error) {
             feedback = "Could not save: " + error.getMessage();
@@ -162,10 +215,11 @@ public final class BaldModuleMenuScreen extends BaldLauncherScreen {
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         renderBaldBackground(context, mouseX, mouseY, delta);
-        int panelWidth = Math.min(560, width - 24);
+        int panelWidth = Math.max(0, Math.min(560, width - 16));
+        int panelHeight = panelHeight();
         int panelX = (width - panelWidth) / 2;
-        int panelY = Math.max(8, (height - 390) / 2);
-        BaldUi.drawPanel(context, panelX, panelY, panelWidth, 378);
+        int panelY = (height - panelHeight) / 2;
+        BaldUi.drawPanel(context, panelX, panelY, panelWidth, panelHeight);
         context.drawCenteredTextWithShadow(textRenderer, BaldText.title("BALD MODULES"),
                 width / 2, panelY + 12, BaldUi.TEXT);
         context.drawCenteredTextWithShadow(textRenderer,
@@ -174,29 +228,45 @@ public final class BaldModuleMenuScreen extends BaldLauncherScreen {
 
         List<Entry> matches = matchingEntries();
         String hoverDescription = "Choose a category or search for an available Bald feature.";
-        int gap = 6;
-        int cardWidth = (panelWidth - 28 - gap) / 2;
+        boolean compact = compactLayout();
+        int inset = compact ? 10 : 14;
+        int columns = panelWidth < 360 ? 1 : 2;
+        int gap = compact ? 4 : 6;
+        int cardWidth = (panelWidth - inset * 2 - gap * (columns - 1)) / columns;
         int firstY = panelY + 116;
-        for (int index = 0; index < matches.size() && index < 8; index++) {
-            int column = index % 2;
-            int row = index / 2;
-            int cardX = panelX + 14 + column * (cardWidth + gap);
-            int cardY = firstY + row * 34;
+        int rowStep = compact ? 25 : 34;
+        int footerY = panelY + panelHeight - (compact ? 32 : 36);
+        int availableRows = Math.max(1, (footerY - firstY - 6) / rowStep);
+        int pageCapacity = availableRows * columns;
+        int pageCount = Math.max(1, (matches.size() + pageCapacity - 1) / pageCapacity);
+        int startIndex = Math.min(entryPage, pageCount - 1) * pageCapacity;
+        int endIndex = Math.min(matches.size(), startIndex + pageCapacity);
+        for (int index = startIndex; index < endIndex; index++) {
+            int pageIndex = index - startIndex;
+            int column = pageIndex % columns;
+            int row = pageIndex / columns;
+            int cardX = panelX + inset + column * (cardWidth + gap);
+            int cardY = firstY + row * rowStep;
             if (mouseX >= cardX && mouseX <= cardX + cardWidth
-                    && mouseY >= cardY && mouseY <= cardY + 28) {
+                    && mouseY >= cardY && mouseY <= cardY + (compact ? 22 : 28)) {
                 hoverDescription = matches.get(index).description();
                 break;
             }
         }
         context.drawCenteredTextWithShadow(textRenderer, BaldText.label(hoverDescription),
-                width / 2, panelY + 307, BaldUi.MUTED);
+                width / 2, panelY + panelHeight - (compact ? 54 : 58), BaldUi.MUTED);
+        if (pageCount > 1) {
+            context.drawCenteredTextWithShadow(textRenderer,
+                    BaldText.label("PAGE " + (Math.min(entryPage, pageCount - 1) + 1) + " / " + pageCount),
+                    width / 2, panelY + (compact ? 96 : 111), BaldUi.MUTED);
+        }
         if (matches.isEmpty()) {
             context.drawCenteredTextWithShadow(textRenderer, BaldText.label("No modules match this search."),
                     width / 2, panelY + 148, BaldUi.MUTED);
         }
         if (!feedback.isEmpty()) {
             context.drawCenteredTextWithShadow(textRenderer, BaldText.label(feedback),
-                    width / 2, panelY + 363, BaldUi.ACCENT);
+                    width / 2, panelY + panelHeight - 15, BaldUi.ACCENT);
         }
         super.render(context, mouseX, mouseY, delta);
     }
