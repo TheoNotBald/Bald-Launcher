@@ -442,6 +442,18 @@ test('Windows release packages every root module required by the main process', 
   }
 });
 
+test('Windows release builds and verifies the bundled Bald Minecraft mod', () => {
+  const workflow = fs.readFileSync(
+    path.join(__dirname, '..', '.github', 'workflows', 'release.yml'),
+    'utf8',
+  );
+
+  assert.match(workflow, /actions\/setup-java@v4[\s\S]*?java-version:\s*['"]?21/);
+  assert.match(workflow, /npm run build:minecraft-mod -- --rerun-tasks/);
+  assert.match(workflow, /minecraft-mod\\build\\libs\\bald-launcher-client-0\.1\.0\.jar/);
+  assert.match(workflow, /resources\\baldlauncher\\bald-launcher-client\.jar/);
+});
+
 test('resource pack cards recover pack icons from imported archives', () => {
   const studio = fs.readFileSync(path.join(__dirname, '..', 'src', 'resource-packs', 'resource-pack-studio.js'), 'utf8');
   assert.match(studio, /function getPackIconDataUrl\(entry\)/);

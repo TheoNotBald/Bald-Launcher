@@ -16,6 +16,12 @@ jobs:
       - name: Check out tagged source
         uses: actions/checkout@v4
 
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -36,10 +42,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build and verify Bald Minecraft mod
+        shell: pwsh
+        run: |
+          npm run build:minecraft-mod -- --rerun-tasks
+          $mod = Join-Path $PWD 'minecraft-mod\build\libs\bald-launcher-client-0.1.0.jar'
+          if (-not (Test-Path -LiteralPath $mod -PathType Leaf)) {
+            throw "Bald Minecraft mod was not built: $mod"
+          }
+
       - name: Build Windows installer without publishing
         shell: pwsh
         run: |
           npx electron-builder --win --publish never
+          $bundledMod = Join-Path $PWD 'build-release-validation\win-unpacked\resources\baldlauncher\bald-launcher-client.jar'
+          if (-not (Test-Path -LiteralPath $bundledMod -PathType Leaf)) {
+            throw "Windows app package is missing the Bald Minecraft mod: $bundledMod"
+          }
 
       - name: Publish installer and updater metadata
         shell: pwsh
