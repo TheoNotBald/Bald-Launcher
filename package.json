@@ -7,11 +7,12 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron .",
-    "test": "node --test",
+    "test": "node --test tests\\*.test.js",
+    "build:agent": "lib\\gradlew.bat --no-daemon -p lib remapFabric remapVanilla verifyRemap test",
     "build:minecraft-mod": "minecraft-mod\\gradlew.bat --no-daemon -p minecraft-mod build",
-    "dist": "npm run build:minecraft-mod && electron-builder --win",
-    "dist:dir": "npm run build:minecraft-mod && electron-builder --win --dir",
-    "dist:publish": "npm run build:minecraft-mod && electron-builder --win --publish always",
+    "dist": "npm run build:agent && npm run build:minecraft-mod && electron-builder --win",
+    "dist:dir": "npm run build:agent && npm run build:minecraft-mod && electron-builder --win --dir",
+    "dist:publish": "npm run build:agent && npm run build:minecraft-mod && electron-builder --win --publish always",
     "postinstall": "patch-package"
   },
   "devDependencies": {

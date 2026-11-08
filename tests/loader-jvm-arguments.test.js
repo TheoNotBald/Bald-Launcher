@@ -17,6 +17,16 @@ test('NeoForge library discovery and MCLC classpaths use the installer library d
   });
 });
 
+test('Forge library discovery and MCLC classpaths use the installer library directory', () => {
+  const profileRoot = path.join(os.tmpdir(), 'bald-forge-profile');
+  const sharedCacheRoot = path.join(os.tmpdir(), 'bald-shared-cache');
+
+  assert.deepEqual(getLoaderLibraryPaths('forge', profileRoot, sharedCacheRoot), {
+    libraryDirectory: path.join(profileRoot, 'libraries'),
+    libraryRoot: path.join(profileRoot, 'libraries'),
+  });
+});
+
 test('other loaders keep using the shared library cache', () => {
   const profileRoot = path.join(os.tmpdir(), 'bald-fabric-profile');
   const sharedCacheRoot = path.join(os.tmpdir(), 'bald-shared-cache');

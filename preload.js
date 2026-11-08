@@ -239,4 +239,8 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   importTheme: (themeId, jsonString) => ipcRenderer.invoke('launcher:import-theme', { themeId, jsonString }),
   backupThemes: () => ipcRenderer.invoke('launcher:backup-themes'),
   restoreThemes: backup => ipcRenderer.invoke('launcher:restore-themes', backup),
+
+  getLibProfiles: profileIds => ipcRenderer.invoke('launcher:lib:get-profiles', profileIds),
+  setLibProfile: (profileId, enabled) => ipcRenderer.invoke('launcher:lib:set-profile', { profileId, enabled: enabled === true }),
+  getLibStatus: profileIds => ipcRenderer.invoke('launcher:lib:get-status', profileIds),
 });

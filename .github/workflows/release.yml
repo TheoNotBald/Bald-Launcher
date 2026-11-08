@@ -42,6 +42,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build and verify the Minecraft agent
+        shell: pwsh
+        run: |
+          npm run build:agent
+          foreach ($artifact in @('agent-fabric.jar', 'agent-vanilla.jar')) {
+            $path = Join-Path $PWD "lib\build\libs\$artifact"
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Minecraft agent artifact was not built: $path"
+            }
+          }
+
       - name: Build and verify Bald Minecraft mod
         shell: pwsh
         run: |
@@ -58,6 +69,12 @@ jobs:
           $bundledMod = Join-Path $PWD 'build-release-validation\win-unpacked\resources\baldlauncher\bald-launcher-client.jar'
           if (-not (Test-Path -LiteralPath $bundledMod -PathType Leaf)) {
             throw "Windows app package is missing the Bald Minecraft mod: $bundledMod"
+          }
+          foreach ($artifact in @('agent-fabric.jar', 'agent-vanilla.jar')) {
+            $bundledAgent = Join-Path $PWD "build-release-validation\win-unpacked\resources\lib\$artifact"
+            if (-not (Test-Path -LiteralPath $bundledAgent -PathType Leaf)) {
+              throw "Windows app package is missing the Minecraft agent: $bundledAgent"
+            }
           }
 
       - name: Publish installer and updater metadata

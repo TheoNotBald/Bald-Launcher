@@ -6,6 +6,9 @@ release/
 minecraft-mod/.gradle/
 minecraft-mod/build/
 minecraft-mod/bin/
+lib/.gradle/
+lib/build/
+lib/bin/
 .env
 .env.*
 *.log

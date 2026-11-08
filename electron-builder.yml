@@ -27,6 +27,10 @@ files:
   - src/**/*
   - package.json
 extraResources:
+  - from: lib/build/libs/agent-vanilla.jar
+    to: lib/agent-vanilla.jar
+  - from: lib/build/libs/agent-fabric.jar
+    to: lib/agent-fabric.jar
   - from: minecraft-mod/build/libs/bald-launcher-client-0.1.0.jar
     to: baldlauncher/bald-launcher-client.jar
 publish:

@@ -66,7 +66,7 @@ function getLoaderJvmArguments(versionJsonPath, options = {}) {
 }
 
 function getLoaderLibraryPaths(loader, profileRoot, sharedCacheRoot) {
-  const root = loader === 'neoforge' ? profileRoot : sharedCacheRoot;
+  const root = loader === 'forge' || loader === 'neoforge' ? profileRoot : sharedCacheRoot;
   const directory = path.resolve(root, 'libraries');
   return { libraryDirectory: directory, libraryRoot: directory };
 }

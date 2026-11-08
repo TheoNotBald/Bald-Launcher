@@ -1287,6 +1287,8 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
           <div class="setting-row"><span class="setting-label">Keep open after game closes</span><select class="setting-select"><option>Yes</option><option>No</option></select></div>
         </div>
         <div class="settings-section"><div class="ss-title">Minecraft performance</div>
+          <label class="setting-row"><span class="setting-label">Vanilla FPS preset (no mods)</span><input type="checkbox" id="vanillaPerformancePresetEnabled" onchange="syncSettings()"/></label>
+          <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">On by default: selects Fast graphics when supported, lowers render distance to 6, simulation distance to 4, entity distance, particles, clouds, biome blending, mipmaps, and ambient occlusion; disables VSync and caps at 260 FPS. Applies per profile on launch and adds no mods. Turning it off restores saved values unless you changed those settings in Minecraft.</div>
           <label class="setting-row"><span class="setting-label">Opt in to isolated Sodium profile</span><input type="checkbox" id="optimizationModsEnabled" onchange="syncSettings()"/></label>
           <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">Off by default. When enabled, launching may create a separate profile and install Sodium plus compatible client-side mods after exact release checks. Your existing profiles, mods, worlds, and Minecraft settings are not copied over or changed. You can keep using the original profile; FPS gains are not guaranteed.</div>
           <div class="setting-row"><span class="setting-label">JVM profile</span><select class="setting-select" id="jvmProfile" onchange="toggleJvmArgs();syncSettings()"><option value="default">Java defaults (recommended)</option><option value="zgc">ZGC (Java 21+)</option><option value="custom">Custom</option></select></div>
@@ -4383,6 +4385,7 @@ function syncSettings(){
     memoryMaxAuto: document.getElementById('memoryMaxAuto')?.checked === true,
     jvmProfile: valueOf('jvmProfile', 'default'),
     customJvmArgs: valueOf('customJvmArgs', ''),
+    vanillaPerformancePresetEnabled: document.getElementById('vanillaPerformancePresetEnabled')?.checked === true,
     optimizationModsEnabled: document.getElementById('optimizationModsEnabled')?.checked === true,
     minecraftClientModEnabled: document.getElementById('minecraftClientModEnabled')?.checked !== false,
     minecraftMenuEnabled: document.getElementById('minecraftMenuEnabled')?.checked !== false,
@@ -5085,8 +5088,6 @@ function showPanel(name){
     if (el) el.style.display = p===name ? 'flex' : 'none';
   });
   if (name === 'synchronizations') renderSynchronizationWorkspace();
-  if (name === 'resource-packs') window.resourcePackStudio?.render?.();
-  if (window.minecraftPlayerPreview) window.minecraftPlayerPreview.setVisible(name === 'capes');
   if (name === 'capes' && pendingCharacterPreview) {
     const pending = pendingCharacterPreview;
     renderCharacterPreview(pending.entry, pending.model);
@@ -6832,7 +6833,7 @@ async function boot(){
       activeAccountId:'ms-main',
       profiles:[{id:'default',name:'Default profile',mcVersion:'1.21.1',loader:'fabric',rendererMode:'vulkan',icon:'B',mods:[]}],
       activeProfileId:'default',
-      settings:{ memoryMax:6, memoryMaxAuto:true, jvmProfile:'default', customJvmArgs:'', optimizationModsEnabled:false },
+      settings:{ memoryMax:6, memoryMaxAuto:true, jvmProfile:'default', customJvmArgs:'', optimizationModsEnabled:false, vanillaPerformancePresetEnabled:true },
       servers: [],
     };
   }
@@ -6842,6 +6843,7 @@ async function boot(){
   if (launcherBridge?.onGameAction) launcherBridge.onGameAction(handleMinecraftMenuAction);
   bindProfileLaunchButton();
   const settings = state.settings || {};
+  document.getElementById('vanillaPerformancePresetEnabled').checked = settings.vanillaPerformancePresetEnabled === true;
   document.getElementById('optimizationModsEnabled').checked = settings.optimizationModsEnabled === true;
   document.getElementById('minecraftClientModEnabled').checked = settings.minecraftClientModEnabled !== false;
   document.getElementById('minecraftMenuEnabled').checked = settings.minecraftMenuEnabled !== false;
@@ -7546,3 +7548,4 @@ if (document.readyState === 'loading') {
 }
 
 </script>
+<script src="src/lib/ui.js"></script>

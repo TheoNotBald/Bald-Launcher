@@ -1,4 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require('electron');
+let libLaunch = null;
+try { libLaunch = require('./src/lib/launch'); libLaunch.register(ipcMain); } catch (error) { if (error.code !== 'MODULE_NOT_FOUND') console.error('[lib]', error); }
 const { execFile, execFileSync, spawn, spawnSync } = require('child_process');
 const net = require('net');
 const zlib = require('zlib');
@@ -37,6 +39,8 @@ const { waitForLogResponse } = require('./src/servers/console-response');
 const { canAdoptDiscoveredProcess, findMatchingServerProcess, getProcessStartTime, matchesServerProcessIdentity: verifyServerProcessIdentity } = require('./src/servers/process-identity');
 const { ensureLauncherProfilesFile } = require('./src/shared/launcher-profiles');
 const { getLoaderJvmArguments, getLoaderLibraryPaths } = require('./src/shared/loader-jvm-arguments');
+const { runInstallerProcess } = require('./src/shared/run-installer');
+const { setVanillaPerformancePreset } = require('./src/shared/vanilla-performance');
 const { refreshMicrosoftAuthorization } = require('./src/shared/launch-authorization');
 const { runProfileImportDownloads } = require('./src/shared/profile-import');
 const { recordProfilePlaytime } = require('./src/shared/profile-playtime');
@@ -636,6 +640,7 @@ const DEFAULT_STATE = {
     fpsCap: 'Unlimited',
     renderDistance: 8,
     simulationDistance: 5,
+    vanillaPerformancePresetEnabled: true,
     jvmProfile: 'default',
     customJvmArgs: '',
     optimizationModsEnabled: false,
@@ -3068,6 +3073,7 @@ function normalizeSettings(settings) {
     jvmProfile: ['default', 'zgc', 'custom'].includes(settings?.jvmProfile) ? settings.jvmProfile : 'default',
     customJvmArgs: String(settings?.customJvmArgs || ''),
     optimizationModsEnabled: isOptimizationOptedIn(settings),
+    vanillaPerformancePresetEnabled: settings?.vanillaPerformancePresetEnabled !== false,
     playitKeepRunningOnClose: settings?.playitKeepRunningOnClose === true,
     ...normalizeBaldMenuSettings(settings),
   };
@@ -4076,17 +4082,7 @@ async function ensureVanillaVersionProfile(rootPath, mcVersion) {
 }
 
 function runInstaller(javaPath, installerPath, args, cwd) {
-  return new Promise((resolve, reject) => {
-    const child = execFile(javaPath, ['-jar', installerPath, ...args], { cwd, windowsHide: true }, (error, stdout, stderr) => {
-      if (error) {
-        reject(new Error(`${error.message}${stderr ? `: ${stderr.trim()}` : ''}`));
-        return;
-      }
-      resolve(`${stdout || ''}${stderr || ''}`);
-    });
-    child.stdout?.on('data', data => emitStatus(String(data).trim().split(/\r?\n/).pop()));
-    child.stderr?.on('data', data => emitStatus(String(data).trim().split(/\r?\n/).pop()));
-  });
+  return runInstallerProcess(spawn, javaPath, installerPath, args, cwd, emitStatus);
 }
 
 function findInstalledVersionId(rootPath, mcVersion, loader, before) {
@@ -10653,6 +10649,7 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
   let launchProfileId = requestedProfileId;
   let baldMenuBridge = null;
   let baldMenuConfigPath = null;
+  let libSession = null;
   try {
     const account = launcherState.accounts.find(item => item.id === requestedAccountId) || getActiveAccount();
     if (!account) throw new Error('No account selected');
@@ -10725,6 +10722,21 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       }
     }
     ensureLauncherGameFolders(minecraftRoot);
+    const vanillaPerformanceBackup = path.join(
+      app.getPath('userData'),
+      'performance-backups',
+      `${crypto.createHash('sha256').update(profile.id).digest('hex').slice(0, 24)}.json`,
+    );
+    const vanillaPerformanceResult = setVanillaPerformancePreset({
+      enabled: settings.vanillaPerformancePresetEnabled,
+      optionsPath: path.join(minecraftRoot, 'options.txt'),
+      backupPath: vanillaPerformanceBackup,
+    });
+    if (vanillaPerformanceResult.changed) {
+      emitLog(profile.name, 'info', vanillaPerformanceResult.enabled
+        ? 'Applied the reversible vanilla FPS video preset (no performance mods added).'
+        : 'Restored saved video options where they were not changed in Minecraft.', profile.id);
+    }
     const baldMenuSettings = normalizeBaldMenuSettings(settings);
     let baldMenuModInstalled = false;
     const baldMenuSupported = isSupportedBaldMenuTarget(profile);
@@ -10831,6 +10843,14 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       fs.writeFileSync(baldMenuConfigPath, JSON.stringify(baldMenuConfig), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
       baldMenuJvmArguments.push(`-Dbaldlauncher.config=${baldMenuConfigPath}`);
     }
+    if (libLaunch && await libLaunch.isEnabled(profile.id)) {
+      try {
+        libSession = await libLaunch.prepare(profile, profile.loader);
+      } catch (error) {
+        if (error.code !== 'LIB_ARTIFACT_MISSING') throw error;
+        emitLog(profile.name, 'warn', `${error.message} Launching without the library agent.`, profile.id);
+      }
+    }
     const child = await profileLauncher.launch({
       root: minecraftRoot,
       version: versionNumber === profile.mcVersion
@@ -10838,7 +10858,7 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
         : { number: profile.mcVersion, type: 'custom', custom: versionNumber },
       memory: { min: '1G', max: `${Math.min(32, Math.max(1, memoryMax))}G` },
       javaPath: javaExecutable,
-      customArgs: [...jvmArguments, ...loaderJvmArguments, ...baldMenuJvmArguments],
+      customArgs: [...jvmArguments, ...loaderJvmArguments, ...baldMenuJvmArguments, ...(libSession ? libSession.args : [])],
       authorization,
       overrides: {
         gameDirectory: minecraftRoot,
@@ -10887,6 +10907,7 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
           }
           baldMenuConfigPath = null;
         }
+        if (libSession) { libSession.cleanup(); libSession = null; }
         runningProcesses.delete(profile.id);
         session.running = false;
         session.pid = null;
@@ -10934,6 +10955,7 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
         if (cleanupError.code !== 'ENOENT') console.error('[Bald Menu] Could not remove temporary menu configuration:', cleanupError);
       }
     }
+    if (libSession) { libSession.cleanup(); libSession = null; }
     const message = error instanceof Error ? error.message : String(error);
     const failedSession = launchProfileId && getSession(launchProfileId);
     if (failedSession && !runningProcesses.has(launchProfileId)) {

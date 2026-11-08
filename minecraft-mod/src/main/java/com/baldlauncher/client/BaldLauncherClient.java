@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
@@ -151,6 +152,11 @@ public final class BaldLauncherClient implements ClientModInitializer {
         initialized = true;
         loadConfiguration();
         loadProfilePreferences();
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+            if (!client.isInSingleplayer()) {
+                disableAgentModules();
+            }
+        });
         if (!clientModEnabled) return;
         KeyBinding.Category category = KeyBinding.Category.create(
                 Identifier.of("baldlauncher", "client_controls"));
@@ -207,6 +213,29 @@ public final class BaldLauncherClient implements ClientModInitializer {
                 }
             }
         });
+    }
+
+    private static void disableAgentModules() {
+        ClassLoader systemLoader = ClassLoader.getSystemClassLoader();
+        ClassLoader contextLoader = Thread.currentThread().getContextClassLoader();
+        try {
+            Class<?> agent = Class.forName("bl.Bl", true, systemLoader);
+            agent.getMethod("disableAllModules").invoke(null);
+        } catch (ClassNotFoundException error) {
+            if (contextLoader == null || contextLoader == systemLoader) {
+                System.out.println("[Bald Launcher] No agent modules are loaded.");
+                return;
+            }
+            try {
+                Class<?> agent = Class.forName("bl.Bl", true, contextLoader);
+                agent.getMethod("disableAllModules").invoke(null);
+            } catch (ReflectiveOperationException contextError) {
+                throw new IllegalStateException("Could not disable agent modules after joining a server",
+                        contextError);
+            }
+        } catch (ReflectiveOperationException error) {
+            throw new IllegalStateException("Could not disable agent modules after joining a server", error);
+        }
     }
 
     private static void loadConfiguration() {
