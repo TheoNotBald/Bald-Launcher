@@ -11,6 +11,12 @@ import bl.util.TimerUtil;
 
 public final class KillAura extends Module {
 
+    public static KillAura INSTANCE;
+
+    public Object currentTarget() {
+        return target;
+    }
+
     private final TimerUtil timer = new TimerUtil();
 
     private final Setting range = setting(Setting.decimal("Range", 3.0, 2.0, 6.0));
@@ -34,6 +40,7 @@ public final class KillAura extends Module {
 
     public KillAura() {
         super("KillAura", Category.COMBAT, true);
+        INSTANCE = this;
         Bl.bus().subscribe(this, AttackEvent.class, event -> {
             if (event.target == target) {
                 timer.reset();
@@ -127,6 +134,13 @@ public final class KillAura extends Module {
         rotations().reset();
     }
 
+    private double effectiveRange() {
+        if (Reach.INSTANCE != null && Reach.INSTANCE.enabled) {
+            return Reach.INSTANCE.range();
+        }
+        return range.getDouble();
+    }
+
     private boolean isSprinting(Object player) {
         Object value = Reflect.call(player, "isSprinting");
         return value instanceof Boolean bool && bool;
@@ -147,7 +161,8 @@ public final class KillAura extends Module {
     private Object select(Object player) {
         Object best = null;
         double bestMetric = Double.MAX_VALUE;
-        double maximumDistanceSquared = range.getDouble() * range.getDouble();
+        double maximumDistance = effectiveRange();
+        double maximumDistanceSquared = maximumDistance * maximumDistance;
         double playerX = Worlds.coordinate(player, "getX", "x");
         double playerY = Worlds.coordinate(player, "getY", "y");
         double playerZ = Worlds.coordinate(player, "getZ", "z");
@@ -193,12 +208,13 @@ public final class KillAura extends Module {
             return false;
         }
         boolean playerTarget = players.getBool() && Worlds.isPlayer(candidate);
-        boolean mobTarget = mobs.getBool() && Worlds.isMob(candidate);
+        boolean mobTarget = mobs.getBool() && Worlds.isHostileMob(candidate);
         if (!playerTarget && !mobTarget) {
             return false;
         }
         double distanceSquared = Worlds.distanceSquared(player, candidate);
-        if (!Double.isFinite(distanceSquared) || distanceSquared > range.getDouble() * range.getDouble()) {
+        double maximumDistance = effectiveRange();
+        if (!Double.isFinite(distanceSquared) || distanceSquared > maximumDistance * maximumDistance) {
             return false;
         }
         return !requireLineOfSight.getBool() || lineOfSight(player, candidate);

@@ -2,15 +2,13 @@ package bl.module.render;
 
 import bl.Bl;
 import bl.event.events.RenderLevelEvent;
+import bl.mc.GizmoDraw;
 import bl.mc.Reflect;
 import bl.mc.Worlds;
 import bl.module.Category;
 import bl.module.Module;
 import bl.module.Setting;
 import bl.util.MathUtil;
-import net.minecraft.gizmos.GizmoProperties;
-import net.minecraft.gizmos.Gizmos;
-import net.minecraft.world.phys.Vec3;
 
 public final class Tracers extends Module {
 
@@ -25,7 +23,7 @@ public final class Tracers extends Module {
         super("Tracers", Category.RENDER, true);
         Bl.bus().subscribe(this, RenderLevelEvent.class, event -> {
             if (enabled && isAvailable()) {
-                draw();
+                GizmoDraw.inScope(event.levelRenderer, this::draw);
             }
         });
     }
@@ -34,7 +32,7 @@ public final class Tracers extends Module {
     protected void onTick() {
     }
 
-    private void draw() {
+    private void draw(Object levelRenderer) {
         Object player = Reflect.player();
         if (player == null) {
             return;
@@ -43,7 +41,7 @@ public final class Tracers extends Module {
         Object renderer = Reflect.getField(minecraft, "gameRenderer");
         Object camera = Reflect.call(renderer, "getMainCamera");
         Object cameraPosition = Reflect.call(camera, "position");
-        if (!(cameraPosition instanceof Vec3 origin)) {
+        if (cameraPosition == null) {
             throw new IllegalStateException("Could not read the render camera position");
         }
         for (Object entity : Worlds.entities()) {
@@ -61,16 +59,12 @@ public final class Tracers extends Module {
             int alpha = (int) (MathUtil.fade(color.getColor(), distance, maxDistance.getDouble()) * 255.0f);
             int shaded = (alpha << 24) | (color.getColor() & 0xFFFFFF);
             double x = Worlds.coordinate(entity, "getX", "x");
+            Object height = Reflect.call(entity, "getHeight");
             double y = Worlds.coordinate(entity, "getY", "y")
-                    + (entity instanceof net.minecraft.world.entity.Entity mcEntity
-                            ? mcEntity.getBbHeight() * 0.5
-                            : 0.8);
+                    + (height instanceof Number number ? number.doubleValue() * 0.5 : 0.8);
             double z = Worlds.coordinate(entity, "getZ", "z");
-            Vec3 destination = new Vec3(x, y, z);
-            GizmoProperties line = Gizmos.line(origin, destination, shaded, thickness.getInt());
-            if (throughWalls.getBool()) {
-                line.setAlwaysOnTop();
-            }
+            GizmoDraw.line(cameraPosition, GizmoDraw.vector(x, y, z), shaded,
+                    thickness.getInt(), throughWalls.getBool());
         }
     }
 }

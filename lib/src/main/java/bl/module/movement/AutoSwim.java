@@ -21,8 +21,8 @@ public final class AutoSwim extends Module {
             return;
         }
         Object options = Reflect.getField(Reflect.instance(), "options");
-        boolean up = Boolean.TRUE.equals(Reflect.call(Reflect.getField(options, "keyJump"), "isDown"));
-        boolean down = Boolean.TRUE.equals(Reflect.call(Reflect.getField(options, "keyShift"), "isDown"));
+        boolean up = Boolean.TRUE.equals(Reflect.call(Reflect.getField(options, "keyJump"), "isPressed"));
+        boolean down = Boolean.TRUE.equals(Reflect.call(Reflect.getField(options, "keyShift"), "isPressed"));
         if (up == down) {
             return;
         }

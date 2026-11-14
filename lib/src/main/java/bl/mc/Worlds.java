@@ -21,7 +21,10 @@ public final class Worlds {
         if (world == null) {
             return List.of();
         }
-        Object listed = Reflect.call(world, "entitiesForRendering");
+        Object listed = Reflect.call(world, "getEntities");
+        if (!(listed instanceof Iterable<?>)) {
+            listed = Reflect.call(world, "entitiesForRendering");
+        }
         if (!(listed instanceof Iterable<?> iterable)) {
             return List.of();
         }
@@ -72,7 +75,10 @@ public final class Worlds {
     }
 
     public static double verticalVelocity(Object entity) {
-        Object movement = Reflect.call(entity, "getDeltaMovement");
+        Object movement = Reflect.call(entity, "getVelocity");
+        if (movement == null) {
+            movement = Reflect.call(entity, "getDeltaMovement");
+        }
         Object value = Reflect.getField(movement, "y");
         if (!(value instanceof Number)) {
             value = Reflect.call(movement, "y");
@@ -104,7 +110,13 @@ public final class Worlds {
     }
 
     public static boolean onGround(Object entity) {
-        Object value = Reflect.call(entity, "onGround");
+        Object value = Reflect.call(entity, "isOnGround");
+        if (!(value instanceof Boolean)) {
+            value = Reflect.call(entity, "onGround");
+        }
+        if (!(value instanceof Boolean)) {
+            value = Reflect.getField(entity, "onGround");
+        }
         return value instanceof Boolean bool && bool;
     }
 

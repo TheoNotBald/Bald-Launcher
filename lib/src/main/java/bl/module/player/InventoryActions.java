@@ -10,7 +10,10 @@ final class InventoryActions {
 
     static boolean click(Object player, int slot, int button, String clickTypeName) {
         Object menu = Reflect.getField(player, "containerMenu");
-        Object menuId = Reflect.getField(menu, "containerId");
+        Object menuId = Reflect.getField(menu, "syncId");
+        if (!(menuId instanceof Number)) {
+            menuId = Reflect.getField(menu, "containerId");
+        }
         Object gameMode = Reflect.getField(Reflect.instance(), "gameMode");
         Class<?> clickTypes = Types.find("net/minecraft/world/inventory/ClickType");
         Object clickType = clickTypes == null ? null : Reflect.call(clickTypes, "valueOf", clickTypeName);

@@ -12,6 +12,8 @@ public final class RotationManager {
 
     private static final double DUPLICATE_EPSILON = 0.001;
     private static final float READY_DELTA = 5.0f;
+    // Grim 2.3.75 GrimMath.java:12
+    private static final float MINIMUM_DIVISOR = 0.0086f;
 
     private Mode mode = Mode.SMOOTH;
     private float targetYaw;
@@ -112,14 +114,18 @@ public final class RotationManager {
     public static float gcdStep(float sensitivity) {
         float f = sensitivity * 0.6f + 0.2f;
         float g = f * f * f * 1.2f;
-        return g * 8.0f * 0.15f;
+        return Math.max(g * 8.0f * 0.15f, MINIMUM_DIVISOR);
     }
 
-    private static float snap(float value, float step) {
+    public static float snapToStep(float value, float step) {
         if (step <= 0.0f) {
             return value;
         }
         return Math.round(value / step) * step;
+    }
+
+    private static float snap(float value, float step) {
+        return snapToStep(value, step);
     }
 
     private static float wrapDegrees(float degrees) {

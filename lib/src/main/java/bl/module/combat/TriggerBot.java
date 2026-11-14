@@ -42,7 +42,7 @@ public final class TriggerBot extends Module {
         if (requireAttackInput.getBool()) {
             Object options = Reflect.getField(mc, "options");
             Object attackKey = Reflect.getField(options, "keyAttack");
-            Object down = Reflect.call(attackKey, "isDown");
+            Object down = Reflect.call(attackKey, "isPressed");
             if (!(down instanceof Boolean pressed) || !pressed) {
                 return;
             }

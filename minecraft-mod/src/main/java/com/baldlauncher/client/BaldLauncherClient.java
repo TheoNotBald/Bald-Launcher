@@ -145,6 +145,7 @@ public final class BaldLauncherClient implements ClientModInitializer {
     private static KeyBinding openHudEditorKey;
     private static final long[] CLICK_TIMESTAMPS = new long[64];
     private static int clickTimestampIndex;
+    private static boolean agentLockLookupFailed;
 
     @Override
     public synchronized void onInitializeClient() {
@@ -154,7 +155,14 @@ public final class BaldLauncherClient implements ClientModInitializer {
         loadProfilePreferences();
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             if (!client.isInSingleplayer()) {
-                disableAgentModules();
+                armAgentLock();
+                engageAgentLock();
+            }
+        });
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> releaseAgentLock());
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (isAgentLocked()) {
+                enforceAgentLock();
             }
         });
         if (!clientModEnabled) return;
@@ -215,26 +223,62 @@ public final class BaldLauncherClient implements ClientModInitializer {
         });
     }
 
-    private static void disableAgentModules() {
-        ClassLoader systemLoader = ClassLoader.getSystemClassLoader();
-        ClassLoader contextLoader = Thread.currentThread().getContextClassLoader();
+    private static void armAgentLock() {
+        invokeAgentLock("arm", new Class<?>[0]);
+    }
+
+    private static void engageAgentLock() {
+        invokeAgentLock("engage", new Class<?>[0]);
+    }
+
+    private static void enforceAgentLock() {
+        invokeAgentLock("enforceDisabled", new Class<?>[0]);
+    }
+
+    private static void releaseAgentLock() {
+        invokeAgentLock("release", new Class<?>[0]);
+    }
+
+    private static boolean isAgentLocked() {
         try {
-            Class<?> agent = Class.forName("bl.Bl", true, systemLoader);
-            agent.getMethod("disableAllModules").invoke(null);
+            Class<?> lock = loadAgentLockClass();
+            return (boolean) lock.getMethod("isLocked").invoke(null);
         } catch (ClassNotFoundException error) {
-            if (contextLoader == null || contextLoader == systemLoader) {
-                System.out.println("[Bald Launcher] No agent modules are loaded.");
-                return;
-            }
-            try {
-                Class<?> agent = Class.forName("bl.Bl", true, contextLoader);
-                agent.getMethod("disableAllModules").invoke(null);
-            } catch (ReflectiveOperationException contextError) {
-                throw new IllegalStateException("Could not disable agent modules after joining a server",
-                        contextError);
-            }
+            reportMissingAgentLock(error);
+            return false;
         } catch (ReflectiveOperationException error) {
-            throw new IllegalStateException("Could not disable agent modules after joining a server", error);
+            throw new IllegalStateException("Could not check the agent lock state", error);
+        }
+    }
+
+    private static void invokeAgentLock(String method, Class<?>[] parameterTypes, Object... arguments) {
+        try {
+            Class<?> lock = loadAgentLockClass();
+            lock.getMethod(method, parameterTypes).invoke(null, arguments);
+        } catch (ClassNotFoundException error) {
+            reportMissingAgentLock(error);
+        } catch (ReflectiveOperationException error) {
+            throw new IllegalStateException("Could not invoke agent lock method " + method, error);
+        }
+    }
+
+    private static Class<?> loadAgentLockClass() throws ClassNotFoundException {
+        ClassLoader systemLoader = ClassLoader.getSystemClassLoader();
+        try {
+            return Class.forName("bl.AgentLock", true, systemLoader);
+        } catch (ClassNotFoundException systemError) {
+            ClassLoader contextLoader = Thread.currentThread().getContextClassLoader();
+            if (contextLoader == null || contextLoader == systemLoader) {
+                throw systemError;
+            }
+            return Class.forName("bl.AgentLock", true, contextLoader);
+        }
+    }
+
+    private static void reportMissingAgentLock(ClassNotFoundException error) {
+        if (!agentLockLookupFailed) {
+            agentLockLookupFailed = true;
+            System.out.println("[Bald Launcher] Agent lock is unavailable: " + error.getMessage());
         }
     }
 

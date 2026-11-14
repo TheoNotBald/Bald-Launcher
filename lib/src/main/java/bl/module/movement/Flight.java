@@ -70,9 +70,9 @@ public final class Flight extends Module {
         double y = component(motion, "y");
         if (mode.getEnum().equals("Jetpack")) {
             Object input = Reflect.getField(player, "input");
-            Object keyPresses = Reflect.getField(input, "keyPresses");
-            boolean up = pressed(keyPresses, "jump");
-            boolean down = pressed(keyPresses, "shift");
+            Object playerInput = input == null ? null : Reflect.getField(input, "playerInput");
+            boolean up = pressed(playerInput, "jump");
+            boolean down = pressed(playerInput, "sneak");
             if (up != down) {
                 y = up ? jetpackSpeed.getDouble() : -jetpackSpeed.getDouble();
             } else if (dampenWhenIdle.getBool()) {
@@ -233,8 +233,8 @@ public final class Flight extends Module {
         return changed;
     }
 
-    private boolean pressed(Object keyPresses, String accessor) {
-        Object value = Reflect.call(keyPresses, accessor);
+    private boolean pressed(Object playerInput, String accessor) {
+        Object value = playerInput == null ? null : Reflect.call(playerInput, accessor);
         if (!(value instanceof Boolean pressed)) {
             throw new IllegalStateException("Could not read flight key " + accessor);
         }

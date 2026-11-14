@@ -29,7 +29,10 @@ public final class PacketUtil {
             return false;
         }
         try {
-            Object movement = Reflect.call(packet, "getMovement");
+            Object movement = Reflect.call(packet, "getVelocity");
+            if (movement == null) {
+                movement = Reflect.call(packet, "getMovement");
+            }
             if (movement == null) {
                 throw new NoSuchMethodException("Clientbound motion packet movement");
             }
@@ -42,7 +45,8 @@ public final class PacketUtil {
             }
             Object scaled = vectorType.getConstructor(double.class, double.class, double.class)
                     .newInstance(x * horizontalFactor, y * verticalFactor, z * horizontalFactor);
-            if (!Reflect.setField(packet, "movement", scaled)) {
+            if (!Reflect.setField(packet, "movement", scaled)
+                    && !Reflect.setField(packet, "velocity", scaled)) {
                 throw new NoSuchFieldException("Clientbound motion packet movement");
             }
             return true;

@@ -10,7 +10,7 @@ public final class Timer extends Module {
     private Float originalTickLength;
 
     public Timer() {
-        super("Timer", Category.MOVEMENT);
+        super("Timer", Category.WORLD);
     }
 
     @Override

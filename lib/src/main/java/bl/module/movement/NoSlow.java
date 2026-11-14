@@ -42,13 +42,8 @@ public final class NoSlow extends Module {
                 x,
                 component(motion, "y"),
                 z)) {
-            throw new IllegalStateException("Could not adjust item-use movement");
+            throw new IllegalStateException("Could not update player movement while using an item");
         }
-    }
-
-    @Override
-    protected boolean runsAfterVanillaTick() {
-        return true;
     }
 
     private double component(Object vec, String axis) {

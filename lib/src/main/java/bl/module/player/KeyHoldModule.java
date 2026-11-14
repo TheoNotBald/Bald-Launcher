@@ -11,7 +11,7 @@ public final class KeyHoldModule extends Module {
     private Boolean originalDown;
 
     public KeyHoldModule(String name, String keyName) {
-        super(name, Category.MOVEMENT, true);
+        super(name, Category.MISC, true);
         this.keyName = keyName;
     }
 
@@ -25,13 +25,13 @@ public final class KeyHoldModule extends Module {
         if (currentKey != key) {
             restore();
             key = currentKey;
-            Object down = Reflect.call(key, "isDown");
+            Object down = Reflect.call(key, "isPressed");
             if (!(down instanceof Boolean value)) {
                 throw new IllegalStateException("Could not read the " + keyName + " key state");
             }
             originalDown = value;
         }
-        if (!Reflect.invoke(key, "setDown", true)) {
+        if (!Reflect.invoke(key, "setPressed", true)) {
             throw new IllegalStateException("Could not hold the " + keyName + " key");
         }
     }
@@ -47,7 +47,7 @@ public final class KeyHoldModule extends Module {
     }
 
     private void restore() {
-        if (key != null && originalDown != null && !Reflect.invoke(key, "setDown", originalDown)) {
+        if (key != null && originalDown != null && !Reflect.invoke(key, "setPressed", originalDown)) {
             throw new IllegalStateException("Could not restore the " + keyName + " key state");
         }
         key = null;

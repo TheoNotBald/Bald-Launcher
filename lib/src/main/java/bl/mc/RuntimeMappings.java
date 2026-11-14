@@ -16,8 +16,9 @@ public final class RuntimeMappings {
 
     private static final Map<String, String[]> classes = new HashMap<>();
     private static final Map<String, String> namedClasses = new HashMap<>();
-    private static final Map<String, List<String[]>> methods = new HashMap<>();
-    private static final Map<String, List<String[]>> fields = new HashMap<>();
+    private static final Map<String, Set<String>> classAliases = new HashMap<>();
+    private static final Map<String, List<String[]>> methodsByOwner = new HashMap<>();
+    private static final Map<String, List<String[]>> fieldsByOwner = new HashMap<>();
 
     private static volatile int namespace;
     private static volatile ClassLoader gameLoader;
@@ -62,6 +63,10 @@ public final class RuntimeMappings {
         String expectedName = namedInternalName.replace('.', '/');
         String[] aliases = classes.get(expectedName);
         if (aliases == null) {
+            String named = namedClasses.get(expectedName);
+            aliases = named == null ? null : classes.get(named);
+        }
+        if (aliases == null) {
             return actualName.equals(expectedName);
         }
         return actualName.equals(aliases[namespace + 1]);
@@ -69,22 +74,35 @@ public final class RuntimeMappings {
 
     public static List<String> memberNames(String ownerName, String name, boolean field) {
         String internalOwner = ownerName.replace('.', '/');
-        String namedOwner = namedClasses.getOrDefault(internalOwner, internalOwner);
-        Map<String, List<String[]>> mappings = field ? fields : methods;
-        List<String[]> aliases = mappings.get(namedOwner + "#" + name);
-        if (aliases == null) {
-            return List.of(name);
+        Set<String> owners = classAliases.getOrDefault(internalOwner,
+                Set.of(namedClasses.getOrDefault(internalOwner, internalOwner)));
+        Map<String, List<String[]>> mappings = field ? fieldsByOwner : methodsByOwner;
+        List<String[]> ownerMappings = new ArrayList<>();
+        Set<String> intermediaryNames = new LinkedHashSet<>();
+        for (String owner : owners) {
+            List<String[]> members = mappings.getOrDefault(owner, List.of());
+            ownerMappings.addAll(members);
+            for (String[] mapping : members) {
+                if (containsName(mapping, name)) {
+                    intermediaryNames.add(mapping[1]);
+                }
+            }
         }
         Set<String> names = new LinkedHashSet<>();
-        for (String[] mapping : aliases) {
+        for (String[] mapping : ownerMappings) {
+            if (!intermediaryNames.contains(mapping[1])) {
+                continue;
+            }
             names.add(mapping[namespace]);
-        }
-        names.add(name);
-        for (String[] mapping : aliases) {
             names.add(mapping[namespace == 0 ? 1 : 0]);
             names.add(mapping[2]);
         }
+        names.add(name);
         return new ArrayList<>(names);
+    }
+
+    private static boolean containsName(String[] mapping, String name) {
+        return mapping[0].equals(name) || mapping[1].equals(name) || mapping[2].equals(name);
     }
 
     private static String runtimeClassName(String[] aliases) {
@@ -114,9 +132,12 @@ public final class RuntimeMappings {
                     namedClasses.put(namedName, namedName);
                     namedClasses.put(parts[2], namedName);
                     namedClasses.put(parts[3], namedName);
+                    classAliases.computeIfAbsent(parts[2], ignored -> new LinkedHashSet<>()).add(namedName);
+                    classAliases.computeIfAbsent(parts[3], ignored -> new LinkedHashSet<>()).add(namedName);
                 } else if ((parts[0].equals("M") || parts[0].equals("F")) && parts.length == 5) {
-                    Map<String, List<String[]>> mappings = parts[0].equals("F") ? fields : methods;
-                    mappings.computeIfAbsent(parts[1] + "#" + parts[2], ignored -> new ArrayList<>())
+                    Map<String, List<String[]>> ownerMappings = parts[0].equals("F")
+                            ? fieldsByOwner : methodsByOwner;
+                    ownerMappings.computeIfAbsent(parts[1], ignored -> new ArrayList<>())
                             .add(new String[] { parts[3], parts[4], parts[2] });
                 }
             }

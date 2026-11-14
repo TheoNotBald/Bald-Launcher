@@ -1,7 +1,6 @@
 package bl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -35,8 +34,7 @@ class ModuleRegistryTest {
             assertTrue(names.add(module.name), "Duplicate module name: " + module.name);
         }
         assertEquals(Bl.modules().size(), names.size());
-        assertTrue(names.size() >= 51, "Expected at least 51 registered modules");
-        assertFalse(names.contains("NoFall"), "NoFall is intentionally excluded from this agent build");
+        assertTrue(names.size() >= 52, "Expected at least 52 registered modules");
         assertTrue(names.containsAll(Set.of("SpeedMine", "BlockESP", "ESP", "Tracers", "Nametags", "ItemESP", "AutoTotem",
                 "AutoArmor", "AutoFish", "AutoLoot", "AutoFarm", "TreeFeller", "AutoReplant",
                 "AutoMine", "AirJump", "NoSlow", "Spider", "AimAssist", "AutoWeapon", "AutoShield", "BowAim")));

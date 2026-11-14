@@ -20,7 +20,7 @@ public final class AutoTool extends Module {
         Object player = Reflect.player();
         Object options = Reflect.getField(minecraft, "options");
         Object attackKey = Reflect.getField(options, "keyAttack");
-        Object pressed = Reflect.call(attackKey, "isDown");
+        Object pressed = Reflect.call(attackKey, "isPressed");
         if (player == null || !Boolean.TRUE.equals(pressed)) {
             restoreSelection();
             return;

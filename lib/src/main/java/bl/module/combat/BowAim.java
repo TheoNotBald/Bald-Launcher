@@ -3,6 +3,7 @@ package bl.module.combat;
 import bl.mc.Reflect;
 import bl.mc.Types;
 import bl.mc.Worlds;
+import bl.rotation.RotationManager;
 import bl.module.Category;
 import bl.module.Module;
 import bl.module.Setting;
@@ -21,7 +22,9 @@ public final class BowAim extends Module {
     @Override
     protected void onTick() {
         Object player = Reflect.player();
-        if (player == null) {
+        Object minecraft = Reflect.instance();
+        if (player == null || minecraft == null
+                || Reflect.fieldOfType(minecraft, "net/minecraft/client/gui/screens/Screen") != null) {
             return;
         }
         Object hand = enumValue("net/minecraft/world/InteractionHand", "MAIN_HAND");
@@ -33,9 +36,9 @@ public final class BowAim extends Module {
         if (item != bow && item != crossbow) {
             return;
         }
-        Object options = Reflect.getField(Reflect.instance(), "options");
+        Object options = Reflect.getField(minecraft, "options");
         Object useKey = Reflect.getField(options, "keyUse");
-        if (!Boolean.TRUE.equals(Reflect.call(useKey, "isDown"))) {
+        if (!Boolean.TRUE.equals(Reflect.call(useKey, "isPressed"))) {
             return;
         }
         Object target = null;
@@ -61,7 +64,8 @@ public final class BowAim extends Module {
         float pitch = (float) -Math.toDegrees(Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)));
         float nextYaw = Reflect.yaw() + wrap(yaw - Reflect.yaw()) * (float) smoothness.getDouble();
         float nextPitch = Reflect.pitch() + (pitch - Reflect.pitch()) * (float) smoothness.getDouble();
-        Reflect.applyRotation(nextYaw, nextPitch);
+        float step = RotationManager.gcdStep(Reflect.sensitivity());
+        Reflect.applyRotation(RotationManager.snapToStep(nextYaw, step), RotationManager.snapToStep(nextPitch, step));
     }
 
     private boolean isTargetType(Object entity) {

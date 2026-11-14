@@ -2,16 +2,13 @@ package bl.module.render;
 
 import bl.Bl;
 import bl.event.events.RenderLevelEvent;
+import bl.mc.GizmoDraw;
 import bl.mc.Reflect;
 import bl.mc.Worlds;
 import bl.module.Category;
 import bl.module.Module;
 import bl.module.Setting;
 import bl.util.MathUtil;
-import net.minecraft.gizmos.GizmoProperties;
-import net.minecraft.gizmos.GizmoStyle;
-import net.minecraft.gizmos.Gizmos;
-import net.minecraft.world.phys.AABB;
 
 public final class ESP extends Module {
 
@@ -27,7 +24,7 @@ public final class ESP extends Module {
         super("ESP", Category.RENDER, true);
         Bl.bus().subscribe(this, RenderLevelEvent.class, event -> {
             if (enabled && isAvailable()) {
-                draw();
+                GizmoDraw.inScope(event.levelRenderer, this::draw);
             }
         });
     }
@@ -36,7 +33,7 @@ public final class ESP extends Module {
     protected void onTick() {
     }
 
-    private void draw() {
+    private void draw(Object levelRenderer) {
         Object player = Reflect.player();
         if (player == null) {
             return;
@@ -62,13 +59,10 @@ public final class ESP extends Module {
             int alpha = (int) (MathUtil.fade(color, distance, maxDistance.getDouble()) * 255.0f);
             int shaded = (alpha << 24) | (color & 0xFFFFFF);
             Object bounds = Reflect.call(entity, "getBoundingBox");
-            if (!(bounds instanceof AABB box)) {
+            if (bounds == null) {
                 throw new IllegalStateException("Could not read entity bounding box");
             }
-            GizmoProperties outline = Gizmos.cuboid(box, GizmoStyle.stroke(shaded, 1.5f));
-            if (alwaysOnTop.getBool()) {
-                outline.setAlwaysOnTop();
-            }
+            GizmoDraw.box(bounds, shaded, 1.5f, alwaysOnTop.getBool());
         }
     }
 }

@@ -47,10 +47,14 @@ public final class Setting {
     }
 
     public static Setting integer(String name, int value, int min, int max) {
+        return integer(name, value, min, max, () -> true);
+    }
+
+    public static Setting integer(String name, int value, int min, int max, BooleanSupplier visibility) {
         if (min > max || value < min || value > max) {
             throw new IllegalArgumentException("Invalid integer setting range or default: " + name);
         }
-        Setting setting = new Setting(name, Type.INT, () -> true);
+        Setting setting = new Setting(name, Type.INT, visibility);
         setting.number = value;
         setting.min = min;
         setting.max = max;
@@ -83,6 +87,17 @@ public final class Setting {
         return setting;
     }
 
+    public static Setting enumOf(String name, Enum<?> value) {
+        if (value == null) {
+            throw new IllegalArgumentException("Enum setting default cannot be null: " + name);
+        }
+        List<String> options = new java.util.ArrayList<>();
+        for (Object option : value.getDeclaringClass().getEnumConstants()) {
+            options.add(((Enum<?>) option).name());
+        }
+        return enumeration(name, value.name(), options);
+    }
+
     public static Setting color(String name, int value) {
         Setting setting = new Setting(name, Type.COLOR, () -> true);
         setting.color = value;
@@ -113,6 +128,10 @@ public final class Setting {
 
     public String getEnum() {
         return choice;
+    }
+
+    public <E extends Enum<E>> E getEnum(Class<E> enumType) {
+        return Enum.valueOf(enumType, choice);
     }
 
     public int getColor() {

@@ -5,21 +5,16 @@ import java.util.List;
 
 import bl.Bl;
 import bl.event.events.RenderLevelEvent;
+import bl.mc.GizmoDraw;
 import bl.mc.Reflect;
+import bl.mc.Types;
 import bl.module.Category;
 import bl.module.Module;
 import bl.module.Setting;
-import net.minecraft.core.BlockPos;
-import net.minecraft.tags.BlockTags;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.gizmos.GizmoProperties;
-import net.minecraft.gizmos.GizmoStyle;
-import net.minecraft.gizmos.Gizmos;
 
 public final class BlockESP extends Module {
 
-    private record Highlight(BlockPos position, int color) {
+    private record Highlight(Object position, int color) {
     }
 
     private final Setting radius = setting(Setting.integer("Scan radius", 12, 4, 24));
@@ -40,7 +35,7 @@ public final class BlockESP extends Module {
         super("BlockESP", Category.RENDER, true);
         Bl.bus().subscribe(this, RenderLevelEvent.class, event -> {
             if (enabled && isAvailable()) {
-                draw();
+                GizmoDraw.inScope(event.levelRenderer, this::draw);
             }
         });
     }
@@ -68,8 +63,8 @@ public final class BlockESP extends Module {
 
     private void scan() {
         Object player = Reflect.player();
-        Object levelObject = Reflect.world();
-        if (player == null || !(levelObject instanceof Level level)) {
+        Object world = Reflect.world();
+        if (player == null || world == null) {
             highlights = List.of();
             return;
         }
@@ -86,14 +81,14 @@ public final class BlockESP extends Module {
                     continue;
                 }
                 for (int y = -vertical; y <= vertical; y++) {
-                    BlockPos pos = new BlockPos(centerX + x, centerY + y, centerZ + z);
-                    if (!level.isLoaded(pos)) {
-                        continue;
+                    Object pos = blockPosition(centerX + x, centerY + y, centerZ + z);
+                    Object state = Reflect.call(world, "getBlockState", pos);
+                    if (state == null) {
+                        throw new IllegalStateException("Could not read scanned block state");
                     }
-                    BlockState state = level.getBlockState(pos);
                     int color = colorFor(state);
                     if (color != 0) {
-                        found.add(new Highlight(pos.immutable(), color));
+                        found.add(new Highlight(pos, color));
                     }
                 }
             }
@@ -101,35 +96,53 @@ public final class BlockESP extends Module {
         highlights = List.copyOf(found);
     }
 
-    private int colorFor(BlockState state) {
-        if (diamonds.getBool() && state.is(BlockTags.DIAMOND_ORES)) {
+    private int colorFor(Object state) {
+        if (diamonds.getBool() && hasTag(state, "DIAMOND_ORES")) {
             return 0xFF55FFFF;
         }
-        if (emeralds.getBool() && state.is(BlockTags.EMERALD_ORES)) {
+        if (emeralds.getBool() && hasTag(state, "EMERALD_ORES")) {
             return 0xFF55FF55;
         }
-        if (gold.getBool() && state.is(BlockTags.GOLD_ORES)) {
+        if (gold.getBool() && hasTag(state, "GOLD_ORES")) {
             return 0xFFFFD700;
         }
-        if (iron.getBool() && state.is(BlockTags.IRON_ORES)) {
+        if (iron.getBool() && hasTag(state, "IRON_ORES")) {
             return 0xFFD8D8D8;
         }
-        if (redstone.getBool() && state.is(BlockTags.REDSTONE_ORES)) {
+        if (redstone.getBool() && hasTag(state, "REDSTONE_ORES")) {
             return 0xFFFF4444;
         }
-        if (lapis.getBool() && state.is(BlockTags.LAPIS_ORES)) {
+        if (lapis.getBool() && hasTag(state, "LAPIS_ORES")) {
             return 0xFF5577FF;
         }
         return 0;
     }
 
-    private void draw() {
+    private boolean hasTag(Object state, String tagName) {
+        Class<?> blockTags = Types.find("net/minecraft/registry/tag/BlockTags");
+        Object tag = blockTags == null ? null : Reflect.call(blockTags, tagName);
+        Object result = tag == null ? null : Reflect.call(state, "is", tag);
+        if (!(result instanceof Boolean matches)) {
+            throw new IllegalStateException("Could not check block tag " + tagName);
+        }
+        return matches;
+    }
+
+    private Object blockPosition(int x, int y, int z) {
+        Class<?> type = Types.find("net/minecraft/util/math/BlockPos");
+        if (type == null) {
+            throw new IllegalStateException("Minecraft BlockPos type is unavailable");
+        }
+        try {
+            return type.getConstructor(int.class, int.class, int.class).newInstance(x, y, z);
+        } catch (ReflectiveOperationException error) {
+            throw new IllegalStateException("Could not create block position", error);
+        }
+    }
+
+    private void draw(Object levelRenderer) {
         for (Highlight highlight : highlights) {
-            GizmoProperties outline = Gizmos.cuboid(highlight.position(),
-                    GizmoStyle.stroke(highlight.color(), 1.5f));
-            if (throughWalls.getBool()) {
-                outline.setAlwaysOnTop();
-            }
+            GizmoDraw.box(highlight.position(), highlight.color(), 1.5f, throughWalls.getBool());
         }
     }
 }

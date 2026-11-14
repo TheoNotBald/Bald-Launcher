@@ -6,6 +6,9 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -34,6 +37,7 @@ import bl.module.combat.BowAim;
 import bl.module.combat.AutoClicker;
 import bl.module.combat.Criticals;
 import bl.module.combat.KillAura;
+import bl.module.combat.Hitboxes;
 import bl.module.combat.Reach;
 import bl.module.combat.TriggerBot;
 import bl.module.combat.Velocity;
@@ -45,6 +49,7 @@ import bl.module.movement.AutoSwim;
 import bl.module.movement.FastLadder;
 import bl.module.movement.FastBreak;
 import bl.module.movement.LongJump;
+import bl.module.movement.NoFall;
 import bl.module.movement.NoJumpDelay;
 import bl.module.movement.NoSlow;
 import bl.module.movement.Parkour;
@@ -74,6 +79,7 @@ import bl.module.world.AutoMine;
 import bl.module.world.AutoReplant;
 import bl.module.world.SpeedMine;
 import bl.module.world.TreeFeller;
+import bl.mc.Types;
 import bl.rotation.RotationManager;
 import bl.ui.ClickGui;
 
@@ -93,6 +99,9 @@ public final class Bl {
     private Module active;
     private boolean configurationLoaded;
     private String activeProfile = "default";
+    private boolean rightShiftDown;
+    private boolean menuKeyFailureReported;
+    private Method glfwGetKey;
 
     private Bl() {
     }
@@ -101,8 +110,14 @@ public final class Bl {
         if (instance != null) {
             return;
         }
-        instance = new Bl();
-        instance.register();
+        Bl created = new Bl();
+        instance = created;
+        try {
+            created.register();
+        } catch (RuntimeException | Error failure) {
+            instance = null;
+            throw failure;
+        }
     }
 
     public static Bl get() {
@@ -168,9 +183,9 @@ public final class Bl {
     }
 
     private void register() {
-        add(new KillAura(), new Reach(), new Velocity(), new AutoClicker(), new Criticals(), new TriggerBot(),
+        add(new KillAura(), new Reach(), new Hitboxes(), new Velocity(), new AutoClicker(), new Criticals(), new TriggerBot(),
                 new AimAssist(), new AutoWeapon(), new AutoShield(), new BowAim());
-        add(new Sprint(), new Step(), new Speed(), new Flight(), new LongJump(), new SafeWalk(),
+        add(new Sprint(), new Step(), new NoFall(), new Speed(), new Flight(), new LongJump(), new SafeWalk(),
                 new Timer(), new AutoSprint(), new AirJump(), new NoJumpDelay(), new Spider(), new ReverseStep(),
                 new NoSlow(), new Parkour(), new AutoSwim(), new FastLadder(), new AntiWeb());
         add(new AutoRespawn(), new FastPlace());
@@ -197,12 +212,15 @@ public final class Bl {
     public static void tick() {
         try {
             if (instance == null) {
-                return;
+                init();
+                System.out.println("[Bald Agent] Initialized " + instance.modules.size()
+                        + " modules in the game classloader");
             }
             instance.minecraft = bl.mc.Reflect.instance();
             if (!instance.configurationLoaded) {
                 instance.loadConfiguration();
             }
+            instance.pollMenuKey();
             instance.rotations.tick();
             instance.gui.tick();
             for (Module module : new ArrayList<>(instance.modules)) {
@@ -260,11 +278,22 @@ public final class Bl {
 
     public static void attackIntercept(Object gameMode, Object player, Object target) {
         if (instance != null) {
+            boolean queuedCritical = false;
             for (Module module : instance.modules) {
-                if (module instanceof Criticals criticals && module.enabled
-                        && criticals.interceptAttack(gameMode, player, target)) {
-                    return;
+                if (module instanceof Criticals criticals) {
+                    if (criticals.isExecutingQueuedAttack()) {
+                        queuedCritical = true;
+                    }
+                    if (module.enabled && criticals.interceptAttack(gameMode, player, target)) {
+                        return;
+                    }
                 }
+            }
+            // A critical hit is already airborne; deferring it here would lose the crit.
+            Reach reach = Reach.INSTANCE;
+            if (!queuedCritical && reach != null && reach.enabled
+                    && reach.onAttack(target instanceof net.minecraft.entity.Entity entity ? entity : null)) {
+                return;
             }
         }
         if (gameMode == null || !bl.mc.Reflect.invoke(gameMode, "bald$originalAttack", player, target)) {
@@ -283,11 +312,87 @@ public final class Bl {
     public static boolean onSendFromListener(Object listener, Object packet) {
         try {
             instance.connection = bl.mc.Reflect.connectionOf(listener);
+            if (nudgeNoFall(packet)) {
+                return true;
+            }
+            Reach reach = Reach.INSTANCE;
+            if (reach != null
+                    && Types.isInstanceOf(packet,
+                            "net/minecraft/network/packet/c2s/play/PlayerMoveC2SPacket")
+                    && Boolean.TRUE.equals(bl.mc.Reflect.call(packet, "changesPosition"))) {
+                reach.onPositionSent();
+            }
             return false;
         } catch (Throwable t) {
             fault(t);
             return false;
         }
+    }
+
+    private static boolean nudgeNoFall(Object packet) throws ReflectiveOperationException {
+        NoFall noFall = NoFall.INSTANCE;
+        if (noFall == null || !Types.isInstanceOf(packet,
+                "net/minecraft/network/packet/c2s/play/PlayerMoveC2SPacket") || !noFall.intercept()) {
+            return false;
+        }
+        Object player = bl.mc.Reflect.player();
+        Object minecraft = bl.mc.Reflect.instance();
+        Object networkHandler = bl.mc.Reflect.call(minecraft, "getNetworkHandler");
+        if (player == null || networkHandler == null) {
+            throw new IllegalStateException("Could not access the client network handler for NoFall");
+        }
+        Class<?> positionPacket = Types.find(
+                "net/minecraft/network/packet/c2s/play/PlayerMoveC2SPacket$PositionAndOnGround");
+        if (positionPacket == null) {
+            throw new IllegalStateException("Could not locate the position movement packet");
+        }
+        Constructor<?> constructor = positionPacket.getDeclaredConstructor(
+                double.class, double.class, double.class, boolean.class, boolean.class);
+        constructor.setAccessible(true);
+        Object horizontalCollision = bl.mc.Reflect.getField(player, "horizontalCollision");
+        if (!(horizontalCollision instanceof Boolean collided)) {
+            throw new IllegalStateException("Could not read player collision state");
+        }
+        Object replacement = constructor.newInstance(
+                number(bl.mc.Reflect.call(player, "getX")),
+                number(bl.mc.Reflect.call(player, "getY")) + 9.0E-8,
+                number(bl.mc.Reflect.call(player, "getZ")),
+                false,
+                collided);
+        if (!NoFall.beginReplacementPacket()) {
+            return false;
+        }
+        try {
+            if (!bl.mc.Reflect.invoke(networkHandler, "sendPacket", replacement)) {
+                throw new IllegalStateException("Could not send the NoFall movement packet");
+            }
+        } finally {
+            NoFall.endReplacementPacket();
+        }
+        return true;
+    }
+
+    public static void onPositionSetback() {
+        try {
+            NoFall noFall = NoFall.INSTANCE;
+            Object player = bl.mc.Reflect.player();
+            if (noFall == null || player == null) {
+                return;
+            }
+            noFall.onSetback(
+                    number(bl.mc.Reflect.call(player, "getX")),
+                    number(bl.mc.Reflect.call(player, "getY")),
+                    number(bl.mc.Reflect.call(player, "getZ")));
+        } catch (Throwable t) {
+            fault(t);
+        }
+    }
+
+    private static double number(Object value) {
+        if (!(value instanceof Number number)) {
+            throw new IllegalStateException("Could not read a numeric player movement value");
+        }
+        return number.doubleValue();
     }
 
     public static boolean onSendFromConnection(Object connection, Object packet) {
@@ -339,14 +444,46 @@ public final class Bl {
         }
     }
 
+    /**
+     * Return-value hook for {@code Entity#getBoundingBox}. Called from the ASM
+     * hitbox hook with the returned box first and the owning entity second.
+     */
+    public static Object hitbox(Object box, Object entity) {
+        try {
+            Hitboxes hitboxes = Hitboxes.INSTANCE;
+            if (hitboxes == null || box == null) {
+                return box;
+            }
+            return hitboxes.expand(box, entity);
+        } catch (Throwable t) {
+            reportFailure("Hitbox expansion", t);
+            return box;
+        }
+    }
+
+    public static boolean scrollMenu(Object screen, double mouseX, double mouseY,
+            double horizontal, double vertical) {
+        if (instance == null) {
+            return false;
+        }
+        try {
+            return instance.gui.scroll(screen, mouseX, mouseY, vertical);
+        } catch (Throwable t) {
+            fault(t);
+            return false;
+        }
+    }
+
     public static void onKey(Object source, int keyCode, int action, int namespace) {
         try {
             if (instance == null || action != 1) {
                 return;
             }
+            if (AgentLock.isLocked()) {
+                instance.gui.close();
+                return;
+            }
             if (keyCode == 344) {
-                System.out.println("[Bald Agent] Right Shift received by agent");
-                instance.gui.toggle(source, namespace);
                 return;
             }
             if (instance.gui.isOpen()) {
@@ -361,6 +498,55 @@ public final class Bl {
         } catch (Throwable t) {
             fault(t);
         }
+    }
+
+    private void pollMenuKey() {
+        try {
+            Object window = bl.mc.Reflect.call(minecraft, "getWindow");
+            if (window == null) {
+                throw new IllegalStateException("Could not access the Minecraft window");
+            }
+            long windowHandle = findWindowHandle(window);
+            if (glfwGetKey == null) {
+                Class<?> glfw = Class.forName("org.lwjgl.glfw.GLFW", true, minecraft.getClass().getClassLoader());
+                glfwGetKey = glfw.getMethod("glfwGetKey", long.class, int.class);
+            }
+            Object state = glfwGetKey.invoke(null, windowHandle, 344);
+            if (!(state instanceof Number keyState)) {
+                throw new IllegalStateException("GLFW did not return the Right Shift key state");
+            }
+            boolean pressed = keyState.intValue() == 1;
+            Object currentScreen = bl.mc.Reflect.getField(minecraft, "currentScreen");
+            // Right Shift may close the agent's own dashboard, but it must not
+            // open over chat, the pause menu, or any other player screen.
+            if (pressed && !rightShiftDown && !AgentLock.isLocked()
+                    && (currentScreen == null || gui.isOpen())) {
+                System.out.println("[Bald Agent] Right Shift received by agent");
+                gui.toggle(minecraft, bl.mc.RuntimeMappings.namespace());
+            }
+            rightShiftDown = pressed;
+        } catch (ReflectiveOperationException | LinkageError | IllegalStateException error) {
+            if (!menuKeyFailureReported) {
+                menuKeyFailureReported = true;
+                reportFailure("Agent menu key polling", error);
+            }
+        }
+    }
+
+    private static long findWindowHandle(Object window) throws IllegalAccessException {
+        for (Class<?> type = window.getClass(); type != null; type = type.getSuperclass()) {
+            for (Field field : type.getDeclaredFields()) {
+                if (field.getType() != long.class || java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+                    continue;
+                }
+                field.setAccessible(true);
+                long handle = field.getLong(window);
+                if (handle != 0L) {
+                    return handle;
+                }
+            }
+        }
+        throw new IllegalStateException("Could not read the Minecraft GLFW window handle");
     }
 
     public static int moduleCount() {
@@ -625,7 +811,7 @@ public final class Bl {
 
     public static void toggleModule(int index) {
         try {
-            if (instance != null && index >= 0 && index < instance.modules.size()) {
+            if (!AgentLock.isLocked() && instance != null && index >= 0 && index < instance.modules.size()) {
                 instance.modules.get(index).toggle();
                 saveConfiguration();
             }

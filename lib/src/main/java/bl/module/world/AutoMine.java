@@ -15,7 +15,7 @@ public final class AutoMine extends Module {
         Object minecraft = Reflect.instance();
         Object options = Reflect.getField(minecraft, "options");
         Object attack = Reflect.getField(options, "keyAttack");
-        if (!Boolean.TRUE.equals(Reflect.call(attack, "isDown"))) {
+        if (!Boolean.TRUE.equals(Reflect.call(attack, "isPressed"))) {
             return;
         }
         Object hit = Reflect.getField(minecraft, "hitResult");

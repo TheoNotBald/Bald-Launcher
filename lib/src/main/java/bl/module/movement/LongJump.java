@@ -31,8 +31,8 @@ public final class LongJump extends Module {
         boolean ground = Worlds.onGround(player);
         if (ground) {
             Object input = Reflect.getField(player, "input");
-            Object keyPresses = Reflect.getField(input, "keyPresses");
-            Object jump = Reflect.call(keyPresses, "jump");
+            Object playerInput = input == null ? null : Reflect.getField(input, "playerInput");
+            Object jump = playerInput == null ? null : Reflect.call(playerInput, "jump");
             airborne = !requireJumpInput.getBool() || jump instanceof Boolean pressed && pressed;
             return;
         }

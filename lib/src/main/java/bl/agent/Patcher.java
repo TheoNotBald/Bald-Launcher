@@ -6,17 +6,13 @@ import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.security.ProtectionDomain;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.MethodNode;
 
-import bl.Bl;
 import bl.agent.hook.AttackHook;
 import bl.agent.hook.CriticalAttackHook;
 import bl.agent.hook.KeyboardHook;
@@ -40,6 +36,7 @@ public final class Patcher implements ClassFileTransformer {
 
     private final List<Entry> entries = new ArrayList<>();
     private ClassLoader exposedLoader;
+    private ClassLoader configuredLoader;
 
     public void register(String[] names, ClassHook hook) {
         entries.add(new Entry(names, hook));
@@ -56,27 +53,28 @@ public final class Patcher implements ClassFileTransformer {
             return null;
         }
         ClassHook hook = null;
+        List<ClassHook> matchingHooks = new ArrayList<>();
         int runtimeNamespace = 0;
         for (Entry entry : entries) {
             for (int index = 0; index < entry.names.length; index++) {
                 if (entry.names[index].equals(className)) {
-                    hook = entry.hook;
+                    if (hook == null) {
+                        hook = entry.hook;
+                    }
+                    matchingHooks.add(entry.hook);
                     runtimeNamespace = index == 1 ? 1 : 0;
                     break;
                 }
             }
-            if (hook != null) {
-                break;
-            }
         }
-        if (hook == null) {
+        if (matchingHooks.isEmpty()) {
             return null;
         }
         RuntimeMappings.configure(runtimeNamespace, loader);
         try {
-            exposeAgentToGameLoader(loader);
+            initializeAgentInGameLoader(loader, runtimeNamespace);
         } catch (Throwable error) {
-            System.err.println("[Bald Agent] Could not expose agent classes to the game classloader");
+            System.err.println("[Bald Agent] Could not initialize agent in the game classloader");
             error.printStackTrace(System.err);
             return null;
         }
@@ -87,7 +85,7 @@ public final class Patcher implements ClassFileTransformer {
         boolean motionHook = hook instanceof ReceiveMotionHook;
         boolean attackHook = hook instanceof AttackHook;
         boolean criticalAttackHook = hook instanceof CriticalAttackHook;
-        if (Bl.debug) {
+        if (Boolean.getBoolean("lib.debug")) {
             System.out.println("lib: " + className.replace('/', '.'));
         }
         try {
@@ -108,7 +106,13 @@ public final class Patcher implements ClassFileTransformer {
                 System.out.println("[Bald Agent] KeyboardHandler loaded as " + className
                         + "; matched key methods: " + matchedMethods);
             }
-            hook.apply(node);
+            for (ClassHook matchingHook : matchingHooks) {
+                matchingHook.apply(node);
+            }
+            if (matchingHooks.size() > 1) {
+                System.out.println("[Bald Agent] Applied " + matchingHooks.size()
+                        + " hooks to " + className);
+            }
             if (keyboardHook) {
                 System.out.println("[Bald Agent] Keyboard hook applied to " + matchedMethods + " method(s)");
             }
@@ -155,28 +159,34 @@ public final class Patcher implements ClassFileTransformer {
         var location = Agent.class.getProtectionDomain().getCodeSource().getLocation();
         Path agentJar = Path.of(location.toURI()).toAbsolutePath().normalize();
 
+        Object delegate = gameDelegate(loader);
+        Method addCodeSource = delegate.getClass().getMethod("addCodeSource", Path.class);
+        addCodeSource.setAccessible(true);
+        addCodeSource.invoke(delegate, agentJar);
+        exposedLoader = loader;
+        System.out.println("[Bald Agent] Added agent code source to " + loader.getClass().getName());
+    }
+
+    private synchronized void initializeAgentInGameLoader(ClassLoader loader, int runtimeNamespace)
+            throws Exception {
+        if (configuredLoader == loader) {
+            return;
+        }
+        exposeAgentToGameLoader(loader);
+
+        Object delegate = gameDelegate(loader);
+        Method loadIntoTarget = delegate.getClass().getMethod("loadIntoTarget", String.class);
+        loadIntoTarget.setAccessible(true);
+
+        Class<?> mappings = (Class<?>) loadIntoTarget.invoke(delegate, "bl.mc.RuntimeMappings");
+        mappings.getMethod("configure", int.class, ClassLoader.class).invoke(null, runtimeNamespace, loader);
+        configuredLoader = loader;
+        System.out.println("[Bald Agent] Configured runtime mappings in the game classloader");
+    }
+
+    private Object gameDelegate(ClassLoader loader) throws ReflectiveOperationException {
         Field delegateField = loader.getClass().getDeclaredField("delegate");
         delegateField.setAccessible(true);
-        Object delegate = delegateField.get(loader);
-
-        Field validSourcesField = delegate.getClass().getDeclaredField("validParentCodeSources");
-        validSourcesField.setAccessible(true);
-        Object currentSources = validSourcesField.get(delegate);
-        Set<Path> validSources = new LinkedHashSet<>();
-        if (currentSources instanceof Collection<?> sources) {
-            for (Object source : sources) {
-                if (source instanceof Path path) {
-                    validSources.add(path);
-                }
-            }
-        }
-        validSources.add(agentJar);
-
-        Method registerSources = delegate.getClass()
-                .getMethod("setValidParentClassPath", Collection.class);
-        registerSources.setAccessible(true);
-        registerSources.invoke(delegate, validSources);
-        exposedLoader = loader;
-        System.out.println("[Bald Agent] Exposed agent classes to " + loader.getClass().getName());
+        return delegateField.get(loader);
     }
 }

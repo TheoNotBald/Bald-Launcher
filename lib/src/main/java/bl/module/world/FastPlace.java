@@ -7,7 +7,7 @@ import bl.module.Module;
 public final class FastPlace extends Module {
 
     public FastPlace() {
-        super("FastPlace", Category.WORLD, true);
+        super("FastPlace", Category.PLAYER, true);
     }
 
     @Override

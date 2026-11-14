@@ -90,7 +90,7 @@ public final class SafeWalk extends Module {
         Object mc = Reflect.instance();
         Object options = Reflect.getField(mc, "options");
         Object shiftKey = Reflect.getField(options, "keyShift");
-        Object physicalState = Reflect.call(shiftKey, "isDown");
+        Object physicalState = Reflect.call(shiftKey, "isPressed");
         boolean shouldSneak = physicalState instanceof Boolean down && down;
         if (current instanceof Boolean state && state != shouldSneak
                 && !Reflect.invoke(player, "setShiftKeyDown", shouldSneak)) {

@@ -26,10 +26,10 @@ public final class Parkour extends Module {
         Object backKey = Reflect.getField(options, "keyDown");
         Object leftKey = Reflect.getField(options, "keyLeft");
         Object rightKey = Reflect.getField(options, "keyRight");
-        double forward = (Boolean.TRUE.equals(Reflect.call(forwardKey, "isDown")) ? 1.0 : 0.0)
-                - (Boolean.TRUE.equals(Reflect.call(backKey, "isDown")) ? 1.0 : 0.0);
-        double strafe = (Boolean.TRUE.equals(Reflect.call(rightKey, "isDown")) ? 1.0 : 0.0)
-                - (Boolean.TRUE.equals(Reflect.call(leftKey, "isDown")) ? 1.0 : 0.0);
+        double forward = (Boolean.TRUE.equals(Reflect.call(forwardKey, "isPressed")) ? 1.0 : 0.0)
+                - (Boolean.TRUE.equals(Reflect.call(backKey, "isPressed")) ? 1.0 : 0.0);
+        double strafe = (Boolean.TRUE.equals(Reflect.call(rightKey, "isPressed")) ? 1.0 : 0.0)
+                - (Boolean.TRUE.equals(Reflect.call(leftKey, "isPressed")) ? 1.0 : 0.0);
         if (forward == 0.0 && strafe == 0.0) {
             jumped = false;
             return;

@@ -23,6 +23,10 @@ public final class Criticals extends Module {
         super("Criticals", Category.COMBAT, true);
     }
 
+    public boolean isExecutingQueuedAttack() {
+        return executingQueuedAttack;
+    }
+
     public boolean interceptAttack(Object gameMode, Object player, Object target) {
         if (!enabled || !isAvailable() || executingQueuedAttack || target == null || player == null) {
             return false;

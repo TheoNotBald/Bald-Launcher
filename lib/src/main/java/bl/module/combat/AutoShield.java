@@ -23,7 +23,10 @@ public final class AutoShield extends Module {
             return;
         }
         Object player = Reflect.player();
-        if (player == null || Boolean.TRUE.equals(Reflect.call(player, "isUsingItem"))) {
+        Object minecraft = Reflect.instance();
+        if (player == null || minecraft == null
+                || Reflect.fieldOfType(minecraft, "net/minecraft/client/gui/screens/Screen") != null
+                || Boolean.TRUE.equals(Reflect.call(player, "isUsingItem"))) {
             return;
         }
         Object offhandSlot = enumValue("net/minecraft/world/entity/EquipmentSlot", "OFFHAND");
@@ -45,7 +48,7 @@ public final class AutoShield extends Module {
             return;
         }
         Object hand = enumValue("net/minecraft/world/InteractionHand", "OFF_HAND");
-        Object gameMode = Reflect.getField(Reflect.instance(), "gameMode");
+        Object gameMode = Reflect.getField(minecraft, "gameMode");
         if (gameMode == null || !Reflect.invoke(gameMode, "useItem", player, hand)) {
             throw new IllegalStateException("Could not raise the offhand shield");
         }

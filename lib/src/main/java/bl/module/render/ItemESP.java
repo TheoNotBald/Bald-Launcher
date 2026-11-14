@@ -2,15 +2,12 @@ package bl.module.render;
 
 import bl.Bl;
 import bl.event.events.RenderLevelEvent;
+import bl.mc.GizmoDraw;
 import bl.mc.Reflect;
 import bl.mc.Worlds;
 import bl.module.Category;
 import bl.module.Module;
 import bl.module.Setting;
-import net.minecraft.gizmos.GizmoProperties;
-import net.minecraft.gizmos.GizmoStyle;
-import net.minecraft.gizmos.Gizmos;
-import net.minecraft.world.phys.AABB;
 
 public final class ItemESP extends Module {
 
@@ -22,7 +19,7 @@ public final class ItemESP extends Module {
         super("ItemESP", Category.RENDER, true);
         Bl.bus().subscribe(this, RenderLevelEvent.class, event -> {
             if (enabled && isAvailable()) {
-                draw();
+                GizmoDraw.inScope(event.levelRenderer, this::draw);
             }
         });
     }
@@ -31,7 +28,7 @@ public final class ItemESP extends Module {
     protected void onTick() {
     }
 
-    private void draw() {
+    private void draw(Object levelRenderer) {
         Object player = Reflect.player();
         if (player == null) {
             return;
@@ -41,13 +38,10 @@ public final class ItemESP extends Module {
                 continue;
             }
             Object bounds = Reflect.call(entity, "getBoundingBox");
-            if (!(bounds instanceof AABB box)) {
+            if (bounds == null) {
                 throw new IllegalStateException("Could not read item entity bounds");
             }
-            GizmoProperties outline = Gizmos.cuboid(box, GizmoStyle.stroke(color.getColor(), 1.5f));
-            if (throughWalls.getBool()) {
-                outline.setAlwaysOnTop();
-            }
+            GizmoDraw.box(bounds, color.getColor(), 1.5f, throughWalls.getBool());
         }
     }
 }

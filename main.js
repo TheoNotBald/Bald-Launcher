@@ -10843,13 +10843,18 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       fs.writeFileSync(baldMenuConfigPath, JSON.stringify(baldMenuConfig), { encoding: 'utf8', mode: 0o600, flag: 'wx' });
       baldMenuJvmArguments.push(`-Dbaldlauncher.config=${baldMenuConfigPath}`);
     }
-    if (libLaunch && await libLaunch.isEnabled(profile.id)) {
+    const agentEnabled = libLaunch && await libLaunch.isEnabled(profile.id);
+    if (agentEnabled) {
       try {
         libSession = await libLaunch.prepare(profile, profile.loader);
+        emitLog(profile.name, 'info',
+          `[Bald Agent] Prepared ${profile.loader} agent; passing -javaagent to Minecraft.`, profile.id);
       } catch (error) {
         if (error.code !== 'LIB_ARTIFACT_MISSING') throw error;
         emitLog(profile.name, 'warn', `${error.message} Launching without the library agent.`, profile.id);
       }
+    } else {
+      emitLog(profile.name, 'warn', '[Bald Agent] Not enabled for this profile; Minecraft will launch without it.', profile.id);
     }
     const child = await profileLauncher.launch({
       root: minecraftRoot,

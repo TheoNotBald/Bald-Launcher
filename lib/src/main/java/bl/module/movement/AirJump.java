@@ -19,7 +19,7 @@ public final class AirJump extends Module {
         }
         Object options = Reflect.getField(Reflect.instance(), "options");
         Object jump = Reflect.getField(options, "keyJump");
-        boolean pressed = Boolean.TRUE.equals(Reflect.call(jump, "isDown"));
+        boolean pressed = Boolean.TRUE.equals(Reflect.call(jump, "isPressed"));
         if (pressed && !Worlds.onGround(player)) {
             if (!Reflect.invoke(player, "jumpFromGround")) {
                 throw new IllegalStateException("Could not trigger the midair jump");

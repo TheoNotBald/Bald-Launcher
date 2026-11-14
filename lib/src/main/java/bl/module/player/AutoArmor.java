@@ -10,7 +10,7 @@ public final class AutoArmor extends Module {
     private int clickDelay;
 
     public AutoArmor() {
-        super("AutoArmor", Category.PLAYER, true);
+        super("AutoArmor", Category.COMBAT, true);
     }
 
     @Override

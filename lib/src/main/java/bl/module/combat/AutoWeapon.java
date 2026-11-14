@@ -19,7 +19,7 @@ public final class AutoWeapon extends Module {
         Object player = Reflect.player();
         Object options = Reflect.getField(Reflect.instance(), "options");
         Object attack = Reflect.getField(options, "keyAttack");
-        if (player == null || !Boolean.TRUE.equals(Reflect.call(attack, "isDown"))) {
+        if (player == null || !Boolean.TRUE.equals(Reflect.call(attack, "isPressed"))) {
             restoreSlot();
             return;
         }

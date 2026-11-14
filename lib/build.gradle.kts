@@ -35,6 +35,11 @@ val intermediaryTiny = buildDirRef.file("mappings/intermediary.tiny")
 val clientJar = buildDirRef.file("client.jar")
 val clientNamedJar = buildDirRef.file("client-named.jar")
 val shadowJarFile = buildDirRef.file("libs/lib-${version}-all.jar")
+val yarnCompileJar = rootProject.layout.projectDirectory.file(
+    "../minecraft-mod/.gradle/loom-cache/minecraftMaven/net/minecraft/minecraft-merged-2ae02fda0f/1.21.11-net.fabricmc.yarn.1_21_11.1.21.11+build.6-v2/minecraft-merged-2ae02fda0f-1.21.11-net.fabricmc.yarn.1_21_11.1.21.11+build.6-v2.jar"
+)
+val yarnMappingsDir = rootProject.layout.projectDirectory.dir("../minecraft-mod/.gradle/loom-cache/source_mappings")
+val mixinCompileJar = File(System.getProperty("user.home"), ".gradle/caches/modules-2/files-2.1/net.fabricmc/sponge-mixin/0.17.4+mixin.0.8.7/5f66cc9f59b8efaa942155a3d5a30599bf6640dd/sponge-mixin-0.17.4+mixin.0.8.7.jar")
 
 java {
     toolchain { languageVersion.set(JavaLanguageVersion.of(21)) }
@@ -54,12 +59,21 @@ dependencies {
     implementation("org.ow2.asm:asm-tree:9.7.1")
     implementation("net.fabricmc:mapping-io:0.6.1")
     implementation("net.fabricmc:tiny-remapper:0.10.4")
+    compileOnly("net.fabricmc:fabric-loader:0.19.5")
+    compileOnly("net.fabricmc.fabric-api:fabric-api:0.141.6+1.21.11")
     compileOnly("com.mojang:brigadier:1.3.10")
 
-    compileOnly(files(clientNamedJar))
+    compileOnly(files(clientNamedJar, clientJar, mixinCompileJar))
     annotationProcessor(files(clientNamedJar))
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    // Module classes reference Minecraft types in their signatures, so the
+    // registry tests need the named game jar at runtime. It stays out of the
+    // shipped agent artifacts.
+    testRuntimeOnly(files(clientNamedJar))
+    testRuntimeOnly("net.fabricmc:fabric-loader:0.19.5")
+    testRuntimeOnly("net.fabricmc.fabric-api:fabric-api:0.141.6+1.21.11")
+    testRuntimeOnly("com.mojang:brigadier:1.3.10")
 }
 
 tasks.test {
@@ -217,17 +231,29 @@ val downloadIntermediary = tasks.register("downloadIntermediary") {
     }
 }
 
-fun remap(input: File, output: File, mappingFile: File, from: String, to: String) {
+fun remap(
+    input: File,
+    output: File,
+    mappingFile: File,
+    from: String,
+    to: String,
+    classPath: File? = null,
+    ignoreConflicts: Boolean = false,
+) {
     val remapper = TinyRemapper.newRemapper()
         .withMappings(TinyUtils.createTinyMappingProvider(mappingFile.toPath(), from, to))
         .renameInvalidLocals(true)
         .rebuildSourceFilenames(true)
         .threads(8)
         .fixPackageAccess(true)
+        .ignoreConflicts(ignoreConflicts)
         .build()
     output.parentFile.mkdirs()
     val remappedClasses = HashMap<String, ByteArray>()
     try {
+        if (classPath != null) {
+            remapper.readClassPathAsync(classPath.toPath()).join()
+        }
         remapper.readInputsAsync(input.toPath())
         remapper.apply { name, bytes -> remappedClasses[name] = bytes }
     } finally {
@@ -254,11 +280,30 @@ fun remap(input: File, output: File, mappingFile: File, from: String, to: String
     }
 }
 
+fun findYarnMappings(): File =
+    yarnMappingsDir.asFile.listFiles().orEmpty().firstOrNull { file ->
+        file.extension == "tiny" && file.useLines { lines ->
+            lines.firstOrNull() == "tiny\t2\t0\tnamed\tofficial\tintermediary"
+        }
+    } ?: error("Yarn source mappings are missing from ${yarnMappingsDir.asFile}")
+
 val remapClientToNamed = tasks.register("remapClientToNamed") {
     dependsOn(downloadMappings, downloadClient)
-    inputs.files(clientJar, officialTiny)
+    inputs.files(clientJar, officialTiny, yarnCompileJar)
     outputs.file(clientNamedJar)
-    doLast { remap(clientJar.get().asFile, clientNamedJar.get().asFile, officialTiny.get().asFile, "official", "named") }
+    doLast {
+        val source = yarnCompileJar.asFile
+        val target = clientNamedJar.get().asFile
+        if (source.exists()) {
+            // On Windows a test worker can keep the previous named jar open.
+            // Reuse an already-current copy instead of deleting a locked file.
+            if (!target.exists() || target.length() != source.length()) {
+                source.copyTo(target, overwrite = true)
+            }
+        } else {
+            remap(clientJar.get().asFile, target, officialTiny.get().asFile, "official", "named")
+        }
+    }
 }
 
 val generatedDescriptors = buildDirRef.dir("generated/sources/descriptors/java")
@@ -288,12 +333,14 @@ val genDescriptors = tasks.register("genDescriptors") {
             "LISTENER_SEND" to Triple("net/minecraft/client/multiplayer/ClientCommonPacketListenerImpl", "send", "protocol/Packet;)V"),
             "CONNECTION_SEND" to Triple("net/minecraft/network/Connection", "send", "protocol/Packet;)V"),
             "CLIENT_SET_ENTITY_MOTION" to Triple("net/minecraft/client/multiplayer/ClientPacketListener", "handleSetEntityMotion", "ClientboundSetEntityMotionPacket;)V"),
+            "PLAYER_POSITION_LOOK" to Triple("net/minecraft/client/multiplayer/ClientPacketListener", "handleMovePlayer", "ClientboundPlayerPositionPacket;)V"),
             "SEND_POSITION" to Triple("net/minecraft/client/player/LocalPlayer", "sendPosition", "()V"),
             "RENDER_LEVEL" to Triple("net/minecraft/client/renderer/LevelRenderer", "renderLevel", "Camera;"),
             "GAME_RENDER" to Triple("net/minecraft/client/renderer/GameRenderer", "render", "DeltaTracker;Z)V"),
             "GET_BLOCK_STATE" to Triple("net/minecraft/world/level/BlockGetter", "getBlockState", "BlockPos;)Lnet/minecraft/world/level/block/state/BlockState;"),
             "LEVEL_GET_BLOCK_STATE" to Triple("net/minecraft/world/level/Level", "getBlockState", "BlockPos;)Lnet/minecraft/world/level/block/state/BlockState;"),
             "EYE_HEIGHT" to Triple("net/minecraft/world/entity/Entity", "getEyeHeight", "()F"),
+            "ENTITY_BOUNDING_BOX" to Triple("net/minecraft/world/entity/Entity", "getBoundingBox", "()Lnet/minecraft/world/phys/AABB;"),
             "OVERLAY_MESSAGE" to Triple("net/minecraft/client/gui/Gui", "setOverlayMessage", "Component;Z)V"),
         )
 
@@ -366,9 +413,16 @@ val genDescriptors = tasks.register("genDescriptors") {
 val genRuntimeMappings = tasks.register("genRuntimeMappings") {
     dependsOn(downloadMappings, downloadIntermediary)
     inputs.files(officialTiny, intermediaryTiny)
+    inputs.dir(yarnMappingsDir)
     outputs.dir(generatedRuntimeMappings)
     doLast {
-        data class Member(val kind: String, val officialName: String, val namedName: String, val descriptor: String)
+        data class Member(
+            val kind: String,
+            val officialName: String,
+            val namedName: String,
+            val descriptor: String,
+            val intermediaryName: String = "",
+        )
 
         fun readTiny(file: File): Pair<Map<String, String>, Map<String, List<Member>>> {
             val classes = LinkedHashMap<String, String>()
@@ -397,21 +451,56 @@ val genRuntimeMappings = tasks.register("genRuntimeMappings") {
 
         val (officialToNamed, namedMembers) = readTiny(officialTiny.get().asFile)
         val (officialToIntermediary, intermediaryMembers) = readTiny(intermediaryTiny.get().asFile)
+        val mojangToIntermediary = officialToNamed.mapNotNull { (officialName, namedName) ->
+            officialToIntermediary[officialName]?.let { namedName to it }
+        }.toMap()
+        val yarnLines = findYarnMappings().readLines()
+        val yarnClasses = HashMap<String, Pair<String, String>>()
+        val yarnMembers = HashMap<String, MutableList<Member>>()
+        var yarnOwner: String? = null
+        for (line in yarnLines) {
+            val parts = line.trimStart('\t').split('\t')
+            when {
+                line.startsWith("c\t") && parts.size >= 4 -> {
+                    yarnOwner = parts[2]
+                    yarnClasses[parts[2]] = parts[1] to parts[3]
+                }
+                (line.startsWith("\tm\t") || line.startsWith("\tf\t")) &&
+                    parts.size >= 5 && yarnOwner != null -> {
+                    yarnMembers.getOrPut(yarnOwner!!) { ArrayList() }.add(
+                        Member(parts[0], parts[3], parts[2], parts[1], parts[4])
+                    )
+                }
+            }
+        }
         val output = StringBuilder()
         for ((officialOwner, namedOwner) in officialToNamed) {
             if (!namedOwner.startsWith("net/minecraft/")) continue
             val intermediaryOwner = officialToIntermediary[officialOwner] ?: officialOwner
             output.append("C\t").append(namedOwner).append('\t').append(officialOwner)
                 .append('\t').append(intermediaryOwner).append('\n')
+            val yarnOwner = yarnClasses[officialOwner]?.first
+            if (yarnOwner != null) {
+                output.append("C\t").append(yarnOwner).append('\t').append(officialOwner)
+                    .append('\t').append(intermediaryOwner).append('\n')
+            }
             val intermediaryBySignature = intermediaryMembers[officialOwner].orEmpty()
                 .associateBy { "${it.kind}\t${it.officialName}\t${it.descriptor}" }
             for (member in namedMembers[officialOwner].orEmpty()) {
+                val intermediaryDescriptor = remapDescriptor(member.descriptor, mojangToIntermediary)
                 val intermediaryMember = intermediaryBySignature[
-                    "${member.kind}\t${member.officialName}\t${member.descriptor}"
+                    "${member.kind}\t${member.officialName}\t$intermediaryDescriptor"
                 ]
                 output.append(member.kind.uppercase()).append('\t').append(namedOwner).append('\t')
                     .append(member.namedName).append('\t').append(member.officialName).append('\t')
                     .append(intermediaryMember?.namedName ?: member.officialName).append('\n')
+            }
+            if (yarnOwner != null) {
+                for (member in yarnMembers[officialOwner].orEmpty()) {
+                    output.append(member.kind.uppercase()).append('\t').append(yarnOwner).append('\t')
+                        .append(member.namedName).append('\t').append(member.officialName).append('\t')
+                        .append(member.intermediaryName).append('\n')
+                }
             }
         }
 
@@ -464,6 +553,7 @@ val applyManifest = tasks.register("applyManifest") {
 
 tasks.shadowJar {
     archiveClassifier.set("all")
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     relocate("org.objectweb.asm", "bl.shaded.asm")
     manifest {
         attributes(
@@ -475,40 +565,66 @@ tasks.shadowJar {
 }
 
 val remapVanilla = tasks.register("remapVanilla") {
-    dependsOn(tasks.shadowJar)
-    inputs.files(shadowJarFile, officialTiny)
+    dependsOn(tasks.shadowJar, remapClientToNamed)
+    inputs.files(shadowJarFile, findYarnMappings(), clientNamedJar)
     outputs.file(buildDirRef.file("libs/agent-vanilla.jar"))
     doLast {
         val output = buildDirRef.file("libs/agent-vanilla.jar").get().asFile
-        remap(shadowJarFile.get().asFile, output, officialTiny.get().asFile, "named", "official")
+        remap(shadowJarFile.get().asFile, output, findYarnMappings(), "named", "official",
+            clientNamedJar.get().asFile, ignoreConflicts = true)
     }
     finalizedBy(applyManifest)
 }
 
 val remapFabric = tasks.register("remapFabric") {
-    dependsOn(tasks.shadowJar, downloadMappings, downloadIntermediary)
-    inputs.files(shadowJarFile, officialTiny, intermediaryTiny)
+    dependsOn(tasks.shadowJar, remapClientToNamed, downloadIntermediary)
+    inputs.files(shadowJarFile, findYarnMappings(), clientNamedJar)
     outputs.file(buildDirRef.file("libs/agent-fabric.jar"))
     doLast {
-        val officialJar = buildDirRef.file("tmp/agent-official.jar").get().asFile
         val output = buildDirRef.file("libs/agent-fabric.jar").get().asFile
-        remap(shadowJarFile.get().asFile, officialJar, officialTiny.get().asFile, "named", "official")
-        remap(officialJar, output, intermediaryTiny.get().asFile, "official", "intermediary")
+        remap(shadowJarFile.get().asFile, output, findYarnMappings(), "named", "intermediary",
+            clientNamedJar.get().asFile)
     }
     finalizedBy(applyManifest)
 }
 
 val verifyRemap = tasks.register("verifyRemap") {
-    dependsOn(remapVanilla)
+    dependsOn(remapVanilla, remapFabric)
     doLast {
-        val jar = buildDirRef.file("libs/agent-vanilla.jar").get().asFile
-        JarFile(jar).use { zip ->
-            check(zip.getEntry("net/minecraft/client/Minecraft.class") == null) {
-                "agent-vanilla.jar still contains net/minecraft/client/Minecraft"
-            }
-            check(zip.getEntry("bl/agent/Agent.class") != null) { "agent-vanilla.jar missing agent entrypoint" }
-            check(zip.manifest.mainAttributes.getValue("Premain-Class") == "bl.agent.Agent") {
-                "agent-vanilla.jar lost its Premain-Class"
+        val yarnNames = listOf(
+            "net/minecraft/client/MinecraftClient",
+            "net/minecraft/client/network/ClientPlayerEntity",
+            "net/minecraft/client/world/ClientWorld",
+            "net/minecraft/entity/Entity",
+            "net/minecraft/util/math/Box",
+            "net/minecraft/util/math/Vec3d",
+        )
+        for (artifact in listOf("agent-vanilla.jar", "agent-fabric.jar")) {
+            val jar = buildDirRef.file("libs/$artifact").get().asFile
+            JarFile(jar).use { zip ->
+                check(zip.getEntry("bl/agent/Agent.class") != null) { "$artifact missing agent entrypoint" }
+                check(zip.manifest.mainAttributes.getValue("Premain-Class") == "bl.agent.Agent") {
+                    "$artifact lost its Premain-Class"
+                }
+                val noFall = zip.getInputStream(zip.getEntry("bl/module/movement/NoFall.class")
+                    ?: error("$artifact missing NoFall module")).use { it.readBytes() }
+                val noFallConstants = noFall.toString(Charsets.ISO_8859_1)
+                for (yarnName in yarnNames + listOf("getInstance", "isSpaceEmpty")) {
+                    check(!noFallConstants.contains(yarnName)) {
+                        "$artifact still has an unmapped Yarn reference to $yarnName in NoFall"
+                    }
+                }
+                val mappedSingleton = if (artifact == "agent-fabric.jar") "method_1551" else "V"
+                check(noFallConstants.contains(mappedSingleton)) {
+                    "$artifact did not remap MinecraftClient.getInstance in NoFall"
+                }
+                for (module in listOf("ESP", "Tracers", "Nametags", "ItemESP", "BlockESP")) {
+                    val bytes = zip.getInputStream(zip.getEntry("bl/module/render/$module.class")
+                        ?: error("$artifact missing $module module")).use { it.readBytes() }
+                    check(!bytes.toString(Charsets.ISO_8859_1).contains("Unresolved compilation problems")) {
+                        "$artifact contains a compiler-error stub for $module"
+                    }
+                }
             }
         }
     }
