@@ -52,6 +52,9 @@ jobs:
             throw "Bald Minecraft mod was not built: $mod"
           }
 
+      - name: Generate Loom mappings for the agent
+        shell: pwsh
+        run: '& "./minecraft-mod/gradlew.bat" --no-daemon -p minecraft-mod genSources'
       - name: Build and verify the Minecraft agent
         shell: pwsh
         run: |
