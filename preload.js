@@ -88,6 +88,40 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   openWindowsGpuSettings: () => ipcRenderer.invoke('launcher:open-windows-gpu-settings'),
   runBenchmark: payload => ipcRenderer.invoke('launcher:run-benchmark', payload),
 
+  // Horizon Rust client
+  getHorizonStatus: accountId => ipcRenderer.invoke('horizon:get-status', { accountId }),
+  syncHorizonAccount: accountId => ipcRenderer.invoke('horizon:sync-account', { accountId }),
+  ensureHorizonInstalled: () => ipcRenderer.invoke('horizon:ensure-installed'),
+  openHorizonDownload: () => ipcRenderer.invoke('horizon:open-download'),
+  chooseHorizonLauncher: () => ipcRenderer.invoke('horizon:choose-launcher'),
+  openHorizonSetup: () => ipcRenderer.invoke('horizon:open-setup'),
+  listHorizonInstances: () => ipcRenderer.invoke('horizon:list-instances'),
+  createHorizonInstance: name => ipcRenderer.invoke('horizon:create-instance', { name }),
+  setHorizonInstance: instanceId => ipcRenderer.invoke('horizon:set-instance', { instanceId }),
+  launchHorizon: instanceId => ipcRenderer.invoke('horizon:launch', { instanceId }),
+  searchHorizonMods: payload => ipcRenderer.invoke('horizon:search-mods', payload),
+  listHorizonMods: instanceId => ipcRenderer.invoke('horizon:list-mods', { instanceId }),
+  listHorizonWorlds: instanceId => ipcRenderer.invoke('horizon:list-worlds', { instanceId }),
+  listHorizonDatapacks: payload => ipcRenderer.invoke('horizon:list-datapacks', payload),
+  horizonDatapackAction: payload => ipcRenderer.invoke('horizon:datapack-action', payload),
+  importHorizonPack: payload => ipcRenderer.invoke('horizon:import-pack', payload),
+  listHorizonModpacks: () => ipcRenderer.invoke('horizon:list-modpacks'),
+  installHorizonMod: payload => ipcRenderer.invoke('horizon:install-mod', payload),
+  horizonModAction: payload => ipcRenderer.invoke('horizon:mod-action', payload),
+  horizonPackAction: payload => ipcRenderer.invoke('horizon:pack-action', payload),
+  importHorizonModpack: instanceId => ipcRenderer.invoke('horizon:import-modpack', { instanceId }),
+  importJavaWorldToHorizon: payload => ipcRenderer.invoke('horizon:import-java-world', payload),
+  onHorizonProcessState: callback => {
+    const handler = (_event, status) => callback(status);
+    ipcRenderer.on('horizon:process-state', handler);
+    return () => ipcRenderer.removeListener('horizon:process-state', handler);
+  },
+  onHorizonSetupProgress: callback => {
+    const handler = (_event, progress) => callback(progress);
+    ipcRenderer.on('horizon:setup-progress', handler);
+    return () => ipcRenderer.removeListener('horizon:setup-progress', handler);
+  },
+
   createServer: server => ipcRenderer.invoke('launcher:create-server', server),
   searchModpacks: params => ipcRenderer.invoke('launcher:search-modpacks', params),
   installModpackToServer: payload => ipcRenderer.invoke('launcher:install-modpack-to-server', payload),

@@ -285,10 +285,11 @@ test('server content sync is exposed through the preload bridge', () => {
 });
 
 test('profiles include search and sort filters and only expose profile import', () => {
+  const profilePanel = html.slice(html.indexOf('<!-- PROFILES (home) -->'), html.indexOf('<!-- SERVERS -->'));
   assert.match(html, /id="profileSearch"[^>]*oninput="renderProfileGrid\(\)"/);
   assert.match(html, /id="profileSort"[\s\S]*value="recent">Recently used[\s\S]*value="added">Recently added[\s\S]*value="edited">Recently edited[\s\S]*value="all">All profiles/);
   assert.match(html, /onclick="importProfileExport\(\)"/);
-  assert.doesNotMatch(html, /Import modpack|importModpackFile|launcher:import-modpack/);
+  assert.doesNotMatch(profilePanel, /Import modpack|importModpackFile|launcher:import-modpack/);
   const preload = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
   const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
   assert.doesNotMatch(preload, /importModpack|launcher:import-modpack/);

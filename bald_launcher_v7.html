@@ -31,6 +31,80 @@ body{font-family:var(--font-sans);}
 .titlebar{-webkit-app-region:drag;height:38px;background:var(--bg-void);border-bottom:0.5px solid var(--bg-surface-2);display:flex;align-items:center;padding:0 14px;gap:9px;flex-shrink:0;}
 .titlebar-logo{width:32px;height:32px;display:block;object-fit:contain;flex-shrink:0;user-select:none;-webkit-user-drag:none;}
 .titlebar-name{font-size:var(--text-md);color:#bbb;font-weight:500;flex:1;}
+.launcher-mode-toggle{-webkit-app-region:no-drag;min-height:30px;padding:0 12px;border:1px solid rgba(126,241,94,.32);border-radius:8px;background:rgba(126,241,94,.09);color:#c9f7b7;font:600 11px var(--font-sans);cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s,color .15s;}
+.launcher-mode-toggle:hover{background:rgba(126,241,94,.16);border-color:rgba(126,241,94,.55);color:#e4ffda;}
+.horizon-mode-view{height:100%;min-height:0;overflow:auto;padding:22px 24px;display:flex;flex-direction:column;gap:16px;background:var(--bg-void);}
+.horizon-mode-header{display:flex;align-items:center;justify-content:space-between;gap:16px;}
+.horizon-mode-heading{font-size:20px;line-height:1.25;font-weight:650;color:var(--text-primary);}
+.horizon-mode-description{margin-top:5px;color:#858585;font-size:11px;line-height:1.5;}
+.horizon-mode-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-surface);}
+.horizon-mode-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.horizon-create-profile{display:flex;gap:7px;align-items:center;}
+.horizon-profile-name{width:190px;min-width:130px;padding:9px 11px;border:1px solid var(--border-strong);border-radius:8px;background:var(--bg-void);color:var(--text-primary);font:inherit;}
+.horizon-mode-status{min-height:34px;padding:8px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg-surface);color:#aaa;font:11px/1.45 var(--font-sans);white-space:normal;overflow-wrap:anywhere;}
+.horizon-mode-status.is-error{border-color:rgba(255,115,115,.32);color:#ff9b9b;}
+.horizon-mode-progress{height:3px;overflow:hidden;border-radius:99px;background:var(--ui-bg-tertiary);visibility:hidden;}
+.horizon-mode-progress>span{display:block;width:0;height:100%;border-radius:inherit;background:var(--accent-green);transition:width .18s ease;}
+.horizon-profile-search{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+.horizon-profile-search input{flex:1;min-width:140px;}
+.horizon-profile-search .profiles-count{white-space:nowrap;}
+.horizon-profile-section-title{color:var(--text-primary);font-size:13px;font-weight:600;}
+#horizonProfileGrid{grid-template-columns:repeat(auto-fill,minmax(148px,220px));}
+.horizon-profile-card{min-height:150px;}
+.horizon-profile-card.is-selected{border-color:var(--accent-green);box-shadow:0 0 0 1px rgba(126,241,94,.18);}
+.horizon-profile-card:focus-visible{outline:2px solid var(--accent-green);outline-offset:2px;}
+.horizon-profile-card .profile-card-icon{background:rgba(126,241,94,.1);color:var(--accent-green);}
+.horizon-mode-view [hidden],.horizon-profile-library[hidden],.horizon-profile-detail[hidden],.horizon-detail-page[hidden]{display:none!important;}
+.horizon-mode-view.is-profile-open>.horizon-mode-header,.horizon-mode-view.is-profile-open>.horizon-mode-toolbar,.horizon-mode-view.is-profile-open>#horizonStatus,.horizon-mode-view.is-profile-open>#horizonInstallProgress{display:none!important;}
+.horizon-profile-detail{min-height:0;flex:1;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--border);border-radius:10px;background:var(--bg-surface);}
+.horizon-detail-header{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);}
+.horizon-detail-inline-status{padding:8px 14px;border-bottom:1px solid var(--border);color:#aaa;font-size:11px;line-height:1.45;overflow-wrap:anywhere;}
+.horizon-detail-inline-status.is-error{color:#ff9b9b;}
+.horizon-detail-back{flex:none;}
+.horizon-detail-identity{min-width:0;flex:1;}
+.horizon-detail-title{overflow:hidden;color:var(--text-primary);font-size:16px;font-weight:650;text-overflow:ellipsis;white-space:nowrap;}
+.horizon-detail-subtitle{margin-top:4px;color:#858585;font-size:10px;}
+.horizon-detail-tabs{display:flex;gap:4px;padding:8px 14px 0;border-bottom:1px solid var(--border);overflow-x:auto;}
+.horizon-detail-tab{flex:none;padding:9px 11px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--text-secondary);font:inherit;cursor:pointer;white-space:nowrap;}
+.horizon-detail-tab:hover{color:var(--text-primary);}
+.horizon-detail-tab.active{border-bottom-color:var(--accent-green);color:var(--accent-green-text-on-dark);}
+.horizon-detail-scroll{min-height:0;flex:1;overflow:auto;padding:16px;}
+.horizon-detail-page{display:flex;flex-direction:column;gap:12px;}
+.horizon-detail-callout{padding:12px 14px;border:1px solid var(--border);border-radius:9px;background:var(--bg-void);color:#aaa;font-size:11px;line-height:1.55;}
+.horizon-overview-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}
+.horizon-overview-stat{min-height:78px;padding:13px 15px;border:1px solid var(--border);border-radius:9px;background:linear-gradient(145deg,rgba(126,241,94,.055),transparent 70%),var(--bg-void);}
+.horizon-overview-stat-value{color:var(--text-primary);font-size:18px;font-weight:650;line-height:1.2;}
+.horizon-overview-stat-label{margin-top:5px;color:#858585;font-size:10px;}
+.horizon-overview-group{padding:14px;border:1px solid var(--border);border-radius:9px;background:var(--bg-void);}
+.horizon-native-mod-card{display:flex;align-items:center;gap:14px;}
+.horizon-native-mod-icon{width:42px;height:42px;flex:none;display:grid;place-items:center;border:1px solid rgba(126,241,94,.2);border-radius:10px;background:rgba(126,241,94,.08);color:var(--accent-green);font-size:20px;}
+.horizon-native-mod-copy{flex:1;min-width:0;}
+.horizon-profile-library .profiles-search-toolbar{margin-bottom:14px;}
+.horizon-profile-library .profile-grid{min-height:180px;}
+.horizon-mode-status:empty{display:none;}
+.horizon-mode-status:not(.is-error){min-height:0;padding:0;border:0;background:transparent;color:#858585;}
+.horizon-detail-page>.horizon-detail-callout{border-color:transparent;background:transparent;padding:0;color:#858585;}
+.horizon-detail-search{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.horizon-detail-search input{flex:1;min-width:180px;}
+.horizon-detail-section-title{color:var(--text-primary);font-size:12px;font-weight:600;}
+.horizon-detail-help{color:#858585;font-size:10px;line-height:1.5;}
+.horizon-content-card{padding:12px 14px;border:1px solid var(--border);border-radius:9px;background:var(--bg-void);}
+.horizon-content-card>div:first-child{color:var(--text-primary);font-size:12px;font-weight:600;}
+.horizon-content-card-description{margin-top:5px;color:#858585;font-size:10px;line-height:1.5;white-space:pre-wrap;}
+.horizon-content-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px;}
+.horizon-profile-content{padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg-surface);}
+.horizon-profile-content summary{color:var(--text-primary);font-size:var(--text-md);font-weight:600;cursor:pointer;}
+.horizon-profile-content[open] summary{margin-bottom:14px;}
+.horizon-tools-group{padding:12px 0;border-top:1px solid var(--border);}
+.horizon-tools-group:first-of-type{border-top:0;}
+.horizon-tools-title{margin-bottom:8px;color:#aaa;font-size:11px;font-weight:600;}
+.horizon-tools-help{margin-top:7px;color:var(--text-muted);font-size:10px;line-height:1.45;}
+.horizon-tools-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+#horizonPackSearchResults,#horizonPackInstalledContent{display:flex;flex-direction:column;gap:8px;margin-top:9px;}
+body.horizon-mode .sidebar{display:none!important;}
+body.horizon-mode .titlebar-acc{display:none!important;}
+body.horizon-mode #panel-horizon{display:flex!important;}
+@media(max-width:780px){.horizon-mode-view{padding:14px}.horizon-mode-header,.horizon-mode-toolbar{align-items:flex-start;flex-direction:column}.horizon-mode-actions{width:100%}.horizon-create-profile{flex:1}.horizon-profile-name{flex:1;width:auto}.horizon-profile-search{flex-wrap:wrap}#horizonProfileGrid{grid-template-columns:repeat(auto-fill,minmax(148px,1fr))}.horizon-detail-header{align-items:flex-start;flex-wrap:wrap}.horizon-detail-header>.modal-btn.primary{margin-left:auto}.horizon-overview-stats{grid-template-columns:1fr}}
 .update-banner{display:none;align-items:center;gap:10px;padding:7px 14px;background:var(--bg-surface-2);border-bottom:0.5px solid var(--border-strong);color:var(--text-primary);font-size:var(--text-sm);}
 .update-banner.visible{display:flex;}
 .update-banner span{flex:1;}
@@ -931,6 +1005,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
   <div class="titlebar">
     <img class="titlebar-logo" src="build/bald-launcher-mark.svg" alt="Bald Launcher" draggable="false">
     <span class="titlebar-name">Bald Launcher</span>
+    <button class="launcher-mode-toggle" id="launcherModeToggle" type="button" onclick="toggleLauncherMode()" aria-label="Switch to Horizon mode">Horizon mode</button>
     <div class="titlebar-acc">
       <div class="acc-av" id="titlebarAv">YO</div>
       <span class="acc-name" id="titlebarName">YourName</span>
@@ -991,6 +1066,103 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
         </button>
       </div>
     </nav>
+
+    <div class="panel" id="panel-horizon" style="display:none;">
+      <div class="horizon-mode-view">
+        <header class="horizon-mode-header">
+          <div>
+            <div class="horizon-mode-heading">Horizon profiles</div>
+            <p class="horizon-mode-description">Manage isolated profiles for the Horizon Rust client. These stay separate from your Java Edition profiles.</p>
+          </div>
+        </header>
+        <div class="horizon-mode-toolbar">
+          <div class="horizon-mode-actions horizon-create-profile">
+            <input class="horizon-profile-name" id="horizonNewInstanceName" maxlength="100" placeholder="New profile name" aria-label="New Horizon profile name"/>
+            <button class="new-profile-btn" type="button" onclick="createHorizonInstance()"><i class="ti ti-plus" aria-hidden="true"></i> New profile</button>
+            <button class="modal-btn" type="button" onclick="importHorizonModpack()"><i class="ti ti-package-import" aria-hidden="true"></i> Import profile</button>
+          </div>
+          <div class="horizon-mode-actions">
+            <select id="horizonBaldAccountSelect" aria-label="Bald Launcher account for Horizon" onchange="loadHorizonStatus()"></select>
+            <button class="modal-btn" id="horizonSetupButton" type="button" onclick="openHorizonSetup()" disabled><i class="ti ti-login" aria-hidden="true"></i> Sign in / setup</button>
+            <button class="modal-btn" type="button" onclick="loadHorizonStatus()"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
+            <button class="modal-btn" id="horizonInstallRetryButton" type="button" onclick="ensureHorizonModeReady()" style="display:none;"><i class="ti ti-download" aria-hidden="true"></i> Install / retry</button>
+          </div>
+        </div>
+        <div class="horizon-mode-status" id="horizonStatus" role="status" aria-live="polite">Switching modes…</div>
+        <div class="horizon-mode-progress" id="horizonInstallProgress" aria-hidden="true" style="visibility:hidden;"><span id="horizonInstallProgressBar"></span></div>
+        <div class="horizon-profile-library" id="horizonProfileLibrary">
+          <div class="profiles-search-toolbar horizon-profile-search" aria-label="Horizon profile search and sorting">
+            <input id="horizonProfileSearch" type="search" placeholder="Search profiles..." oninput="renderHorizonInstances()" />
+            <select id="horizonProfileSort" aria-label="Sort Horizon profiles" onchange="renderHorizonInstances()">
+              <option value="recent">Recently played</option>
+              <option value="name">Name</option>
+              <option value="version">Version</option>
+            </select>
+            <span class="profiles-count" id="horizonProfileCount"></span>
+          </div>
+          <div class="profile-grid" id="horizonProfileGrid"></div>
+        </div>
+        <section class="horizon-profile-detail" id="horizonProfileDetail" hidden>
+          <header class="horizon-detail-header">
+            <button class="modal-btn horizon-detail-back" type="button" onclick="closeHorizonProfile()"><i class="ti ti-arrow-left" aria-hidden="true"></i> Profiles</button>
+            <div class="horizon-detail-identity">
+              <div class="horizon-detail-title" id="horizonDetailName">Horizon profile</div>
+              <div class="horizon-detail-subtitle" id="horizonDetailMeta"></div>
+            </div>
+            <button class="modal-btn primary" id="horizonDetailPlayButton" type="button" onclick="launchHorizon()" disabled><i class="ti ti-player-play" aria-hidden="true"></i> Play</button>
+          </header>
+          <div class="horizon-detail-inline-status" id="horizonDetailStatus" role="status" aria-live="polite" hidden></div>
+          <nav class="horizon-detail-tabs" aria-label="Horizon profile sections">
+            <button class="horizon-detail-tab active" type="button" data-horizon-tab="overview" onclick="setHorizonProfileTab('overview')">Overview</button>
+            <button class="horizon-detail-tab" type="button" data-horizon-tab="mod" onclick="setHorizonProfileTab('mod')">Mods</button>
+            <button class="horizon-detail-tab" type="button" data-horizon-tab="resource" onclick="setHorizonProfileTab('resource')">Resource packs</button>
+            <button class="horizon-detail-tab" type="button" data-horizon-tab="shader" onclick="setHorizonProfileTab('shader')">Shaders</button>
+            <button class="horizon-detail-tab" type="button" data-horizon-tab="modpack" onclick="setHorizonProfileTab('modpack')">Modpacks</button>
+            <button class="horizon-detail-tab" type="button" data-horizon-tab="datapack" onclick="setHorizonProfileTab('datapack')">Data packs</button>
+          </nav>
+          <div class="horizon-detail-scroll">
+            <section class="horizon-detail-page" id="horizonOverviewPage">
+              <div class="horizon-overview-stats" aria-label="Profile summary">
+                <div class="horizon-overview-stat"><div class="horizon-overview-stat-value" id="horizonOverviewVersion">Horizon</div><div class="horizon-overview-stat-label">Client version</div></div>
+                <div class="horizon-overview-stat"><div class="horizon-overview-stat-value" id="horizonOverviewWorldCount">—</div><div class="horizon-overview-stat-label">Worlds in this profile</div></div>
+                <div class="horizon-overview-stat"><div class="horizon-overview-stat-value" id="horizonOverviewPackCount">—</div><div class="horizon-overview-stat-label">Resource and shader packs</div></div>
+              </div>
+              <div class="horizon-overview-group">
+                <div class="horizon-detail-section-title">Bring a world from Java</div>
+                <div class="horizon-tools-row" style="margin-top:8px;">
+                  <select class="setting-select" id="horizonJavaProfileSelect" aria-label="Java profile for world import"></select>
+                  <button class="modal-btn" type="button" onclick="importJavaWorldToHorizon()"><i class="ti ti-world-download" aria-hidden="true"></i> Copy a Java world into this profile</button>
+                </div>
+                <div class="horizon-detail-help" style="margin-top:7px;">The original Java world is left unchanged.</div>
+              </div>
+            </section>
+            <section class="horizon-detail-page" id="horizonModsPage" hidden>
+              <div class="horizon-overview-group horizon-native-mod-card">
+                <div class="horizon-native-mod-icon"><i class="ti ti-puzzle" aria-hidden="true"></i></div>
+                <div class="horizon-native-mod-copy">
+                  <div class="horizon-detail-section-title">Native Horizon mods</div>
+                  <div class="horizon-detail-help">Browse and manage this profile’s native mods in Horizon. Java loaders and Java mods are not used here.</div>
+                </div>
+                <button class="modal-btn primary" type="button" onclick="openHorizonModManager()"><i class="ti ti-external-link" aria-hidden="true"></i> Open mod manager</button>
+              </div>
+            </section>
+            <section class="horizon-detail-page" id="horizonPacksPage" hidden>
+              <div class="horizon-tools-row" id="horizonPackActions" hidden>
+                <button class="modal-btn primary" id="horizonImportPackButton" type="button" onclick="importHorizonPack()">Add pack</button>
+                <button class="modal-btn" id="horizonImportModpackButton" type="button" onclick="importHorizonModpack()">Import modpack</button>
+                <button class="modal-btn" id="horizonAddDatapackButton" type="button" onclick="runHorizonDatapackAction('add')">Add data pack</button>
+                <select class="setting-select" id="horizonDatapackWorld" aria-label="Horizon world for data packs" hidden onchange="refreshHorizonInstalledContent()"></select>
+                <button class="modal-btn" type="button" onclick="refreshHorizonInstalledContent()"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh</button>
+              </div>
+              <div class="horizon-detail-help" id="horizonPackHelp">Packs are managed in this Horizon profile.</div>
+              <div id="horizonPackSearchResults"></div>
+              <div class="horizon-detail-section-title" id="horizonInstalledHeading">Installed content</div>
+              <div id="horizonPackInstalledContent"></div>
+            </section>
+          </div>
+        </section>
+      </div>
+    </div>
 
     <div class="panel" id="panel-synchronizations" style="display:none;">
       <div class="page-header"><div><div class="eyebrow">PROFILE TOOLS</div><h1>Synchronizations</h1><p>Copy selected Minecraft files from one source into any number of profiles.</p></div></div>
@@ -1984,6 +2156,14 @@ if (launcherBridge?.onStateChanged) {
       currentProfileId = null;
       showPanel('profile');
     }
+  });
+  launcherBridge?.onHorizonSetupProgress?.(progress => {
+    if (!horizonModeActive || !progress) return;
+    const bar = document.getElementById('horizonInstallProgressBar');
+    const track = document.getElementById('horizonInstallProgress');
+    if (bar && Number.isFinite(Number(progress.percent))) bar.style.width = `${Math.max(0, Math.min(100, Number(progress.percent)))}%`;
+    if (track) track.style.visibility = progress.phase === 'download' || progress.phase === 'verify' ? 'visible' : 'hidden';
+    if (progress.message) setHorizonStatus(progress.message, progress.error === true);
   });
 }
 let currentProfileId = null;
@@ -4291,9 +4471,18 @@ async function setCharacterModel(model){
   }
 }
 
+async function syncHorizonBaldAccount(accountId){
+  const horizonAccountSelect = document.getElementById('horizonBaldAccountSelect');
+  if (horizonAccountSelect && Array.from(horizonAccountSelect.options || []).some(option => option.value === String(accountId))){
+    horizonAccountSelect.value = String(accountId);
+    if (document.getElementById('panel-horizon')?.style.display !== 'none') await loadHorizonStatus();
+  }
+}
+
 async function setActiveAccount(id){
   if (launcherBridge?.setActiveAccount) state = await launcherBridge.setActiveAccount(id);
   else state.activeAccountId = id;
+  await syncHorizonBaldAccount(id);
   renderAccounts();
   await refreshAccountCosmetics(true);
 }
@@ -4319,6 +4508,7 @@ async function handleMinecraftMenuAction(action){
     const stopped = await launcherBridge.stop(action.profileId);
     if (!stopped?.ok) throw new Error(stopped?.error || 'Minecraft could not be closed safely.');
     state = await launcherBridge.setActiveAccount(account.id);
+    await syncHorizonBaldAccount(account.id);
     renderAccounts();
     const launched = await launcherBridge.launch({ profileId: profile.id, accountId: account.id });
     if (!launched?.ok) throw new Error(launched?.error || 'Minecraft could not be restarted with that account.');
@@ -4396,6 +4586,623 @@ function syncSettings(){
   state.settings = { ...(state.settings || {}), ...settings };
   if (launcherBridge?.syncState) launcherBridge.syncState(state);
 }
+let horizonInstances = [];
+let horizonRunningInstanceIds = new Set();
+let horizonSelectedInstanceId = '';
+let horizonProfileTab = 'overview';
+let horizonModeActive = false;
+let horizonSetupInProgress = false;
+let horizonAccountSyncTimer = null;
+let horizonAccountSyncInProgress = false;
+let horizonContentRequestId = 0;
+function updateLauncherModeButton(){
+  const button = document.getElementById('launcherModeToggle');
+  const title = document.querySelector('.titlebar-name');
+  if (button){
+    button.textContent = horizonModeActive ? 'Java mode' : 'Horizon mode';
+    button.setAttribute('aria-label', horizonModeActive ? 'Switch to Java mode' : 'Switch to Horizon mode');
+  }
+  if (title) title.textContent = horizonModeActive ? 'Horizon' : 'Bald Launcher';
+}
+async function toggleLauncherMode(){
+  if (horizonSetupInProgress) return;
+  horizonModeActive = !horizonModeActive;
+  document.body.classList.toggle('horizon-mode', horizonModeActive);
+  updateLauncherModeButton();
+  if (!horizonModeActive){
+    showPanel('home');
+    return;
+  }
+  showPanel('horizon');
+  await ensureHorizonModeReady();
+}
+async function ensureHorizonModeReady(){
+  if (horizonSetupInProgress) return;
+  const retry = document.getElementById('horizonInstallRetryButton');
+  const modeButton = document.getElementById('launcherModeToggle');
+  const setup = document.getElementById('horizonSetupButton');
+  horizonSetupInProgress = true;
+  if (retry) retry.disabled = true;
+  if (modeButton) modeButton.disabled = true;
+  if (setup) setup.disabled = true;
+  setHorizonStatus('Preparing Horizon mode…');
+  try{
+    if (typeof launcherBridge?.ensureHorizonInstalled !== 'function'){
+      throw new Error('This Bald Launcher build is missing Horizon auto-install support. Restart the updated launcher and try again.');
+    }
+    const result = await launcherBridge.ensureHorizonInstalled();
+    if (!result?.ok){
+      setHorizonStatus(result?.error || 'Could not install Horizon Launcher.', true);
+      if (retry) retry.style.display = '';
+      return;
+    }
+    state.settings = { ...(state.settings || {}), horizonLauncherPath: result.executablePath };
+    if (retry) retry.style.display = 'none';
+    await loadHorizonStatus();
+  }catch(error){
+    const message = error?.message || String(error);
+    setHorizonStatus(/No handler registered for.*horizon:ensure-installed/i.test(message)
+      ? 'Horizon auto-install is not registered in this running app. Close Bald Launcher completely, then reopen the updated launcher.'
+      : message, true);
+    if (retry) retry.style.display = '';
+  }finally{
+    horizonSetupInProgress = false;
+    if (retry) retry.disabled = false;
+    if (modeButton) modeButton.disabled = false;
+    if (setup) setup.disabled = !state?.settings?.horizonLauncherPath;
+  }
+}
+function setHorizonStatus(message, isError=false){
+  const output = document.getElementById('horizonStatus');
+  const detailStatus = document.getElementById('horizonDetailStatus');
+  const detailVisible = document.getElementById('horizonProfileDetail')?.hidden === false;
+  const target = detailVisible ? detailStatus : output;
+  if (!target) return;
+  target.textContent = String(message || '');
+  target.classList.toggle('is-error', isError);
+  target.hidden = !message;
+  if (!detailVisible && detailStatus) detailStatus.hidden = true;
+}
+function setHorizonOperationStatus(message, isError=false){
+  const output = document.getElementById('horizonPackSearchResults');
+  if (!output) return;
+  output.replaceChildren();
+  const notice = document.createElement('div');
+  notice.className = 'horizon-detail-help';
+  notice.textContent = String(message || '');
+  notice.style.color = isError ? 'var(--error,#ff7373)' : 'var(--text-secondary)';
+  output.appendChild(notice);
+}
+function populateHorizonJavaProfiles(){
+  const select = document.getElementById('horizonJavaProfileSelect');
+  if (!select) return;
+  select.replaceChildren();
+  const profiles = Array.isArray(state?.profiles) ? state.profiles : [];
+  for (const profile of profiles){
+    const option = document.createElement('option');
+    option.value = String(profile.id || '');
+    option.textContent = `${String(profile.name || 'Java profile')} · ${String(profile.mcVersion || '')} ${String(profile.loader || '')}`;
+    select.appendChild(option);
+  }
+}
+function populateHorizonBaldAccounts(){
+  const select = document.getElementById('horizonBaldAccountSelect');
+  if (!select) return;
+  const selectedBeforeRefresh = select.value;
+  const accounts = (Array.isArray(state?.accounts) ? state.accounts : [])
+    .filter(account => account?.type === 'Microsoft' && account.uuid);
+  const preferred = [
+    selectedBeforeRefresh,
+    state?.settings?.horizonAccountId,
+    state?.activeAccountId,
+  ].find(id => id && accounts.some(account => String(account.id) === String(id)));
+  select.replaceChildren();
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = accounts.length ? 'Select Microsoft account' : 'No Microsoft account linked';
+  select.appendChild(placeholder);
+  for (const account of accounts){
+    const option = document.createElement('option');
+    option.value = String(account.id);
+    option.textContent = String(account.name || 'Microsoft account');
+    select.appendChild(option);
+  }
+  select.value = String(preferred || '');
+  select.disabled = accounts.length === 0;
+}
+function renderHorizonInstances(instances, selectedId=''){
+  if (Array.isArray(instances)) horizonInstances = instances.filter(instance => instance && instance.isJava !== true);
+  const grid = document.getElementById('horizonProfileGrid');
+  const count = document.getElementById('horizonProfileCount');
+  const launch = document.getElementById('horizonDetailPlayButton');
+  if (!grid) return;
+  const query = String(document.getElementById('horizonProfileSearch')?.value || '').trim().toLowerCase();
+  const sort = String(document.getElementById('horizonProfileSort')?.value || 'recent');
+  const preferred = [
+    selectedId,
+    horizonSelectedInstanceId,
+    state?.settings?.horizonInstanceId,
+    horizonInstances.find(instance => instance.selected)?.id,
+    horizonInstances[0]?.id,
+  ].find(candidate => candidate && horizonInstances.some(instance => String(instance.id) === String(candidate)));
+  horizonSelectedInstanceId = String(preferred || '');
+  const matches = horizonInstances.filter(instance => !query
+    || `${instance.name || ''} ${instance.id || ''} ${instance.version || ''} ${instance.kind || ''}`.toLowerCase().includes(query));
+  const visible = [...matches].sort((a, b) => {
+    if (sort === 'name') return String(a.name || a.id).localeCompare(String(b.name || b.id));
+    if (sort === 'version') return String(b.version || '').localeCompare(String(a.version || ''), undefined, { numeric: true });
+    return (Number(b.playedSecs) || 0) - (Number(a.playedSecs) || 0);
+  });
+  if (count) count.textContent = `${matches.length} of ${horizonInstances.length} profile${horizonInstances.length === 1 ? '' : 's'}`;
+  if (!visible.length){
+    const emptyMessage = horizonInstances.length
+      ? 'No Horizon profiles match your search.'
+      : 'No Horizon profiles yet.';
+    const createAction = horizonInstances.length
+      ? ''
+      : '<button class="empty-cta" onclick="document.getElementById(&quot;horizonNewInstanceName&quot;)?.focus()">Create your first profile</button>';
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><span class="empty-state-icon"><i class="ti ti-package" aria-hidden="true"></i></span>${emptyMessage}${createAction}</div>`;
+    if (launch) launch.disabled = true;
+    return;
+  }
+  grid.innerHTML = visible.map(instance => {
+    const id = String(instance.id);
+    const name = String(instance.name || id);
+    const version = String(instance.version || 'Horizon');
+    const kind = String(instance.kind || 'profile');
+    const isRunning = horizonRunningInstanceIds.has(id);
+    const isSelected = id === horizonSelectedInstanceId;
+    return `
+      <div class="profile-card horizon-profile-card${isSelected ? ' is-selected' : ''}" role="button" tabindex="0" aria-pressed="${isSelected}" data-horizon-profile-id="${escapeHtml(id)}" onclick="openHorizonProfile('${escapeHtml(escapeJsString(id))}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openHorizonProfile('${escapeHtml(escapeJsString(id))}')}">
+        <div class="profile-card-icon">${escapeHtml(name.slice(0, 1).toUpperCase())}</div>
+        <div class="profile-card-footer"><div class="profile-card-name">${escapeHtml(name)}</div></div>
+        <div class="profile-card-sub">${escapeHtml(version)} · ${escapeHtml(kind)}</div>
+        <div class="profile-card-activity"><span class="profile-card-activity-item">${isRunning ? 'Running' : 'Open profile'}</span>${isSelected ? '<span class="profile-card-activity-separator">·</span><span class="profile-card-activity-item">Selected</span>' : ''}</div>
+      </div>`;
+  }).join('');
+  if (launch) launch.disabled = !horizonSelectedInstanceId || horizonRunningInstanceIds.has(horizonSelectedInstanceId);
+}
+async function openHorizonProfile(instanceId){
+  const instance = horizonInstances.find(item => String(item.id) === String(instanceId));
+  if (!instance) return;
+  if (!await selectHorizonInstance(instance.id)) return;
+  const library = document.getElementById('horizonProfileLibrary');
+  const detail = document.getElementById('horizonProfileDetail');
+  document.querySelector('.horizon-mode-view')?.classList.add('is-profile-open');
+  const detailStatus = document.getElementById('horizonDetailStatus');
+  if (detailStatus) detailStatus.hidden = true;
+  const title = document.getElementById('horizonDetailName');
+  const meta = document.getElementById('horizonDetailMeta');
+  if (library) library.hidden = true;
+  if (detail) detail.hidden = false;
+  if (title) title.textContent = String(instance.name || instance.id);
+  if (meta) meta.textContent = [instance.version, instance.kind, horizonRunningInstanceIds.has(String(instance.id)) ? 'Running' : ''].filter(Boolean).join(' · ');
+  const version = document.getElementById('horizonOverviewVersion');
+  if (version) version.textContent = String(instance.version || 'Horizon');
+  setHorizonProfileTab('overview');
+}
+function closeHorizonProfile(){
+  const library = document.getElementById('horizonProfileLibrary');
+  const detail = document.getElementById('horizonProfileDetail');
+  document.querySelector('.horizon-mode-view')?.classList.remove('is-profile-open');
+  if (detail) detail.hidden = true;
+  const detailStatus = document.getElementById('horizonDetailStatus');
+  if (detailStatus) detailStatus.hidden = true;
+  if (library) library.hidden = false;
+  renderHorizonInstances();
+}
+function setHorizonProfileTab(tab){
+  const validTabs = new Set(['overview', 'mod', 'resource', 'shader', 'modpack', 'datapack']);
+  if (!validTabs.has(tab)) return;
+  horizonProfileTab = tab;
+  horizonContentRequestId++;
+  document.querySelectorAll('[data-horizon-tab]').forEach(button => {
+    const active = button.dataset.horizonTab === tab;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+  const overview = document.getElementById('horizonOverviewPage');
+  const mods = document.getElementById('horizonModsPage');
+  const packs = document.getElementById('horizonPacksPage');
+  if (overview) overview.hidden = tab !== 'overview';
+  if (mods) mods.hidden = tab !== 'mod';
+  if (packs) packs.hidden = !['resource', 'shader', 'modpack', 'datapack'].includes(tab);
+  const searchResults = document.getElementById('horizonPackSearchResults');
+  if (searchResults) searchResults.replaceChildren();
+  const packActions = document.getElementById('horizonPackActions');
+  if (packActions) packActions.hidden = !['resource', 'shader', 'modpack', 'datapack'].includes(tab);
+  const importPack = document.getElementById('horizonImportPackButton');
+  if (importPack){
+    importPack.hidden = !['resource', 'shader'].includes(tab);
+    importPack.textContent = tab === 'shader' ? 'Add shader pack' : 'Add resource pack';
+  }
+  const importModpack = document.getElementById('horizonImportModpackButton');
+  if (importModpack) importModpack.hidden = tab !== 'modpack';
+  const addDatapack = document.getElementById('horizonAddDatapackButton');
+  if (addDatapack) addDatapack.hidden = tab !== 'datapack';
+  const datapackWorld = document.getElementById('horizonDatapackWorld');
+  if (datapackWorld) datapackWorld.hidden = tab !== 'datapack';
+  const help = document.getElementById('horizonPackHelp');
+  if (help){
+    help.textContent = ({
+      resource: 'Resource packs are added to and managed in this Horizon profile.',
+      shader: 'Shader packs are added to and managed in this Horizon profile.',
+      modpack: 'Horizon manages imported modpacks separately from profile content; importing one may create or update a separate profile.',
+      datapack: 'Data packs belong to a world. Choose a world in this profile, then add or remove its data packs.',
+    })[tab] || '';
+  }
+  const installedHeading = document.getElementById('horizonInstalledHeading');
+  if (installedHeading) installedHeading.textContent = tab === 'modpack' ? 'Imported modpacks' : tab === 'datapack' ? 'World data packs' : 'Installed packs';
+  const scroll = document.querySelector?.('.horizon-detail-scroll');
+  if (scroll) scroll.scrollTop = 0;
+  refreshHorizonInstalledContent();
+}
+async function loadHorizonStatus(){
+  if (!launcherBridge?.getHorizonStatus){ setHorizonStatus('Horizon integration is unavailable in this launcher build.', true); return; }
+  populateHorizonBaldAccounts();
+  setHorizonStatus('Checking Horizon setup and Rust profiles…');
+  try{
+    const result = await launcherBridge.getHorizonStatus(document.getElementById('horizonBaldAccountSelect')?.value || '');
+    if (!result?.ok){ setHorizonStatus(result?.error || 'Could not read Horizon status.', true); return; }
+    if (result.accountConnected) stopHorizonAccountSync();
+    horizonRunningInstanceIds = new Set(Array.isArray(result.runningInstanceIds) ? result.runningInstanceIds : []);
+    renderHorizonInstances(result.instances || [], result.selectedInstanceId || state?.settings?.horizonInstanceId || '');
+    populateHorizonJavaProfiles();
+    const setup = document.getElementById('horizonSetupButton');
+    const retry = document.getElementById('horizonInstallRetryButton');
+    if (setup) setup.disabled = result.configured !== true;
+    if (retry) retry.style.display = result.configured ? 'none' : '';
+    if (!result.configured){
+      setHorizonStatus(`Horizon Launcher is not installed. Use Install / retry to download it automatically. ${result.accountMessage || ''}`);
+      return;
+    }
+    if (result.statusError){
+      setHorizonStatus(`Horizon is installed, but profiles could not be loaded. Open Sign in / setup to finish setup. ${result.statusError}`, true);
+      return;
+    }
+    const accountDetails = [
+      result.accountConnected ? '' : result.accountMessage,
+      result.accountError ? `Account check: ${result.accountError}` : '',
+    ].filter(Boolean).join(' ');
+    setHorizonStatus(accountDetails);
+    await refreshHorizonInstalledContent();
+  }catch(error){
+    setHorizonStatus(error?.message || String(error), true);
+  }
+}
+async function openHorizonSetup(){
+  const result = await launcherBridge?.openHorizonSetup?.();
+  if (!result?.ok){ setHorizonStatus(result?.error || 'Could not open Horizon setup.', true); return; }
+  const accountName = document.getElementById('horizonBaldAccountSelect')?.selectedOptions?.[0]?.textContent;
+  setHorizonStatus(`Horizon setup is open. Sign in once with ${accountName && accountName !== 'Select Microsoft account' ? accountName : 'the same Microsoft account selected here'}; Bald Launcher will match the Minecraft UUID and select it automatically.`);
+  watchHorizonAccountSync();
+}
+function stopHorizonAccountSync(){
+  if (horizonAccountSyncTimer){
+    clearInterval(horizonAccountSyncTimer);
+    horizonAccountSyncTimer = null;
+  }
+}
+function watchHorizonAccountSync(){
+  stopHorizonAccountSync();
+  const deadline = Date.now() + 10 * 60 * 1000;
+  horizonAccountSyncTimer = setInterval(async ()=>{
+    if (Date.now() >= deadline || document.getElementById('panel-horizon')?.style.display === 'none'){
+      stopHorizonAccountSync();
+      return;
+    }
+    if (horizonAccountSyncInProgress) return;
+    const accountId = document.getElementById('horizonBaldAccountSelect')?.value || '';
+    if (!accountId || typeof launcherBridge?.syncHorizonAccount !== 'function') return;
+    horizonAccountSyncInProgress = true;
+    try{
+      const result = await launcherBridge.syncHorizonAccount(accountId);
+      if (result?.accountConnected){
+        stopHorizonAccountSync();
+        await loadHorizonStatus();
+      }else if (result?.accountError){
+        setHorizonStatus(`Waiting for Horizon sign-in. Account check: ${result.accountError}`, true);
+      }
+    }catch(error){
+      setHorizonStatus(`Could not check Horizon account sign-in: ${error?.message || String(error)}`, true);
+    }finally{
+      horizonAccountSyncInProgress = false;
+    }
+  }, 8000);
+}
+function selectedHorizonInstanceId(){
+  return String(horizonSelectedInstanceId || state?.settings?.horizonInstanceId || '');
+}
+async function selectHorizonInstance(instanceId){
+  if (!instanceId) return false;
+  horizonSelectedInstanceId = String(instanceId);
+  renderHorizonInstances();
+  const result = await launcherBridge?.setHorizonInstance?.(instanceId);
+  if (!result?.ok){
+    horizonSelectedInstanceId = String(state?.settings?.horizonInstanceId || '');
+    renderHorizonInstances();
+    setHorizonStatus(result?.error || 'Could not select that Horizon profile.', true);
+    return false;
+  }
+  state.settings = { ...(state.settings || {}), horizonInstanceId: result.instance.id };
+  horizonSelectedInstanceId = String(result.instance.id);
+  renderHorizonInstances();
+  await refreshHorizonInstalledContent();
+  return true;
+}
+async function createHorizonInstance(){
+  const input = document.getElementById('horizonNewInstanceName');
+  const name = String(input?.value || '').trim();
+  if (!name){ setHorizonStatus('Enter a name for the new isolated Horizon profile.', true); return; }
+  setHorizonStatus('Creating a separate Horizon profile…');
+  const result = await launcherBridge?.createHorizonInstance?.(name);
+  if (!result?.ok){ setHorizonStatus(result?.error || 'Could not create the Horizon profile.', true); return; }
+  state.settings = { ...(state.settings || {}), horizonInstanceId: result.instance.id };
+  if (input) input.value = '';
+  await loadHorizonStatus();
+  await openHorizonProfile(result.instance.id);
+}
+async function launchHorizon(){
+  const instanceId = selectedHorizonInstanceId();
+  if (!instanceId){ setHorizonStatus('Create or select a Horizon Rust profile first.', true); return; }
+  const launch = document.getElementById('horizonDetailPlayButton');
+  if (launch) launch.disabled = true;
+  setHorizonStatus('Starting the Horizon Rust client…');
+  const result = await launcherBridge?.launchHorizon?.(instanceId);
+  if (!result?.ok){
+    if (launch) launch.disabled = false;
+    setHorizonStatus(result?.error || 'Could not start Horizon.', true);
+    return;
+  }
+  horizonRunningInstanceIds.add(result.instance.id);
+  if (launch) launch.disabled = true;
+  setHorizonStatus(`Starting ${result.instance.name}…`);
+}
+function makeHorizonContentCard(title, detail){
+  const card = document.createElement('div');
+  card.className = 'horizon-content-card';
+  const heading = document.createElement('div');
+  heading.style.cssText = 'font-weight:600;margin-bottom:4px;';
+  heading.textContent = title;
+  const description = document.createElement('div');
+  description.className = 'horizon-content-card-description';
+  description.textContent = detail;
+  card.append(heading, description);
+  return card;
+}
+async function refreshHorizonInstalledContent(){
+  const tab = horizonProfileTab;
+  const instanceId = selectedHorizonInstanceId();
+  const requestId = ++horizonContentRequestId;
+  const profileIsCurrent = () => requestId === horizonContentRequestId
+    && tab === horizonProfileTab
+    && instanceId === selectedHorizonInstanceId();
+  if (!instanceId) return;
+  if (tab === 'overview'){
+    const worldCount = document.getElementById('horizonOverviewWorldCount');
+    const packCount = document.getElementById('horizonOverviewPackCount');
+    if (worldCount) worldCount.textContent = '…';
+    if (packCount) packCount.textContent = '…';
+    let worldsResult;
+    let packsResult;
+    try{
+      [worldsResult, packsResult] = await Promise.all([
+        launcherBridge?.listHorizonWorlds?.(instanceId),
+        launcherBridge?.listHorizonMods?.(instanceId),
+      ]);
+    }catch(error){
+      if (!profileIsCurrent()) return;
+      if (worldCount) worldCount.textContent = '—';
+      if (packCount) packCount.textContent = '—';
+      setHorizonStatus(error?.message || String(error), true);
+      return;
+    }
+    if (!profileIsCurrent()) return;
+    if (!worldsResult?.ok){
+      if (worldCount) worldCount.textContent = '—';
+      setHorizonStatus(worldsResult?.error || 'Could not load this profile’s worlds.', true);
+    }else if (worldCount){
+      worldCount.textContent = String(Array.isArray(worldsResult.worlds) ? worldsResult.worlds.length : 0);
+    }
+    if (!packsResult?.ok){
+      if (packCount) packCount.textContent = '—';
+      setHorizonStatus(packsResult?.error || 'Could not load this profile’s packs.', true);
+    }else if (packCount){
+      const packs = Array.isArray(packsResult.packs) ? packsResult.packs : [];
+      packCount.textContent = String(packs.length);
+    }
+    return;
+  }
+  if (tab === 'mod') return;
+  const host = document.getElementById('horizonPackInstalledContent');
+  if (!host) return;
+  if (host) host.replaceChildren();
+  if (tab === 'modpack'){
+    const result = await launcherBridge?.listHorizonModpacks?.();
+    if (!profileIsCurrent()) return;
+    if (!result?.ok){ setHorizonOperationStatus(result?.error || 'Could not list imported Horizon modpacks.', true); return; }
+    const modpacks = Array.isArray(result.modpacks) ? result.modpacks.filter(Boolean) : [];
+    if (!modpacks.length){
+      host?.appendChild(makeHorizonContentCard('No imported modpacks', 'Import a modpack to manage its porting and profile options in Horizon.'));
+      return;
+    }
+    for (const entry of modpacks){
+      const title = typeof entry === 'string'
+        ? entry
+        : String(entry.name || entry.title || entry.pack || entry.id || 'Imported modpack');
+      const detail = typeof entry === 'string'
+        ? 'Imported Horizon modpack.'
+        : [entry.coverage, entry.status, entry.version].filter(Boolean).join(' · ')
+        || 'Horizon manages imported modpacks separately from this profile.';
+      host?.appendChild(makeHorizonContentCard(title, detail));
+    }
+    return;
+  }
+  if (tab === 'datapack'){
+    const worldSelect = document.getElementById('horizonDatapackWorld');
+    const worldsResult = await launcherBridge?.listHorizonWorlds?.(instanceId);
+    if (!profileIsCurrent()) return;
+    if (!worldsResult?.ok){ setHorizonOperationStatus(worldsResult?.error || 'Could not list this profile’s worlds.', true); return; }
+    const worlds = Array.isArray(worldsResult.worlds) ? worldsResult.worlds : [];
+    const previousWorld = String(worldSelect?.value || '');
+    const getWorldName = world => typeof world === 'string'
+      ? world
+      : String(world?.name || world?.folder || world?.id || '');
+    if (worldSelect){
+      worldSelect.replaceChildren();
+      for (const world of worlds){
+        const name = getWorldName(world);
+        if (!name) continue;
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        worldSelect.appendChild(option);
+      }
+      if (worlds.some(world => getWorldName(world) === previousWorld)) worldSelect.value = previousWorld;
+    }
+    const worldName = String(worldSelect?.value || '');
+    if (!worldName){
+      host?.appendChild(makeHorizonContentCard('No worlds in this profile', 'Create or copy a world in Horizon before managing its data packs.'));
+      return;
+    }
+    const result = await launcherBridge?.listHorizonDatapacks?.({ instanceId, world: worldName });
+    if (!profileIsCurrent()) return;
+    if (!result?.ok){ setHorizonOperationStatus(result?.error || `Could not list data packs for ${worldName}.`, true); return; }
+    const packs = Array.isArray(result.packs) ? result.packs : [];
+    if (!packs.length){
+      host?.appendChild(makeHorizonContentCard(`No data packs in ${worldName}`, 'Add a data-pack ZIP to this world.'));
+      return;
+    }
+    for (const entry of packs){
+      const packName = typeof entry === 'string' ? entry : String(entry.file || entry.name || entry.id || '');
+      if (!packName) continue;
+      const enabled = typeof entry === 'object' && (entry.enabled === true || entry.on === true);
+      const card = makeHorizonContentCard(packName, enabled ? 'Enabled in this world' : 'Installed in this world');
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'modal-btn';
+      remove.textContent = 'Remove';
+      remove.addEventListener('click', () => runHorizonDatapackAction('remove', packName));
+      const actions = document.createElement('div');
+      actions.className = 'horizon-tools-row';
+      actions.appendChild(remove);
+      card.appendChild(actions);
+      host?.appendChild(card);
+    }
+    return;
+  }
+
+  const result = await launcherBridge?.listHorizonMods?.(instanceId);
+  if (!profileIsCurrent()) return;
+  if (!result?.ok){ setHorizonOperationStatus(result?.error || 'Could not list installed Horizon content.', true); return; }
+  const packs = Array.isArray(result.packs) ? result.packs : [];
+  const visibleEntries = packs.filter(entry => String(entry.kind || '').toLowerCase() === tab
+      || (tab === 'resource' && !entry.kind && !String(entry.file || '').toLowerCase().includes('shader')))
+      .map(entry => ({ ...entry, entryType: 'pack' }));
+  if (!visibleEntries.length){
+    host.appendChild(makeHorizonContentCard(
+      `No installed ${tab === 'shader' ? 'shader' : 'resource'} packs`,
+      `Add a ${tab === 'shader' ? 'shader' : 'resource'} pack to this profile.`,
+    ));
+    return;
+  }
+  for (const entry of visibleEntries){
+    const file = String(entry.file || '');
+    const fileName = file.split(/[\\/]/).pop() || '';
+    const kind = String(entry.kind || (file.toLowerCase().includes('shader') ? 'shader' : 'resource')).toLowerCase();
+    const title = String(entry.title || entry.name || fileName || 'Installed content');
+    const enabled = entry.enabled === true;
+    const card = makeHorizonContentCard(title, `${entry.description || kind}${entry.version ? ` · ${entry.version}` : ''}\n${enabled ? 'Enabled' : 'Disabled'}`);
+    const actions = document.createElement('div');
+    actions.className = 'horizon-content-actions';
+    const addAction = (label, callback) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'modal-btn';
+      button.textContent = label;
+      button.addEventListener('click', callback);
+      actions.appendChild(button);
+    };
+    if (entry.entryType === 'pack'){
+      const packKind = kind === 'shader' ? 'shader' : 'resource';
+      const packName = fileName || title;
+      addAction(enabled ? 'Disable' : 'Enable', () => runHorizonPackAction(packName, packKind, enabled ? 'off' : 'on'));
+      addAction('Remove', () => runHorizonPackAction(packName, packKind, 'remove'));
+    }
+    card.appendChild(actions);
+    host.appendChild(card);
+  }
+}
+async function openHorizonModManager(){
+  const result = await launcherBridge?.openHorizonSetup?.();
+  if (!result?.ok){
+    setHorizonStatus(result?.error || 'Could not open Horizon.', true);
+    return;
+  }
+  setHorizonStatus('Horizon is open. Its native-mod manager uses the same selected Horizon profile.');
+}
+async function importHorizonPack(){
+  const kind = horizonProfileTab === 'shader' ? 'shader' : 'resource';
+  const result = await launcherBridge?.importHorizonPack?.({ kind, instanceId: selectedHorizonInstanceId() });
+  if (!result?.ok){
+    if (!result?.canceled) setHorizonOperationStatus(result?.error || `Could not add the ${kind} pack.`, true);
+    return;
+  }
+  await refreshHorizonInstalledContent();
+  setHorizonOperationStatus(`${kind === 'shader' ? 'Shader' : 'Resource'} pack added to this profile.`);
+}
+async function runHorizonDatapackAction(action, pack=''){
+  const world = String(document.getElementById('horizonDatapackWorld')?.value || '');
+  if (!world){ setHorizonOperationStatus('Select a world before managing data packs.', true); return; }
+  const result = await launcherBridge?.horizonDatapackAction?.({
+    action,
+    pack,
+    world,
+    instanceId: selectedHorizonInstanceId(),
+  });
+  if (!result?.ok){
+    if (!result?.canceled) setHorizonOperationStatus(result?.error || `Could not ${action} the data pack.`, true);
+    return;
+  }
+  await refreshHorizonInstalledContent();
+  setHorizonOperationStatus(action === 'add' ? 'Data pack added to the selected world.' : 'Data pack removed from the selected world.');
+}
+async function runHorizonPackAction(pack, kind, action){
+  const result = await launcherBridge?.horizonPackAction?.({ pack, kind, action, instanceId: selectedHorizonInstanceId() });
+  if (!result?.ok){ setHorizonOperationStatus(result?.error || `Could not ${action} this pack.`, true); return; }
+  await refreshHorizonInstalledContent();
+  setHorizonOperationStatus('Horizon pack settings updated.');
+}
+async function importHorizonModpack(){
+  setHorizonStatus('Choose a modpack archive to import through Horizon.');
+  const result = await launcherBridge?.importHorizonModpack?.(selectedHorizonInstanceId());
+  if (!result?.ok){
+    if (!result?.canceled) setHorizonOperationStatus(result?.error || 'Could not import that modpack.', true);
+    return;
+  }
+  await loadHorizonStatus();
+  setHorizonStatus('Modpack imported. Horizon profiles were refreshed.');
+}
+async function importJavaWorldToHorizon(){
+  const profileId = String(document.getElementById('horizonJavaProfileSelect')?.value || '');
+  if (!profileId){ setHorizonStatus('Create or select a Java profile before importing a world.', true); return; }
+  const result = await launcherBridge?.importJavaWorldToHorizon?.({ profileId, instanceId: selectedHorizonInstanceId() });
+  if (!result?.ok){
+    if (!result?.canceled) setHorizonStatus(result?.error || 'Could not copy the selected world.', true);
+    return;
+  }
+  setHorizonStatus(`Copied world “${result.worldName}” into the selected Horizon profile. The Java world was left unchanged.`);
+}
+launcherBridge?.onHorizonProcessState?.(processState => {
+  if (processState?.running){
+    horizonRunningInstanceIds.add(processState.instanceId);
+    setHorizonStatus(`Horizon is running for ${processState.instanceName || processState.instanceId}.`);
+  }else if (processState?.instanceId){
+    horizonRunningInstanceIds.delete(processState.instanceId);
+    if (processState.error) setHorizonStatus(processState.error, true);
+  }
+  renderHorizonInstances();
+});
 async function loadDiagnostics(){
   const output = document.getElementById('diagnosticsOutput');
   const analysisOutput = document.getElementById('crashAnalysisOutput');
@@ -5082,7 +5889,7 @@ async function runSynchronization() {
 }
 
 function showPanel(name){
-  const panelNames = ['home','servers','synchronizations','profile','server-detail','accounts','settings','performance','logs','appearance','capes','resource-packs'];
+  const panelNames = ['home','horizon','servers','synchronizations','profile','server-detail','accounts','settings','performance','logs','appearance','capes','resource-packs'];
   panelNames.forEach(p=>{
     const el = document.getElementById('panel-'+p);
     if (el) el.style.display = p===name ? 'flex' : 'none';

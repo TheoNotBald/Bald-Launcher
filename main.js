@@ -32,6 +32,11 @@ const { commitStagedFiles } = require('./src/shared/file-transaction');
 const { parseWindowsGpuPreference, summarizeGpuEngineSamples } = require('./src/shared/windows-gpu');
 const { redactLaunchArguments } = require('./src/shared/launch-arguments');
 const { findSha256Asset, parseSha256Checksum, verifySha256 } = require('./src/shared/sha256-checksum');
+const {
+  HORIZON_RELEASES_API,
+  installHorizonLauncherArchive,
+  selectHorizonLauncherAsset,
+} = require('./src/shared/horizon-installer');
 const ServerStats = require('./src/servers/server-stats');
 const { runDueSchedules } = require('./src/servers/schedule-runner');
 const { restoreWorldFromZip } = require('./src/servers/backup-restore');
@@ -41,6 +46,19 @@ const { ensureLauncherProfilesFile } = require('./src/shared/launcher-profiles')
 const { getLoaderJvmArguments, getLoaderLibraryPaths } = require('./src/shared/loader-jvm-arguments');
 const { runInstallerProcess } = require('./src/shared/run-installer');
 const { setVanillaPerformancePreset } = require('./src/shared/vanilla-performance');
+const {
+  HORIZON_DOWNLOAD_URL,
+  buildHorizonInstallArgs,
+  buildHorizonSearchArgs,
+  findMatchingHorizonAccount,
+  getHorizonPaths,
+  normalizeHorizonLauncherPath,
+  parseHorizonJson,
+  publicHorizonAccounts,
+  runHorizonCommand,
+  validateInstanceName,
+  validateProjectId,
+} = require('./src/shared/horizon-integration');
 const { refreshMicrosoftAuthorization } = require('./src/shared/launch-authorization');
 const { runProfileImportDownloads } = require('./src/shared/profile-import');
 const { recordProfilePlaytime } = require('./src/shared/profile-playtime');
@@ -650,6 +668,9 @@ const DEFAULT_STATE = {
     minecraftInGameButtonEnabled: true,
     minecraftPerformanceHudEnabled: false,
     playitKeepRunningOnClose: false,
+    horizonLauncherPath: '',
+    horizonInstanceId: '',
+    horizonAccountId: '',
   },
   themes: {
     '1': createBuiltInTheme('Bald Dark'),
@@ -719,6 +740,7 @@ const launcherStateStore = createStateStore({
   onPersistError: error => console.error('State persistence error:', error),
 });
 const runningProcesses = new Map();
+const horizonProcesses = new Map();
 const profilePlaytimeIntervals = new Map();
 const serverProcesses = new Map();
 const serverStartupTasks = new Map();
@@ -3075,6 +3097,9 @@ function normalizeSettings(settings) {
     optimizationModsEnabled: isOptimizationOptedIn(settings),
     vanillaPerformancePresetEnabled: settings?.vanillaPerformancePresetEnabled !== false,
     playitKeepRunningOnClose: settings?.playitKeepRunningOnClose === true,
+    horizonLauncherPath: String(settings?.horizonLauncherPath || '').trim().slice(0, 2048),
+    horizonInstanceId: String(settings?.horizonInstanceId || '').trim().slice(0, 160),
+    horizonAccountId: String(settings?.horizonAccountId || '').trim().slice(0, 160),
     ...normalizeBaldMenuSettings(settings),
   };
 }
@@ -4317,6 +4342,719 @@ ipcMain.handle('launcher:open-external-url', async (_event, url) => {
   if (!/^https?:\/\//i.test(value)) return { ok: false, error: 'Only HTTP and HTTPS links can be opened.' };
   await shell.openExternal(value);
   return { ok: true };
+});
+
+function getConfiguredHorizonLauncher() {
+  const executablePath = normalizeHorizonLauncherPath(launcherState.settings?.horizonLauncherPath);
+  const stat = fs.lstatSync(executablePath);
+  if (!stat.isFile() || stat.isSymbolicLink()) {
+    throw new Error('The configured Horizon Launcher path is not a regular executable file.');
+  }
+  return executablePath;
+}
+
+function prepareHorizonHomes() {
+  const roots = getHorizonPaths(app.getPath('userData'));
+  for (const folder of [roots.root, roots.launcherHome, roots.gameHome]) {
+    fs.mkdirSync(folder, { recursive: true });
+    const stat = fs.lstatSync(folder);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new Error(`The Horizon data folder is not a real directory: ${folder}`);
+    }
+  }
+  return roots;
+}
+
+async function runHorizonCli(args, options = {}) {
+  const executablePath = getConfiguredHorizonLauncher();
+  prepareHorizonHomes();
+  return runHorizonCommand({
+    executablePath,
+    userDataPath: app.getPath('userData'),
+    args,
+    ...options,
+  });
+}
+
+function sendHorizonSetupProgress(progress) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('horizon:setup-progress', progress);
+  }
+}
+
+ipcMain.handle('horizon:ensure-installed', async () => {
+  try {
+    prepareHorizonHomes();
+    try {
+      const executablePath = getConfiguredHorizonLauncher();
+      return { ok: true, executablePath, alreadyInstalled: true };
+    } catch (error) {
+      if (launcherState.settings?.horizonLauncherPath) {
+        console.warn('[Horizon] Saved launcher path is unavailable; installing the official launcher:', error.message);
+      }
+    }
+
+    if (process.platform !== 'win32') {
+      throw new Error('Automatic Horizon installation is currently supported on Windows only.');
+    }
+    sendHorizonSetupProgress({ phase: 'metadata', message: 'Finding the latest official Horizon Launcher…' });
+    const releaseResponse = await axios.get(HORIZON_RELEASES_API, {
+      timeout: 30_000,
+      maxContentLength: 8 * 1024 * 1024,
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Bald-Launcher' },
+    });
+    const selected = selectHorizonLauncherAsset(releaseResponse.data, process.arch);
+    sendHorizonSetupProgress({
+      phase: 'download',
+      message: `Downloading Horizon Launcher ${selected.version} from its official GitHub release…`,
+      percent: 0,
+      total: selected.asset.size,
+    });
+    const downloadResponse = await axios.get(selected.asset.browser_download_url, {
+      timeout: 5 * 60_000,
+      maxContentLength: selected.asset.size,
+      maxBodyLength: selected.asset.size,
+      responseType: 'arraybuffer',
+      headers: { Accept: 'application/octet-stream', 'User-Agent': 'Bald-Launcher' },
+      onDownloadProgress: progress => {
+        const loaded = Math.max(0, Number(progress.loaded) || 0);
+        sendHorizonSetupProgress({
+          phase: 'download',
+          message: `Downloading Horizon Launcher ${selected.version}…`,
+          loaded,
+          total: selected.asset.size,
+          percent: Math.min(100, Math.floor(loaded / selected.asset.size * 100)),
+        });
+      },
+    });
+    const archive = Buffer.from(downloadResponse.data);
+    if (archive.length !== selected.asset.size) {
+      throw new Error(`Horizon Launcher download size mismatch (expected ${selected.asset.size} bytes, got ${archive.length}).`);
+    }
+    sendHorizonSetupProgress({ phase: 'verify', message: 'Verifying the Horizon Launcher archive…', percent: 100 });
+    const roots = getHorizonPaths(app.getPath('userData'));
+    const installRoot = path.join(roots.root, 'launcher-apps');
+    sendHorizonSetupProgress({ phase: 'install', message: 'Installing Horizon Launcher into its isolated app folder…' });
+    const installed = installHorizonLauncherArchive({
+      archive,
+      digest: selected.digest,
+      version: selected.version,
+      installRoot,
+    });
+    launcherState.settings = normalizeSettings({
+      ...launcherState.settings,
+      horizonLauncherPath: installed.executablePath,
+      horizonInstanceId: launcherState.settings?.horizonInstanceId || '',
+    });
+    scheduleStateWrite();
+    sendHorizonSetupProgress({ phase: 'ready', message: `Horizon Launcher ${installed.version} is ready.`, percent: 100 });
+    return { ok: true, executablePath: installed.executablePath, version: installed.version };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    sendHorizonSetupProgress({ phase: 'error', message, error: true });
+    return { ok: false, error: message };
+  }
+});
+
+async function getHorizonInstances() {
+  const result = await runHorizonCli(['instance', 'list']);
+  const instances = parseHorizonJson(result.stdout);
+  if (!Array.isArray(instances)) throw new Error('Horizon returned an invalid instance list.');
+  return instances.filter(instance => (
+    instance
+    && typeof instance.id === 'string'
+    && typeof instance.name === 'string'
+    && typeof instance.home === 'string'
+  ));
+}
+
+async function resolveHorizonInstance(instanceKey) {
+  const key = validateInstanceName(instanceKey);
+  const instances = await getHorizonInstances();
+  const instance = instances.find(item => item.id === key || item.name === key);
+  if (!instance) throw new Error(`Horizon instance "${key}" was not found. Refresh the Rust mode instance list.`);
+  if (instance.java) throw new Error('This is a Java Edition instance, not a Horizon Rust instance.');
+  return instance;
+}
+
+function publicHorizonInstance(instance) {
+  return {
+    id: instance.id,
+    name: instance.name,
+    kind: instance.kind,
+    isJava: Boolean(instance.java),
+    selected: instance.selected === true,
+    version: instance.version || null,
+    playedSecs: Number(instance.played_secs) || 0,
+  };
+}
+
+function horizonCommandResult(result) {
+  return parseHorizonJson(result.stdout);
+}
+
+async function syncHorizonBaldAccount(accountId) {
+  const baldAccount = launcherState.accounts.find(account => account.id === accountId);
+  if (baldAccount?.type !== 'Microsoft' || !baldAccount.uuid) {
+    return {
+      accountId: baldAccount?.id || '',
+      accountName: baldAccount?.name || '',
+      accountConnected: false,
+      accountMessage: 'Select a linked Microsoft account in Bald Launcher to connect it to Horizon.',
+      accountError: '',
+      horizonAccounts: [],
+    };
+  }
+
+  let horizonAccounts = [];
+  try {
+    horizonAccounts = publicHorizonAccounts(horizonCommandResult(await runHorizonCli(['account', 'list'])));
+  } catch (error) {
+    return {
+      accountId: baldAccount.id,
+      accountName: baldAccount.name,
+      accountConnected: false,
+      accountMessage: `Sign in to Horizon once with ${baldAccount.name}; Bald Launcher will match the Minecraft UUID afterward.`,
+      accountError: error instanceof Error ? error.message : String(error),
+      horizonAccounts,
+    };
+  }
+
+  const matchingAccount = findMatchingHorizonAccount(horizonAccounts, baldAccount.uuid);
+  if (!matchingAccount) {
+    return {
+      accountId: baldAccount.id,
+      accountName: baldAccount.name,
+      accountConnected: false,
+      accountMessage: `Horizon has no signed-in account matching ${baldAccount.name}. Sign in to Horizon once with that Microsoft account; its Minecraft UUID will be matched automatically.`,
+      accountError: '',
+      horizonAccounts,
+    };
+  }
+
+  try {
+    if (!matchingAccount.selected) {
+      await runHorizonCli(['account', 'select', matchingAccount.uuid]);
+    }
+    if (launcherState.settings?.horizonAccountId !== baldAccount.id) {
+      launcherState.settings = normalizeSettings({
+        ...launcherState.settings,
+        horizonAccountId: baldAccount.id,
+      });
+      scheduleStateWrite();
+    }
+    return {
+      accountId: baldAccount.id,
+      accountName: baldAccount.name,
+      accountConnected: true,
+      accountMessage: `${baldAccount.name} is connected to Horizon.`,
+      accountError: '',
+      horizonAccounts,
+    };
+  } catch (error) {
+    return {
+      accountId: baldAccount.id,
+      accountName: baldAccount.name,
+      accountConnected: false,
+      accountMessage: `Horizon found ${baldAccount.name}, but could not select that account.`,
+      accountError: error instanceof Error ? error.message : String(error),
+      horizonAccounts,
+    };
+  }
+}
+
+ipcMain.handle('horizon:get-status', async (_event, payload = {}) => {
+  const roots = getHorizonPaths(app.getPath('userData'));
+  const configuredPath = String(launcherState.settings?.horizonLauncherPath || '').trim();
+  const requestedAccountId = String(payload?.accountId || '').trim().slice(0, 160);
+  const baldAccountId = requestedAccountId
+    || launcherState.settings?.horizonAccountId
+    || launcherState.activeAccountId
+    || '';
+  const baldAccount = launcherState.accounts.find(account => account.id === baldAccountId);
+  if (!configuredPath) {
+    return {
+      ok: true,
+      configured: false,
+      downloadUrl: HORIZON_DOWNLOAD_URL,
+      gameHome: roots.gameHome,
+      launcherHome: roots.launcherHome,
+      selectedInstanceId: launcherState.settings?.horizonInstanceId || '',
+      accountId: baldAccount?.id || '',
+      accountName: baldAccount?.name || '',
+      accountMessage: baldAccount?.type === 'Microsoft'
+        ? `Sign in to Horizon once with ${baldAccount.name}; Bald Launcher will match and select it afterward.`
+        : 'Select a linked Microsoft account to connect it to Horizon.',
+    };
+  }
+  try {
+    const executablePath = getConfiguredHorizonLauncher();
+    let instances = [];
+    let statusError = '';
+    try {
+      instances = await getHorizonInstances();
+    } catch (error) {
+      statusError = error instanceof Error ? error.message : String(error);
+    }
+    const accountSync = await syncHorizonBaldAccount(baldAccount?.id || '');
+    return {
+      ok: true,
+      configured: true,
+      executablePath,
+      downloadUrl: HORIZON_DOWNLOAD_URL,
+      gameHome: roots.gameHome,
+      launcherHome: roots.launcherHome,
+      selectedInstanceId: launcherState.settings?.horizonInstanceId || '',
+      instances: instances.map(publicHorizonInstance),
+      statusError,
+      ...accountSync,
+      runningInstanceIds: [...horizonProcesses.entries()]
+        .filter(([, child]) => !child.killed && child.exitCode === null)
+        .map(([instanceId]) => instanceId),
+    };
+  } catch (error) {
+    return { ok: false, configured: true, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:sync-account', async (_event, payload = {}) => ({
+  ok: true,
+  ...await syncHorizonBaldAccount(String(payload?.accountId || '').trim().slice(0, 160)),
+}));
+
+ipcMain.handle('horizon:open-download', async () => {
+  await shell.openExternal(HORIZON_DOWNLOAD_URL);
+  return { ok: true };
+});
+
+ipcMain.handle('horizon:choose-launcher', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select the Horizon Launcher executable',
+    properties: ['openFile'],
+    filters: [{ name: 'Horizon Launcher', extensions: ['exe'] }],
+  });
+  if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+  try {
+    const executablePath = normalizeHorizonLauncherPath(result.filePaths[0]);
+    const stat = fs.lstatSync(executablePath);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Select a regular Horizon Launcher executable.');
+    const version = await runHorizonCommand({
+      executablePath,
+      userDataPath: app.getPath('userData'),
+      args: ['--version'],
+      json: false,
+      timeoutMs: 15_000,
+    });
+    const versionText = `${version.stdout}\n${version.stderr}`;
+    if (!/horizon[- ]launcher/i.test(versionText)) {
+      throw new Error('The selected executable did not identify itself as Horizon Launcher.');
+    }
+    launcherState.settings = normalizeSettings({
+      ...launcherState.settings,
+      horizonLauncherPath: executablePath,
+      horizonInstanceId: launcherState.settings?.horizonInstanceId || '',
+    });
+    scheduleStateWrite();
+    return { ok: true, executablePath };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:open-setup', async () => {
+  try {
+    const executablePath = getConfiguredHorizonLauncher();
+    const roots = prepareHorizonHomes();
+    const child = spawn(executablePath, [], {
+      env: {
+        ...process.env,
+        HORIZON_LAUNCHER_HOME: roots.launcherHome,
+        HORIZON_HOME: roots.gameHome,
+      },
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false,
+    });
+    await new Promise((resolve, reject) => {
+      child.once('spawn', resolve);
+      child.once('error', reject);
+    });
+    child.unref();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:list-instances', async () => {
+  try {
+    return { ok: true, instances: (await getHorizonInstances()).map(publicHorizonInstance) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:create-instance', async (_event, payload) => {
+  try {
+    const name = validateInstanceName(payload?.name);
+    await runHorizonCli(['instance', 'create', name]);
+    const instances = await getHorizonInstances();
+    const created = instances.find(instance => instance.name === name);
+    if (!created) throw new Error(`Horizon did not return the new instance "${name}".`);
+    launcherState.settings = normalizeSettings({
+      ...launcherState.settings,
+      horizonInstanceId: created.id,
+    });
+    scheduleStateWrite();
+    return { ok: true, instance: publicHorizonInstance(created) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:set-instance', async (_event, payload) => {
+  try {
+    const instance = await resolveHorizonInstance(payload?.instanceId);
+    launcherState.settings = normalizeSettings({
+      ...launcherState.settings,
+      horizonInstanceId: instance.id,
+    });
+    scheduleStateWrite();
+    return { ok: true, instance: publicHorizonInstance(instance) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:launch', async (_event, payload) => {
+  try {
+    const instance = await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
+    const existing = horizonProcesses.get(instance.id);
+    if (existing && !existing.killed && existing.exitCode === null) {
+      throw new Error(`${instance.name} is already running.`);
+    }
+    const executablePath = getConfiguredHorizonLauncher();
+    const roots = prepareHorizonHomes();
+    const child = spawn(executablePath, ['play', '--instance', instance.id], {
+      env: {
+        ...process.env,
+        HORIZON_LAUNCHER_HOME: roots.launcherHome,
+        HORIZON_HOME: roots.gameHome,
+      },
+      stdio: ['ignore', 'ignore', 'pipe'],
+      windowsHide: true,
+    });
+    let stderrTail = '';
+    child.stderr?.on('data', chunk => {
+      stderrTail = `${stderrTail}${chunk.toString('utf8')}`.slice(-16_384);
+    });
+    horizonProcesses.set(instance.id, child);
+    child.once('error', error => {
+      if (horizonProcesses.get(instance.id) === child) horizonProcesses.delete(instance.id);
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('horizon:process-state', {
+        instanceId: instance.id,
+        instanceName: instance.name,
+        running: false,
+        error: `Could not launch Horizon: ${error.message}`,
+      });
+    });
+    child.once('close', code => {
+      if (horizonProcesses.get(instance.id) === child) horizonProcesses.delete(instance.id);
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('horizon:process-state', {
+        instanceId: instance.id,
+        instanceName: instance.name,
+        running: false,
+        ...(code === 0 ? {} : { error: stderrTail.trim() || `Horizon exited with code ${code}.` }),
+      });
+    });
+    await new Promise((resolve, reject) => {
+      child.once('spawn', resolve);
+      child.once('error', reject);
+    });
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('horizon:process-state', {
+      instanceId: instance.id,
+      instanceName: instance.name,
+      pid: child.pid,
+      running: true,
+    });
+    return { ok: true, instance: publicHorizonInstance(instance), pid: child.pid };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:search-mods', async (_event, payload) => {
+  try {
+    const instance = await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
+    const args = buildHorizonSearchArgs({
+      query: payload?.query,
+      kind: payload?.kind,
+      source: payload?.source,
+      instance: instance.id,
+    });
+    const results = horizonCommandResult(await runHorizonCli(args));
+    if (!Array.isArray(results)) throw new Error('Horizon returned an invalid mod search result.');
+    return { ok: true, results };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:list-mods', async (_event, payload) => {
+  try {
+    const instance = await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
+    const packs = horizonCommandResult(await runHorizonCli(['packs', 'list', '--instance', instance.id]));
+    if (!Array.isArray(packs)) throw new Error('Horizon returned an invalid installed-pack list.');
+    return {
+      ok: true,
+      mods: [],
+      packs,
+      modsError: 'Native mods are managed in Horizon’s own launcher window.',
+    };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:list-worlds', async (_event, payload) => {
+  try {
+    const instance = await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
+    const worlds = horizonCommandResult(await runHorizonCli(['worlds', 'list', '--instance', instance.id]));
+    if (!Array.isArray(worlds)) throw new Error('Horizon returned an invalid world list.');
+    return { ok: true, worlds };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:list-datapacks', async (_event, payload) => {
+  try {
+    const instance = await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
+    const world = validateInstanceName(payload?.world);
+    const packs = horizonCommandResult(await runHorizonCli(['worlds', 'datapack-list', world, '--instance', instance.id]));
+    if (!Array.isArray(packs)) throw new Error('Horizon returned an invalid data-pack list.');
+    return { ok: true, packs };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:datapack-action', async (_event, payload) => {
+  try {
+    const instance = await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
+    const world = validateInstanceName(payload?.world);
+    const action = payload?.action;
+    if (action === 'add') {
+      const selected = await dialog.showOpenDialog(mainWindow, {
+        title: `Add a data pack to ${world}`,
+        properties: ['openFile'],
+        filters: [{ name: 'Minecraft data packs', extensions: ['zip'] }],
+      });
+      if (selected.canceled || !selected.filePaths[0]) return { ok: false, canceled: true };
+      const filePath = path.resolve(selected.filePaths[0]);
+      const stat = fs.lstatSync(filePath);
+      if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Select a regular data-pack ZIP file.');
+      await runHorizonCli(['worlds', 'datapack-add', world, filePath, '--instance', instance.id]);
+      return { ok: true };
+    }
+    if (action === 'remove') {
+      const pack = validateInstanceName(payload?.pack);
+      await runHorizonCli(['worlds', 'datapack-remove', world, pack, '--instance', instance.id]);
+      return { ok: true };
+    }
+    throw new Error('Unsupported Horizon data-pack action.');
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:import-pack', async (_event, payload) => {
+  try {
+    const instance = await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
+    const kind = payload?.kind === 'shader' ? 'shader' : payload?.kind === 'resource' ? 'resource' : '';
+    if (!kind) throw new Error('Choose a resource pack or shader pack.');
+    const selected = await dialog.showOpenDialog(mainWindow, {
+      title: `Add a ${kind === 'shader' ? 'shader' : 'resource'} pack`,
+      properties: ['openFile'],
+      filters: [{
+        name: kind === 'shader' ? 'Horizon shader packs' : 'Minecraft resource packs',
+        extensions: kind === 'shader' ? ['zip', 'hshader'] : ['zip'],
+      }],
+    });
+    if (selected.canceled || !selected.filePaths[0]) return { ok: false, canceled: true };
+    const filePath = path.resolve(selected.filePaths[0]);
+    const stat = fs.lstatSync(filePath);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Select a regular pack file.');
+    await runHorizonCli(['packs', 'add', filePath, '--instance', instance.id]);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:list-modpacks', async () => {
+  try {
+    const modpacks = horizonCommandResult(await runHorizonCli(['modpack', 'list']));
+    if (!Array.isArray(modpacks)) throw new Error('Horizon returned an invalid modpack list.');
+    return { ok: true, modpacks };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+async function confirmHorizonNativeContent(action) {
+  const labels = { install: 'Install', update: 'Update', import: 'Import' };
+  const label = labels[action] || 'Continue';
+  const confirmation = await dialog.showMessageBox(mainWindow, {
+    type: 'warning',
+    title: `${label} Horizon content?`,
+    message: 'This action may add Horizon native .hnmod code.',
+    detail: 'Native Horizon mods are not sandboxed and run with your Windows account permissions. Review the source and continue only if you trust it. The content stays in the isolated Horizon data folder.',
+    buttons: [label, 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+  });
+  return confirmation.response === 0;
+}
+
+ipcMain.handle('horizon:install-mod', async (_event, payload) => {
+  try {
+    const instance = await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
+    const projectId = validateProjectId(payload?.projectId);
+    const source = payload?.source === 'horizon' ? 'horizon' : payload?.source === 'modrinth' ? 'modrinth' : '';
+    const kind = payload?.kind;
+    if (!['mod', 'modpack', 'resource', 'shader', 'datapack'].includes(kind)) {
+      throw new Error('Unsupported Horizon content category.');
+    }
+    const world = payload?.world ? String(payload.world) : undefined;
+    if (['mod', 'modpack'].includes(kind) && !(await confirmHorizonNativeContent('install'))) {
+      return { ok: false, canceled: true };
+    }
+    const args = buildHorizonInstallArgs({ projectId, source, instance: instance.id, world });
+    const result = await runHorizonCli(args);
+    return { ok: true, output: result.stdout.trim() };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:mod-action', async (_event, payload) => {
+  try {
+    const instance = await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
+    const action = payload?.action;
+    if (!['enable', 'disable', 'remove', 'update'].includes(action)) throw new Error('Unsupported Horizon mod action.');
+    if (action === 'update') {
+      const projectId = payload?.projectId ? validateProjectId(payload.projectId) : '';
+      if (!(await confirmHorizonNativeContent('update'))) return { ok: false, canceled: true };
+      await runHorizonCli(['mods', 'update', ...(projectId ? [projectId] : []), '--instance', instance.id]);
+    } else {
+      const projectId = validateProjectId(payload?.projectId);
+      if (action !== 'remove') {
+        const installed = horizonCommandResult(await runHorizonCli(['mods', 'list', '--instance', instance.id]));
+        const entry = Array.isArray(installed) && installed.find(item => item.project === projectId);
+        if (String(entry?.file || '').toLowerCase().endsWith('.hnmod')) {
+          throw new Error('Horizon native mods do not have an on/off switch. Remove the mod from this instance instead.');
+        }
+      }
+      await runHorizonCli(['mods', action, projectId, '--instance', instance.id]);
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:pack-action', async (_event, payload) => {
+  try {
+    const instance = await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
+    const pack = validateInstanceName(payload?.pack);
+    const kind = payload?.kind === 'shader' ? 'shader' : payload?.kind === 'resource' ? 'resource' : '';
+    const action = payload?.action;
+    if (!kind || !['on', 'off', 'remove'].includes(action)) throw new Error('Unsupported Horizon pack action.');
+    const args = action === 'remove'
+      ? ['packs', 'remove', pack, '--kind', kind, '--instance', instance.id]
+      : ['packs', action, pack, '--kind', kind, '--instance', instance.id];
+    await runHorizonCli(args);
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:import-modpack', async (_event, payload) => {
+  try {
+    await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Import a Horizon or Java modpack',
+      properties: ['openFile'],
+      filters: [{ name: 'Modpack archives', extensions: ['mrpack', 'zip'] }],
+    });
+    if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+    const archivePath = path.resolve(result.filePaths[0]);
+    const stat = fs.lstatSync(archivePath);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Select a regular modpack archive.');
+    if (!(await confirmHorizonNativeContent('import'))) return { ok: false, canceled: true };
+    const output = await runHorizonCli(['instance', 'import', archivePath], { timeoutMs: 10 * 60 * 1000 });
+    return { ok: true, output: output.stdout.trim() };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:import-java-world', async (_event, payload) => {
+  try {
+    const profileId = String(payload?.profileId || '');
+    const profile = launcherState.profiles.find(item => item.id === profileId);
+    if (!profile) throw new Error('Choose a valid Bald Launcher Java profile.');
+    if (runningProcesses.has(profile.id)) throw new Error('Close Minecraft before copying one of its worlds.');
+    const sourceSaves = path.join(getMinecraftRootFor(profile.id), 'saves');
+    const savesStat = fs.lstatSync(sourceSaves);
+    if (!savesStat.isDirectory() || savesStat.isSymbolicLink()) throw new Error('The selected Java profile does not have a safe saves folder.');
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Choose a world to copy into Horizon',
+      defaultPath: sourceSaves,
+      properties: ['openDirectory'],
+    });
+    if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+    const sourcePath = path.resolve(result.filePaths[0]);
+    const sourceParent = path.resolve(sourceSaves);
+    if (process.platform === 'win32'
+      ? path.dirname(sourcePath).toLowerCase() !== sourceParent.toLowerCase()
+      : path.dirname(sourcePath) !== sourceParent) {
+      throw new Error('Choose a world folder directly inside the selected Java profile’s saves folder.');
+    }
+    const sourceStat = fs.lstatSync(sourcePath);
+    if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) throw new Error('The selected world is not a regular folder.');
+    const levelDat = path.join(sourcePath, 'level.dat');
+    const levelStat = fs.lstatSync(levelDat);
+    if (!levelStat.isFile() || levelStat.isSymbolicLink()) throw new Error('The selected folder is not a Minecraft world (level.dat is missing).');
+    await assertTreeHasNoSymlinks(sourcePath, 'Minecraft world');
+
+    const instance = await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
+    const roots = prepareHorizonHomes();
+    const gameHomeReal = fs.realpathSync(roots.gameHome);
+    const instanceHomeReal = fs.realpathSync(instance.home);
+    const relativeHome = path.relative(gameHomeReal, instanceHomeReal);
+    if (relativeHome === '..' || relativeHome.startsWith(`..${path.sep}`) || path.isAbsolute(relativeHome)) {
+      throw new Error('The selected Horizon instance is outside the isolated Horizon data folder.');
+    }
+    const destinationSaves = path.join(instance.home, 'saves');
+    fs.mkdirSync(destinationSaves, { recursive: true });
+    const destinationStat = fs.lstatSync(destinationSaves);
+    if (!destinationStat.isDirectory() || destinationStat.isSymbolicLink()) {
+      throw new Error('The Horizon instance saves folder is not a real directory.');
+    }
+    const destinationReal = fs.realpathSync(destinationSaves);
+    const relativeSaves = path.relative(gameHomeReal, destinationReal);
+    if (relativeSaves === '..' || relativeSaves.startsWith(`..${path.sep}`) || path.isAbsolute(relativeSaves)) {
+      throw new Error('The Horizon world destination is outside the isolated Horizon data folder.');
+    }
+    const copiedPath = copyPathWithoutOverwrite(sourcePath, destinationSaves);
+    return { ok: true, worldName: path.basename(copiedPath), destinationPath: copiedPath };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
 });
 
 ipcMain.handle('launcher:apply-update', async () => {
