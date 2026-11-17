@@ -16,7 +16,11 @@ const {
 const {
   buildHorizonEnvironment,
   buildHorizonInstallArgs,
+  buildHorizonPrepareCheckArgs,
+  buildHorizonPrepareArgs,
   buildHorizonSearchArgs,
+  getHorizonAccountRequirement,
+  getSelectedHorizonBuild,
   findMatchingHorizonAccount,
   getHorizonPaths,
   normalizeHorizonLauncherPath,
@@ -88,18 +92,72 @@ test('Horizon search arguments constrain sources, kinds, and instance selection'
   }), /start with a dash/);
 });
 
+test('Horizon prepares the selected build version before launching', () => {
+  assert.deepEqual(buildHorizonPrepareArgs('nightly-2026-11-13-9f42064'), [
+    'prepare', '--version', 'nightly-2026-11-13-9f42064',
+  ]);
+  assert.deepEqual(buildHorizonPrepareArgs('nightly-2026-11-13-9f42064', { download: true }), [
+    'prepare', '--download', '--version', 'nightly-2026-11-13-9f42064',
+  ]);
+  assert.deepEqual(buildHorizonPrepareArgs('26.3'), ['prepare', '--version', '26.3']);
+  for (const version of ['', '-help', '26.3 && whoami', '26.3\u0000']) {
+    assert.throws(() => buildHorizonPrepareArgs(version), /version is invalid/);
+  }
+  assert.deepEqual(buildHorizonPrepareCheckArgs('C:\\Horizon\\versions\\nightly-2026-11-13-9f42064'), [
+    '--check', '--root', 'C:\\Horizon\\versions\\nightly-2026-11-13-9f42064',
+  ]);
+  assert.throws(() => buildHorizonPrepareCheckArgs('relative\\versions\\tag'), /absolute path/);
+});
+
+test('Horizon launch uses its selected installed build and gates on a ready owned account', () => {
+  assert.equal(getSelectedHorizonBuild({
+    installed: ['nightly-2026-11-13-9f42064'],
+    selected: 'nightly-2026-11-13-9f42064',
+  }), 'nightly-2026-11-13-9f42064');
+  assert.throws(() => getSelectedHorizonBuild({ installed: [], selected: 'nightly-2026-11-13-9f42064' }), /selected installed build/);
+  assert.deepEqual(getHorizonAccountRequirement({ accounts: [], owner: false }), {
+    code: 'HORIZON_SIGN_IN_REQUIRED',
+    message: 'Sign in to a Microsoft account that owns Minecraft: Java Edition in Horizon before playing this profile.',
+  });
+  assert.equal(getHorizonAccountRequirement({
+    accounts: [{ selected: true, authentication: { state: 'ready' } }],
+    owner: false,
+  }).code, 'HORIZON_OWNERSHIP_REQUIRED');
+  assert.equal(getHorizonAccountRequirement({
+    accounts: [{ selected: true, authentication: { state: 'ready' } }],
+    owner: true,
+  }), null);
+});
+
 test('Horizon install arguments keep identifiers separate from the command shell', () => {
   assert.deepEqual(buildHorizonInstallArgs({
     projectId: 'native-pack:tools',
     source: 'horizon',
+    kind: 'mod',
     instance: 'Rust Test',
   }), ['mods', 'install', 'native-pack:tools', '--source', 'horizon', '--instance', 'Rust Test']);
   assert.deepEqual(buildHorizonInstallArgs({
     projectId: 'example-datapack',
     source: 'modrinth',
+    kind: 'datapack',
     instance: 'Rust Test',
     world: 'My World',
   }), ['mods', 'install', 'example-datapack', '--source', 'modrinth', '--instance', 'Rust Test', '--world', 'My World']);
+  assert.throws(() => buildHorizonInstallArgs({
+    projectId: 'example-shader',
+    source: 'modrinth',
+    kind: 'shader',
+  }), /Horizon registry/);
+  assert.throws(() => buildHorizonInstallArgs({
+    projectId: 'example-datapack',
+    source: 'modrinth',
+    kind: 'datapack',
+  }), /Select a world/);
+  assert.throws(() => buildHorizonInstallArgs({
+    projectId: 'native-pack:tools',
+    source: 'horizon',
+    kind: 'unsupported',
+  }), /category is invalid/);
   assert.throws(() => buildHorizonInstallArgs({
     projectId: '--delete',
     source: 'horizon',
@@ -107,6 +165,7 @@ test('Horizon install arguments keep identifiers separate from the command shell
   assert.throws(() => buildHorizonInstallArgs({
     projectId: 'example-datapack',
     source: 'horizon',
+    kind: 'datapack',
     world: '--delete',
   }), /world name is invalid/);
 });

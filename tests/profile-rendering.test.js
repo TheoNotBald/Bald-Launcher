@@ -14,6 +14,8 @@ test('profile cards render profile-supplied text as escaped text', () => {
   const grid = { innerHTML: '' };
   const count = { textContent: '' };
   const context = {
+    horizonModeActive: false,
+    renderHorizonInstances() {},
     state: {
       profiles: [{
         id: 'profile-qa',

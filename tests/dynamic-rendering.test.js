@@ -34,6 +34,7 @@ function browseErrorContext(searchContent) {
   ]);
   return {
     ...escapeContext(),
+    horizonModeActive: false,
     browseRequestId: 0,
     browsePage: 1,
     currentProfileId: 'qa-profile',

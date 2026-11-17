@@ -57,6 +57,49 @@ function validateProjectId(projectId) {
   return value;
 }
 
+function buildHorizonPrepareArgs(version, { download = false } = {}) {
+  const value = typeof version === 'string' ? version.trim() : '';
+  if (!value || value.length > 160 || !/^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(value)) {
+    throw new TypeError('The selected Horizon version is invalid. Refresh the Horizon profiles and try again.');
+  }
+  return ['prepare', ...(download ? ['--download'] : []), '--version', value];
+}
+
+function buildHorizonPrepareCheckArgs(rootPath) {
+  if (typeof rootPath !== 'string' || !path.isAbsolute(rootPath)) {
+    throw new TypeError('The Horizon version folder must be an absolute path.');
+  }
+  return ['--check', '--root', path.normalize(rootPath)];
+}
+
+function getSelectedHorizonBuild(value) {
+  const installed = Array.isArray(value?.installed) ? value.installed : [];
+  const selected = typeof value?.selected === 'string' ? value.selected.trim() : '';
+  if (!selected || !installed.includes(selected)) {
+    throw new Error('Horizon has no selected installed build. Install or select a Horizon build, then try again.');
+  }
+  return selected;
+}
+
+function getHorizonAccountRequirement(value) {
+  const accounts = Array.isArray(value?.accounts) ? value.accounts : [];
+  const readyAccount = accounts.find(account => account?.selected === true
+    && account?.authentication?.state === 'ready');
+  if (!readyAccount) {
+    return {
+      code: 'HORIZON_SIGN_IN_REQUIRED',
+      message: 'Sign in to a Microsoft account that owns Minecraft: Java Edition in Horizon before playing this profile.',
+    };
+  }
+  if (value?.owner !== true) {
+    return {
+      code: 'HORIZON_OWNERSHIP_REQUIRED',
+      message: 'The selected Horizon account does not own Minecraft: Java Edition. Sign in with an account that owns the game.',
+    };
+  }
+  return null;
+}
+
 function buildHorizonSearchArgs({ query, kind, source, instance }) {
   const searchText = typeof query === 'string' ? query.trim() : '';
   if (!searchText || searchText.length > 160 || /[\u0000-\u001f\u007f]/.test(searchText)) {
@@ -74,8 +117,18 @@ function buildHorizonSearchArgs({ query, kind, source, instance }) {
   return args;
 }
 
-function buildHorizonInstallArgs({ projectId, source, instance, world }) {
+function buildHorizonInstallArgs({ projectId, source, kind = 'mod', instance, world }) {
   if (!HORIZON_SEARCH_SOURCES.has(source)) throw new TypeError('The requested Horizon mod source is invalid.');
+  if (!HORIZON_SEARCH_KINDS.has(kind)) throw new TypeError('The requested Horizon content category is invalid.');
+  if (kind === 'shader' && source !== 'horizon') {
+    throw new TypeError('Horizon shader packs are available from the Horizon registry.');
+  }
+  if (kind === 'datapack' && !world) {
+    throw new TypeError('Select a world before installing a Horizon data pack.');
+  }
+  if (kind !== 'datapack' && world) {
+    throw new TypeError('A world can only be selected when installing a data pack.');
+  }
   const args = ['mods', 'install', validateProjectId(projectId), '--source', source];
   if (instance) args.push('--instance', validateInstanceName(instance));
   if (world) {
@@ -207,7 +260,11 @@ module.exports = {
   HORIZON_DOWNLOAD_URL,
   buildHorizonEnvironment,
   buildHorizonInstallArgs,
+  buildHorizonPrepareCheckArgs,
+  buildHorizonPrepareArgs,
   buildHorizonSearchArgs,
+  getHorizonAccountRequirement,
+  getSelectedHorizonBuild,
   findMatchingHorizonAccount,
   getHorizonPaths,
   normalizeHorizonLauncherPath,

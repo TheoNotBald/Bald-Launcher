@@ -122,6 +122,7 @@ test('browse install button safely forwards quoted project metadata', async () =
   const context = {
     button: { getAttribute: name => name === 'data-browse-content' ? JSON.stringify(content) : null },
     browseSource: 'modrinth',
+    horizonModeActive: false,
     installFromBrowse: async (...args) => calls.push(args),
     alert: message => { throw new Error(message); },
   };
@@ -288,7 +289,8 @@ test('profiles include search and sort filters and only expose profile import', 
   const profilePanel = html.slice(html.indexOf('<!-- PROFILES (home) -->'), html.indexOf('<!-- SERVERS -->'));
   assert.match(html, /id="profileSearch"[^>]*oninput="renderProfileGrid\(\)"/);
   assert.match(html, /id="profileSort"[\s\S]*value="recent">Recently used[\s\S]*value="added">Recently added[\s\S]*value="edited">Recently edited[\s\S]*value="all">All profiles/);
-  assert.match(html, /onclick="importProfileExport\(\)"/);
+  assert.match(html, /onclick="importProfileForCurrentMode\(\)"/);
+  assert.match(html, /if \(!horizonModeActive\) \{\s*await importProfileExport\(\);/);
   assert.doesNotMatch(profilePanel, /Import modpack|importModpackFile|launcher:import-modpack/);
   const preload = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
   const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');

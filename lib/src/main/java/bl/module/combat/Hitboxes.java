@@ -41,9 +41,9 @@ public final class Hitboxes extends Module {
     }
 
     /**
-     * Expands the box returned by {@code Entity#getBoundingBox}. The expansion
-     * is capped so an attack aimed at the expanded edge still starts inside
-     * the vanilla 3.0 interaction range; Hitboxes never changes reach itself.
+     * Expands the box returned by {@code Entity#getBoundingBox}. The expanded
+     * box must remain inside the vanilla 3.0 interaction range; Hitboxes never
+     * changes reach itself.
      */
     public Object expand(Object rawBox, Object rawEntity) {
         if (!(rawBox instanceof Box box)) return rawBox;
@@ -66,11 +66,23 @@ public final class Hitboxes extends Module {
         double eyeY = eye instanceof Number number ? number.doubleValue() : y + 1.62;
         if (!Double.isFinite(x) || !Double.isFinite(eyeY) || !Double.isFinite(z)) return false;
 
-        double dx = Math.max(Math.max(box.minX - x, x - box.maxX), 0.0);
-        double dy = Math.max(Math.max(box.minY - eyeY, eyeY - box.maxY), 0.0);
-        double dz = Math.max(Math.max(box.minZ - z, z - box.maxZ), 0.0);
-        double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        return distance + expansion <= 3.0;
+        return isWithinReach(box.minX, box.minY, box.minZ, box.maxX, box.maxY, box.maxZ,
+                expansion, x, eyeY, z);
+    }
+
+    static boolean isWithinReach(double minX, double minY, double minZ, double maxX, double maxY, double maxZ,
+            double expansion, double x, double eyeY, double z) {
+        if (!Double.isFinite(minX) || !Double.isFinite(minY) || !Double.isFinite(minZ)
+                || !Double.isFinite(maxX) || !Double.isFinite(maxY) || !Double.isFinite(maxZ)
+                || !Double.isFinite(expansion) || expansion < 0.0
+                || !Double.isFinite(x) || !Double.isFinite(eyeY) || !Double.isFinite(z)) {
+            return false;
+        }
+
+        double dx = Math.max(Math.max(minX - expansion - x, x - (maxX + expansion)), 0.0);
+        double dy = Math.max(Math.max(minY - expansion - eyeY, eyeY - (maxY + expansion)), 0.0);
+        double dz = Math.max(Math.max(minZ - expansion - z, z - (maxZ + expansion)), 0.0);
+        return dx * dx + dy * dy + dz * dz <= 9.0;
     }
 
     @Override

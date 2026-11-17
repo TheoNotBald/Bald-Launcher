@@ -9,11 +9,25 @@ const { pipeline } = require('stream/promises');
 const { StringDecoder } = require('string_decoder');
 const fs = require('fs');
 const path = require('path');
-process.on('uncaughtException', (err) => {
-  try { fs.writeFileSync(path.join(app.getPath('userData'), 'startup-error.txt'), String(err.stack || err)); } catch(e) {}
-});
-process.on('unhandledRejection', (err) => {
-  try { fs.writeFileSync(path.join(app.getPath('userData'), 'startup-error.txt'), String(err.stack || err)); } catch(e) {}
+let mainWindow;
+
+function reportStartupFailure(error, stage) {
+  const details = error instanceof Error ? error.stack || error.message : String(error);
+  const message = `Startup stage: ${stage}\n${details}`;
+  try {
+    fs.writeFileSync(path.join(app.getPath('userData'), 'startup-error.txt'), `${new Date().toISOString()}\n${message}`);
+  } catch (writeError) {
+    console.error('[Startup] Could not write startup-error.txt:', writeError);
+  }
+  console.error(`[Startup] ${message}`);
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    dialog.showErrorBox('Bald Launcher could not start', message);
+  }
+}
+process.on('uncaughtException', error => reportStartupFailure(error, 'uncaught exception'));
+process.on('unhandledRejection', error => {
+  if (!mainWindow || mainWindow.isDestroyed()) reportStartupFailure(error, 'unhandled rejection');
+  else console.error('[Runtime] Unhandled promise rejection:', error);
 });
 const crypto = require('crypto');
 const os = require('os');
@@ -47,11 +61,24 @@ const { getLoaderJvmArguments, getLoaderLibraryPaths } = require('./src/shared/l
 const { runInstallerProcess } = require('./src/shared/run-installer');
 const { setVanillaPerformancePreset } = require('./src/shared/vanilla-performance');
 const {
+  closeHorizonGameWindows,
+  createHorizonWindowController,
+} = require('./src/shared/horizon-process');
+const {
+  copyDirectoryWithoutOverwrite,
+  isPathWithin,
+  mergeHorizonOptions,
+} = require('./src/shared/horizon-profile-sync');
+const {
   HORIZON_DOWNLOAD_URL,
   buildHorizonInstallArgs,
+  buildHorizonPrepareCheckArgs,
+  buildHorizonPrepareArgs,
   buildHorizonSearchArgs,
   findMatchingHorizonAccount,
+  getHorizonAccountRequirement,
   getHorizonPaths,
+  getSelectedHorizonBuild,
   normalizeHorizonLauncherPath,
   parseHorizonJson,
   publicHorizonAccounts,
@@ -185,7 +212,6 @@ if (!hasSingleInstanceLock) {
   console.warn('Single instance lock not acquired; continuing launch.');
 }
 const launcher = new MCLC.Client();
-let mainWindow;
 let profileImportInProgress = false;
 let reloadTimer;
 let stateFilePath;
@@ -688,6 +714,8 @@ const DEFAULT_STATE = {
     manualPaths: {},
     categories: ['options', 'keybinds', 'servers', 'resourcepacks', 'shaders', 'configs'],
     destinationProfileIds: [],
+    horizonDestinationInstanceIds: [],
+    horizonCategories: ['options', 'keybinds', 'resourcepacks'],
     syncNextNewProfile: false,
     autoSyncEveryNewProfile: false,
   },
@@ -703,6 +731,12 @@ function normalizeProfileSync(value) {
       : {},
     categories: Array.isArray(input.categories) ? input.categories.map(String) : DEFAULT_STATE.profileSync.categories.slice(),
     destinationProfileIds: Array.isArray(input.destinationProfileIds) ? input.destinationProfileIds.map(String) : [],
+    horizonDestinationInstanceIds: Array.isArray(input.horizonDestinationInstanceIds)
+      ? [...new Set(input.horizonDestinationInstanceIds.map(String).filter(Boolean))].slice(0, 100)
+      : [],
+    horizonCategories: Array.isArray(input.horizonCategories)
+      ? [...new Set(input.horizonCategories.map(String).filter(category => ['options', 'keybinds', 'resourcepacks'].includes(category)))]
+      : DEFAULT_STATE.profileSync.horizonCategories.slice(),
     syncNextNewProfile: input.syncNextNewProfile === true || (input.autoSyncNewProfiles === true && input.autoSyncEveryNewProfile !== true),
     autoSyncEveryNewProfile: input.autoSyncEveryNewProfile === true,
   };
@@ -741,6 +775,11 @@ const launcherStateStore = createStateStore({
 });
 const runningProcesses = new Map();
 const horizonProcesses = new Map();
+const horizonPrewarmedProcesses = new Map();
+const horizonPrewarmTasks = new Map();
+let horizonPrewarmShutdownRequested = false;
+let horizonPrewarmCoverCount = 0;
+let horizonPrewarmCoverWasAlwaysOnTop = false;
 const profilePlaytimeIntervals = new Map();
 const serverProcesses = new Map();
 const serverStartupTasks = new Map();
@@ -4227,7 +4266,18 @@ function createWindow() {
     const log = details.level === 'error' ? console.error : details.level === 'warning' ? console.warn : console.log;
     log(`[renderer:${details.level}] ${details.sourceId}:${details.lineNumber} ${details.message}`);
   });
-  mainWindow.loadFile(htmlPath);
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (!isMainFrame) return;
+    reportStartupFailure(new Error(`${errorDescription} (${errorCode}): ${validatedURL}`), 'renderer page load');
+    if (!mainWindow.isDestroyed()) mainWindow.show();
+  });
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    reportStartupFailure(new Error(`Renderer exited (${details.reason}, code ${details.exitCode})`), 'renderer process');
+  });
+  mainWindow.loadFile(htmlPath).catch(error => {
+    reportStartupFailure(error, 'loadFile');
+    if (!mainWindow.isDestroyed()) mainWindow.show();
+  });
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
@@ -4271,7 +4321,7 @@ ipcMain.handle('launcher:window-control', async (_event, action) => {
     return { ok: true, maximized: mainWindow.isMaximized() };
   }
   if (action === 'close') {
-    mainWindow.close();
+    app.quit();
     return { ok: true };
   }
   return { ok: false, error: 'Unknown launcher window action.' };
@@ -4376,9 +4426,319 @@ async function runHorizonCli(args, options = {}) {
   });
 }
 
+async function isHorizonBuildPrepared(buildTag) {
+  const roots = prepareHorizonHomes();
+  const versionDir = path.join(roots.launcherHome, 'versions', buildTag);
+  const preparerPath = path.join(versionDir, process.platform === 'win32' ? 'horizon-prepare.exe' : 'horizon-prepare');
+  try {
+    await runHorizonCommand({
+      executablePath: preparerPath,
+      userDataPath: app.getPath('userData'),
+      args: buildHorizonPrepareCheckArgs(versionDir),
+      json: false,
+      timeoutMs: 30_000,
+    });
+    return true;
+  } catch (error) {
+    if (/is not prepared:\s*horizon-prepare --prepare/i.test(error.message)) return false;
+    throw error;
+  }
+}
+
 function sendHorizonSetupProgress(progress) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('horizon:setup-progress', progress);
+  }
+}
+
+function sendHorizonProcessState(state) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('horizon:process-state', state);
+  }
+}
+
+function startHorizonClient(instance, executablePath, roots, { prewarming = false } = {}) {
+  const child = spawn(executablePath, ['play', '--instance', instance.id], {
+    env: {
+      ...process.env,
+      HORIZON_LAUNCHER_HOME: roots.launcherHome,
+      HORIZON_HOME: roots.gameHome,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+  let stderrTail = '';
+  let resolveReadiness;
+  const readiness = prewarming
+    ? new Promise(resolve => { resolveReadiness = resolve; })
+    : Promise.resolve({ ok: true });
+  const state = {
+    child,
+    instance,
+    prewarming,
+    activated: false,
+    ready: !prewarming,
+    readiness,
+    resolveReadiness,
+  };
+  const closeForegroundController = () => {
+    if (state.prewarming || !state.windowController) return;
+    const controller = state.windowController;
+    state.windowController = null;
+    void controller.close().catch(error => {
+      console.warn(`[Horizon] Could not stop the terminal window controller for ${instance.name}:`, error.message);
+    });
+  };
+  horizonProcesses.set(instance.id, child);
+  if (prewarming) horizonPrewarmedProcesses.set(instance.id, state);
+
+  const captureOutput = (stream, type) => stream?.on('data', chunk => {
+    const text = chunk.toString('utf8');
+    if (type === 'warn') stderrTail = `${stderrTail}${text}`.slice(-16_384);
+    text.split(/\r?\n/).forEach(line => emitLog(instance.name, type, line, `horizon:${instance.id}`));
+  });
+  captureOutput(child.stdout, 'normal');
+  captureOutput(child.stderr, 'warn');
+
+  child.once('error', error => {
+    closeForegroundController();
+    if (horizonProcesses.get(instance.id) === child) horizonProcesses.delete(instance.id);
+    if (horizonPrewarmedProcesses.get(instance.id) === state) horizonPrewarmedProcesses.delete(instance.id);
+    if (!state.ready) state.resolveReadiness?.({ ok: false, error });
+    if (state.prewarming) {
+      console.warn(`[Horizon] Background warm-up failed for ${instance.name}:`, error.message);
+      void state.windowController?.close().catch(closeError => {
+        console.warn(`[Horizon] Could not stop the window controller for ${instance.name}:`, closeError.message);
+      });
+    } else {
+      sendHorizonProcessState({
+        instanceId: instance.id,
+        instanceName: instance.name,
+        running: false,
+        error: `Could not launch Horizon: ${error.message}`,
+      });
+    }
+  });
+  child.once('close', code => {
+    closeForegroundController();
+    if (horizonProcesses.get(instance.id) === child) horizonProcesses.delete(instance.id);
+    if (horizonPrewarmedProcesses.get(instance.id) === state) horizonPrewarmedProcesses.delete(instance.id);
+    if (!state.ready) {
+      state.resolveReadiness?.({
+        ok: false,
+        error: stderrTail.trim() || `Horizon exited before its warm-up completed (code ${code}).`,
+      });
+    }
+    if (state.prewarming) void state.windowController?.close().catch(error => {
+      console.warn(`[Horizon] Could not stop the window controller for ${instance.name}:`, error.message);
+    });
+    if (state.prewarming && code !== 0) {
+      console.warn(`[Horizon] Background warm-up exited for ${instance.name}:`, stderrTail.trim() || `exit code ${code}`);
+    }
+    sendHorizonProcessState({
+      instanceId: instance.id,
+      instanceName: instance.name,
+      running: false,
+      ...(code === 0 || state.prewarming ? {} : { error: stderrTail.trim() || `Horizon exited with code ${code}.` }),
+    });
+    if (state.activated && !horizonPrewarmShutdownRequested) {
+      console.info(`[Horizon] Game closed for ${instance.name}; starting a fresh background warm-up.`);
+      setTimeout(() => {
+        if (!horizonPrewarmShutdownRequested) void prewarmSelectedHorizonInstance(instance.id);
+      }, 500);
+    }
+  });
+
+  const spawned = new Promise((resolve, reject) => {
+    child.once('spawn', resolve);
+    child.once('error', reject);
+  });
+  state.spawned = spawned;
+  return { child, state, spawned };
+}
+
+function acquireHorizonPrewarmCover() {
+  if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible() || mainWindow.isMinimized()) {
+    return () => {};
+  }
+  if (horizonPrewarmCoverCount === 0) {
+    horizonPrewarmCoverWasAlwaysOnTop = mainWindow.isAlwaysOnTop();
+    mainWindow.setAlwaysOnTop(true);
+  }
+  horizonPrewarmCoverCount++;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    horizonPrewarmCoverCount = Math.max(0, horizonPrewarmCoverCount - 1);
+    if (horizonPrewarmCoverCount === 0 && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setAlwaysOnTop(horizonPrewarmCoverWasAlwaysOnTop);
+    }
+  };
+}
+
+async function prewarmHorizonInstance(instance, executablePath, roots, startedAt) {
+  const existing = horizonProcesses.get(instance.id);
+  if (existing && !existing.killed && existing.exitCode === null) return false;
+
+  let windowController;
+  let releaseWindowCover = () => {};
+  let child;
+  let state;
+  try {
+    windowController = createHorizonWindowController();
+    await windowController.ready;
+    if (horizonPrewarmShutdownRequested) {
+      await windowController.close();
+      return false;
+    }
+    await windowController.control(0, 'hide-prewarm', { waitForWindow: false });
+    releaseWindowCover = acquireHorizonPrewarmCover();
+    const client = startHorizonClient(instance, executablePath, roots, { prewarming: true });
+    ({ child, state } = client);
+    state.windowController = windowController;
+    const { spawned } = client;
+    await spawned;
+    const result = await windowController.control(0, 'hide-prewarm', {
+      timeoutMs: 30_000,
+      waitForWindow: true,
+    });
+    if (!result.windows) throw new Error('Horizon did not create a game window to prewarm.');
+    if (child.exitCode !== null) throw new Error('Horizon exited before its warm-up completed.');
+    releaseWindowCover();
+    state.ready = true;
+    state.resolveReadiness?.({ ok: true });
+    sendHorizonProcessState({
+      instanceId: instance.id,
+      instanceName: instance.name,
+      prewarmed: true,
+      pid: child.pid,
+    });
+    console.info(`[Horizon] Background warm-up is ready for ${instance.name} in ${Date.now() - startedAt} ms.`);
+    return true;
+  } catch (error) {
+    if (state) {
+      state.ready = true;
+      state.resolveReadiness?.({ ok: false, error });
+      if (horizonPrewarmedProcesses.get(instance.id) === state) horizonPrewarmedProcesses.delete(instance.id);
+      state.prewarming = false;
+    }
+    if (child && Number.isSafeInteger(child.pid) && child.exitCode === null && windowController) {
+      try {
+        const closeResult = await windowController.control(child.pid, 'close');
+        if (!closeResult.windows) {
+          sendHorizonProcessState({
+            instanceId: instance.id,
+            instanceName: instance.name,
+            pid: child.pid,
+            running: true,
+          });
+        }
+      } catch (closeError) {
+        console.warn(`[Horizon] Could not close an incomplete warm-up for ${instance.name}:`, closeError.message);
+        sendHorizonProcessState({
+          instanceId: instance.id,
+          instanceName: instance.name,
+          pid: child.pid,
+          running: true,
+        });
+      }
+    }
+    if (windowController) {
+      try {
+        await windowController.close();
+      } catch (closeError) {
+        console.warn(`[Horizon] Could not stop the window controller for ${instance.name}:`, closeError.message);
+      }
+    }
+    releaseWindowCover();
+    throw error;
+  }
+}
+
+function prewarmSelectedHorizonInstance(instanceIdOverride) {
+  if (process.platform !== 'win32' || horizonPrewarmShutdownRequested) return Promise.resolve();
+  const instanceId = String(instanceIdOverride || launcherState.settings?.horizonInstanceId || '').trim();
+  if (!instanceId || !String(launcherState.settings?.horizonLauncherPath || '').trim()) return Promise.resolve();
+  const existingTask = horizonPrewarmTasks.get(instanceId);
+  if (existingTask) return existingTask;
+
+  const task = (async () => {
+    const startedAt = Date.now();
+    try {
+      const executablePath = getConfiguredHorizonLauncher();
+      const roots = prepareHorizonHomes();
+      const [instance, buildsResult, accountResult] = await Promise.all([
+        resolveHorizonInstance(instanceId),
+        runHorizonCli(['versions', '--installed']),
+        runHorizonCli(['account', 'list']),
+      ]);
+      const buildTag = getSelectedHorizonBuild(horizonCommandResult(buildsResult));
+      const accountRequirement = getHorizonAccountRequirement(horizonCommandResult(accountResult));
+      if (accountRequirement) {
+        console.info(`[Horizon] Background warm-up skipped: ${accountRequirement.message}`);
+        return;
+      }
+      if (!(await isHorizonBuildPrepared(buildTag))) {
+        console.info(`[Horizon] Background warm-up skipped: ${buildTag} is not prepared yet.`);
+        return;
+      }
+      if (horizonPrewarmShutdownRequested) return;
+      await prewarmHorizonInstance(instance, executablePath, roots, startedAt);
+    } catch (error) {
+      console.warn('[Horizon] Background warm-up skipped:', error instanceof Error ? error.message : String(error));
+    }
+  })();
+  horizonPrewarmTasks.set(instanceId, task);
+  void task.finally(() => {
+    if (horizonPrewarmTasks.get(instanceId) === task) horizonPrewarmTasks.delete(instanceId);
+  });
+  return task;
+}
+
+async function stopHorizonPrewarmedProcesses() {
+  for (const [instanceId, state] of [...horizonPrewarmedProcesses.entries()]) {
+    const { child, instance } = state;
+    if (child.killed || child.exitCode !== null) continue;
+    try {
+      if (!Number.isSafeInteger(child.pid)) {
+        const spawned = await Promise.race([
+          state.spawned.then(() => true, () => false),
+          new Promise(resolve => setTimeout(() => resolve(false), 5_000)),
+        ]);
+        if (!spawned || child.exitCode !== null) continue;
+      }
+      const closeResult = await state.windowController.control(child.pid, 'close', {
+        timeoutMs: 8_000,
+        waitForWindow: true,
+      });
+      if (!closeResult.windows) {
+        console.warn(`[Horizon] Could not find a game window to close for prewarmed profile ${instance.name}.`);
+        continue;
+      }
+      if (child.exitCode !== null) continue;
+      const exited = await new Promise(resolve => {
+        const timer = setTimeout(() => {
+          child.removeListener('close', onClose);
+          resolve(false);
+        }, 5_000);
+        const onClose = () => {
+          clearTimeout(timer);
+          resolve(true);
+        };
+        child.once('close', onClose);
+      });
+      if (!exited) console.warn(`[Horizon] Prewarmed profile ${instance.name} did not exit after a graceful close request.`);
+    } catch (error) {
+      console.warn(`[Horizon] Could not close prewarmed profile ${instance.name}:`, error.message);
+    } finally {
+      try {
+        await state.windowController?.close();
+      } catch (error) {
+        console.warn(`[Horizon] Could not stop the window controller for ${instance.name}:`, error.message);
+      }
+      if (horizonPrewarmedProcesses.get(instanceId) === state) horizonPrewarmedProcesses.delete(instanceId);
+    }
   }
 }
 
@@ -4486,6 +4846,8 @@ function publicHorizonInstance(instance) {
     selected: instance.selected === true,
     version: instance.version || null,
     playedSecs: Number(instance.played_secs) || 0,
+    lastPlayedAt: instance.last_played_at || instance.lastPlayedAt || null,
+    home: instance.home,
   };
 }
 
@@ -4609,7 +4971,14 @@ ipcMain.handle('horizon:get-status', async (_event, payload = {}) => {
       statusError,
       ...accountSync,
       runningInstanceIds: [...horizonProcesses.entries()]
-        .filter(([, child]) => !child.killed && child.exitCode === null)
+        .filter(([instanceId, child]) => (
+          !child.killed
+          && child.exitCode === null
+          && !horizonPrewarmedProcesses.has(instanceId)
+        ))
+        .map(([instanceId]) => instanceId),
+      prewarmedInstanceIds: [...horizonPrewarmedProcesses.entries()]
+        .filter(([, state]) => state.ready && !state.child.killed && state.child.exitCode === null)
         .map(([instanceId]) => instanceId),
     };
   } catch (error) {
@@ -4712,6 +5081,37 @@ ipcMain.handle('horizon:create-instance', async (_event, payload) => {
   }
 });
 
+ipcMain.handle('horizon:rename-instance', async (_event, payload) => {
+  try {
+    const instance = await resolveHorizonInstance(payload?.instanceId);
+    const name = validateInstanceName(payload?.name);
+    await runHorizonCli(['instance', 'rename', instance.id, name]);
+    const instances = await getHorizonInstances();
+    const renamed = instances.find(item => item.id === instance.id);
+    if (!renamed) throw new Error('Horizon did not return the renamed profile.');
+    return { ok: true, instance: publicHorizonInstance(renamed) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:delete-instance', async (_event, payload) => {
+  try {
+    const instance = await resolveHorizonInstance(payload?.instanceId);
+    if (horizonProcesses.has(instance.id)) {
+      throw new Error('Stop this Horizon profile before deleting it.');
+    }
+    await runHorizonCli(['instance', 'delete', instance.id]);
+    if (launcherState.settings?.horizonInstanceId === instance.id) {
+      launcherState.settings = normalizeSettings({ ...launcherState.settings, horizonInstanceId: '' });
+      scheduleStateWrite();
+    }
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
 ipcMain.handle('horizon:set-instance', async (_event, payload) => {
   try {
     const instance = await resolveHorizonInstance(payload?.instanceId);
@@ -4728,56 +5128,204 @@ ipcMain.handle('horizon:set-instance', async (_event, payload) => {
 
 ipcMain.handle('horizon:launch', async (_event, payload) => {
   try {
-    const instance = await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
+    const instanceId = payload?.instanceId || launcherState.settings?.horizonInstanceId;
+    const instanceKey = String(instanceId || '');
+    const prewarmTask = horizonPrewarmTasks.get(instanceKey);
+    if (prewarmTask) await prewarmTask;
+    const warmState = horizonPrewarmedProcesses.get(instanceKey);
+    if (warmState) {
+      const readiness = await warmState.readiness;
+      if (readiness.ok && !warmState.child.killed && warmState.child.exitCode === null) {
+        const activationStartedAt = Date.now();
+        const restored = await warmState.windowController.control(warmState.child.pid, 'restore');
+        if (!restored.windows) throw new Error('The prewarmed Horizon window could not be restored.');
+        await warmState.windowController.control(warmState.child.pid, 'hide-terminal', { waitForWindow: false });
+        horizonPrewarmedProcesses.delete(instanceKey);
+        warmState.prewarming = false;
+        warmState.activated = true;
+        console.info(`[Horizon] Prewarmed title window restored in ${Date.now() - activationStartedAt} ms.`);
+        sendHorizonProcessState({
+          instanceId: warmState.instance.id,
+          instanceName: warmState.instance.name,
+          pid: warmState.child.pid,
+          running: true,
+        });
+        return {
+          ok: true,
+          instance: publicHorizonInstance(warmState.instance),
+          pid: warmState.child.pid,
+          prewarmed: true,
+        };
+      }
+      if (!warmState.child.killed && warmState.child.exitCode === null) {
+        throw new Error(readiness.error?.message || 'The Horizon warm-up did not complete successfully.');
+      }
+    }
+    const [instance, buildsResult] = await Promise.all([
+      resolveHorizonInstance(instanceId),
+      runHorizonCli(['versions', '--installed']),
+    ]);
     const existing = horizonProcesses.get(instance.id);
     if (existing && !existing.killed && existing.exitCode === null) {
       throw new Error(`${instance.name} is already running.`);
     }
     const executablePath = getConfiguredHorizonLauncher();
     const roots = prepareHorizonHomes();
-    const child = spawn(executablePath, ['play', '--instance', instance.id], {
-      env: {
-        ...process.env,
-        HORIZON_LAUNCHER_HOME: roots.launcherHome,
-        HORIZON_HOME: roots.gameHome,
-      },
-      stdio: ['ignore', 'ignore', 'pipe'],
-      windowsHide: true,
-    });
-    let stderrTail = '';
-    child.stderr?.on('data', chunk => {
-      stderrTail = `${stderrTail}${chunk.toString('utf8')}`.slice(-16_384);
-    });
-    horizonProcesses.set(instance.id, child);
-    child.once('error', error => {
-      if (horizonProcesses.get(instance.id) === child) horizonProcesses.delete(instance.id);
+    const sendPreparingStatus = message => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('horizon:process-state', {
         instanceId: instance.id,
         instanceName: instance.name,
-        running: false,
-        error: `Could not launch Horizon: ${error.message}`,
+        preparing: true,
+        message,
       });
-    });
-    child.once('close', code => {
-      if (horizonProcesses.get(instance.id) === child) horizonProcesses.delete(instance.id);
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('horizon:process-state', {
-        instanceId: instance.id,
-        instanceName: instance.name,
-        running: false,
-        ...(code === 0 ? {} : { error: stderrTail.trim() || `Horizon exited with code ${code}.` }),
+    };
+    const horizonBuild = getSelectedHorizonBuild(horizonCommandResult(buildsResult));
+    const [prepared, accountResult] = await Promise.all([
+      isHorizonBuildPrepared(horizonBuild),
+      runHorizonCli(['account', 'list'])
+        .then(result => ({ accounts: horizonCommandResult(result) }))
+        .catch(error => ({ error })),
+    ]);
+    if (!prepared) {
+      sendPreparingStatus(`Preparing Minecraft resources with Horizon build ${horizonBuild}…`);
+      try {
+        await runHorizonCli(buildHorizonPrepareArgs(horizonBuild), { timeoutMs: 10 * 60 * 1000 });
+        if (!(await isHorizonBuildPrepared(horizonBuild))) {
+          throw new Error('Horizon preparation returned successfully but did not produce complete Minecraft resources.');
+        }
+      } catch (localPrepareError) {
+        if (accountResult.error) {
+          return {
+            ok: false,
+            code: 'HORIZON_SIGN_IN_REQUIRED',
+            error: 'Horizon could not prepare Minecraft from a local installation. Sign in to an account that owns Minecraft, then try again.',
+          };
+        }
+        const accountRequirement = getHorizonAccountRequirement(accountResult.accounts);
+        if (accountRequirement) return { ok: false, ...accountRequirement };
+        sendPreparingStatus('Downloading Minecraft resources from Mojang…');
+        try {
+          await runHorizonCli(buildHorizonPrepareArgs(horizonBuild, { download: true }), { timeoutMs: 10 * 60 * 1000 });
+        } catch (downloadError) {
+          throw new Error(`Horizon could not prepare Minecraft. Local preparation failed: ${localPrepareError.message} Mojang download failed: ${downloadError.message}`);
+        }
+        if (!(await isHorizonBuildPrepared(horizonBuild))) {
+          throw new Error('Horizon preparation completed but its Minecraft resources are still incomplete. Check Horizon’s preparation output and try again.');
+        }
+      }
+    }
+    if (accountResult.error) {
+      return {
+        ok: false,
+        code: 'HORIZON_SIGN_IN_REQUIRED',
+        error: 'Sign in to a Microsoft account that owns Minecraft: Java Edition in Horizon before playing this profile.',
+      };
+    }
+    const accountRequirement = getHorizonAccountRequirement(accountResult.accounts);
+    if (accountRequirement) return { ok: false, ...accountRequirement };
+    let windowController;
+    try {
+      windowController = createHorizonWindowController();
+      await windowController.ready;
+      await windowController.control(0, 'hide-terminal', { waitForWindow: false });
+    } catch (error) {
+      console.warn('[Horizon] Could not start the hidden-terminal controller:', error.message);
+      await windowController?.close().catch(closeError => {
+        console.warn('[Horizon] Could not stop the terminal window controller:', closeError.message);
       });
-    });
-    await new Promise((resolve, reject) => {
-      child.once('spawn', resolve);
-      child.once('error', reject);
-    });
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('horizon:process-state', {
+      windowController = undefined;
+    }
+    const { child, state, spawned } = startHorizonClient(instance, executablePath, roots);
+    state.windowController = windowController;
+    await spawned;
+    if (windowController) {
+      try {
+        await windowController.control(child.pid, 'hide-terminal', { waitForWindow: false });
+      } catch (error) {
+        console.warn('[Horizon] Could not hide the Horizon terminal window:', error.message);
+        state.windowController = null;
+        await windowController.close().catch(closeError => {
+          console.warn('[Horizon] Could not stop the terminal window controller:', closeError.message);
+        });
+      }
+    }
+    state.activated = true;
+    sendHorizonProcessState({
       instanceId: instance.id,
       instanceName: instance.name,
       pid: child.pid,
       running: true,
     });
     return { ok: true, instance: publicHorizonInstance(instance), pid: child.pid };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:stop', async (_event, payload) => {
+  try {
+    const instance = await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
+    const child = horizonProcesses.get(instance.id);
+    if (!child || child.killed || child.exitCode !== null) {
+      throw new Error(`${instance.name} is not running.`);
+    }
+    const closeResult = await closeHorizonGameWindows(child.pid);
+    if (!closeResult.windows) {
+      throw new Error('Horizon has no open game window to close. No process was force-terminated.');
+    }
+    const exited = await new Promise(resolve => {
+      if (child.exitCode !== null) {
+        resolve(true);
+        return;
+      }
+      const timer = setTimeout(() => {
+        child.removeListener('close', onClose);
+        resolve(false);
+      }, 15_000);
+      const onClose = () => {
+        clearTimeout(timer);
+        resolve(true);
+      };
+      child.once('close', onClose);
+    });
+    return { ok: true, exited, closeRequests: closeResult.windows };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('horizon:get-logs', async (_event, payload) => {
+  try {
+    const instance = await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
+    const roots = prepareHorizonHomes();
+    const gameRoot = fs.realpathSync(roots.gameHome);
+    const instanceHome = fs.realpathSync(instance.home);
+    const relativeHome = path.relative(gameRoot, instanceHome);
+    if (relativeHome === '..' || relativeHome.startsWith(`..${path.sep}`) || path.isAbsolute(relativeHome)) {
+      throw new Error('The Horizon profile is outside its isolated game folder.');
+    }
+    const logDirectory = path.join(instanceHome, 'logs');
+    if (!fs.existsSync(logDirectory)) return { ok: true, text: '' };
+    const directoryStat = fs.lstatSync(logDirectory);
+    if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) {
+      throw new Error('The Horizon profile logs path is not a regular directory.');
+    }
+    const logPath = path.join(logDirectory, 'latest.log');
+    if (!fs.existsSync(logPath)) return { ok: true, text: '' };
+    const logStat = fs.lstatSync(logPath);
+    if (!logStat.isFile() || logStat.isSymbolicLink()) {
+      throw new Error('The Horizon latest.log path is not a regular file.');
+    }
+    const maxBytes = 1024 * 1024;
+    const start = Math.max(0, logStat.size - maxBytes);
+    const buffer = Buffer.alloc(Math.min(maxBytes, logStat.size));
+    const descriptor = fs.openSync(logPath, 'r');
+    try {
+      fs.readSync(descriptor, buffer, 0, buffer.length, start);
+    } finally {
+      fs.closeSync(descriptor);
+    }
+    return { ok: true, text: buffer.toString('utf8'), truncated: start > 0 };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -4803,13 +5351,17 @@ ipcMain.handle('horizon:search-mods', async (_event, payload) => {
 ipcMain.handle('horizon:list-mods', async (_event, payload) => {
   try {
     const instance = await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
-    const packs = horizonCommandResult(await runHorizonCli(['packs', 'list', '--instance', instance.id]));
-    if (!Array.isArray(packs)) throw new Error('Horizon returned an invalid installed-pack list.');
+    const [modsResult, packsResult] = await Promise.all([
+      runHorizonCli(['mods', 'list', '--instance', instance.id]),
+      runHorizonCli(['packs', 'list', '--instance', instance.id]),
+    ]);
+    const mods = horizonCommandResult(modsResult);
+    const packs = horizonCommandResult(packsResult);
+    if (!Array.isArray(mods) || !Array.isArray(packs)) throw new Error('Horizon returned an invalid installed-content list.');
     return {
       ok: true,
-      mods: [],
+      mods,
       packs,
-      modsError: 'Native mods are managed in Horizon’s own launcher window.',
     };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -4931,8 +5483,8 @@ ipcMain.handle('horizon:install-mod', async (_event, payload) => {
     if (['mod', 'modpack'].includes(kind) && !(await confirmHorizonNativeContent('install'))) {
       return { ok: false, canceled: true };
     }
-    const args = buildHorizonInstallArgs({ projectId, source, instance: instance.id, world });
-    const result = await runHorizonCli(args);
+    const args = buildHorizonInstallArgs({ projectId, source, kind, instance: instance.id, world });
+    const result = await runHorizonCli(args, { timeoutMs: 10 * 60 * 1000, maxOutputBytes: 16 * 1024 * 1024 });
     return { ok: true, output: result.stdout.trim() };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -4982,9 +5534,8 @@ ipcMain.handle('horizon:pack-action', async (_event, payload) => {
   }
 });
 
-ipcMain.handle('horizon:import-modpack', async (_event, payload) => {
+ipcMain.handle('horizon:import-modpack', async () => {
   try {
-    await resolveHorizonInstance(payload?.instanceId || launcherState.settings?.horizonInstanceId);
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Import a Horizon or Java modpack',
       properties: ['openFile'],
@@ -6608,6 +7159,83 @@ function syncConfiguredFiles(destinationProfileIds, config) {
   return copied;
 }
 
+async function syncConfiguredFilesToHorizon(instanceIds, config) {
+  if (!instanceIds.length) return { copiedGroups: 0, copiedFiles: 0, skippedFiles: 0 };
+  const selectedCategories = config.horizonCategories.filter(category => (
+    ['options', 'keybinds', 'resourcepacks'].includes(category)
+  ));
+  if (!selectedCategories.length) throw new Error('Select at least one supported Horizon synchronization category.');
+  const instances = await getHorizonInstances();
+  const roots = getHorizonPaths(app.getPath('userData'));
+  let copiedGroups = 0;
+  let copiedFiles = 0;
+  let skippedFiles = 0;
+  for (const instanceId of instanceIds) {
+    const instance = instances.find(item => item.id === instanceId);
+    if (!instance || instance.java) throw new Error(`Horizon profile "${instanceId}" was not found.`);
+    if (horizonProcesses.has(instance.id)) throw new Error(`Stop Horizon profile "${instance.name}" before synchronizing it.`);
+    const instanceHome = path.resolve(instance.home);
+    const gameHome = path.resolve(roots.gameHome);
+    if (!isPathWithin(gameHome, instanceHome)) {
+      throw new Error(`Horizon profile "${instance.name}" is outside Bald Launcher's isolated Horizon data folder.`);
+    }
+    if (!fs.existsSync(instanceHome)) throw new Error(`Horizon profile folder is missing: ${instanceHome}`);
+    if (!isPathWithin(fs.realpathSync(gameHome), fs.realpathSync(instanceHome))) {
+      throw new Error(`Horizon profile "${instance.name}" resolves outside Bald Launcher's isolated Horizon data folder.`);
+    }
+    const instanceHomeStat = fs.lstatSync(instanceHome);
+    if (!instanceHomeStat.isDirectory() || instanceHomeStat.isSymbolicLink()) {
+      throw new Error(`Horizon profile folder is not a regular directory: ${instanceHome}`);
+    }
+    const sourceOptionsPath = getConfiguredSyncSource('options', config);
+    if (selectedCategories.some(category => ['options', 'keybinds'].includes(category))) {
+      if (!sourceOptionsPath || !fs.existsSync(sourceOptionsPath)) {
+        throw new Error('The selected source does not have an options.txt file to synchronize.');
+      }
+      const sourceStat = fs.lstatSync(sourceOptionsPath);
+      if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) {
+        throw new Error('The selected source options.txt must be a regular file.');
+      }
+      const destinationOptionsPath = path.join(instanceHome, 'options.txt');
+      if (fs.existsSync(destinationOptionsPath)
+          && (!fs.lstatSync(destinationOptionsPath).isFile() || fs.lstatSync(destinationOptionsPath).isSymbolicLink())) {
+        throw new Error(`The Horizon options path is not a regular file: ${destinationOptionsPath}`);
+      }
+      const merged = mergeHorizonOptions(
+        fs.readFileSync(sourceOptionsPath, 'utf8'),
+        fs.existsSync(destinationOptionsPath) ? fs.readFileSync(destinationOptionsPath, 'utf8') : '',
+        selectedCategories,
+      );
+      if (merged.merged.length) {
+        fs.mkdirSync(instanceHome, { recursive: true });
+        const temporaryPath = `${destinationOptionsPath}.${crypto.randomUUID()}.tmp`;
+        try {
+          fs.writeFileSync(temporaryPath, merged.text, { encoding: 'utf8', flag: 'wx' });
+          fs.renameSync(temporaryPath, destinationOptionsPath);
+        } finally {
+          if (fs.existsSync(temporaryPath)) fs.rmSync(temporaryPath, { force: true });
+        }
+        copiedGroups += 1;
+        copiedFiles += merged.merged.length;
+      }
+    }
+    if (selectedCategories.includes('resourcepacks')) {
+      const sourcePacksPath = getConfiguredSyncSource('resourcepacks', config);
+      if (sourcePacksPath && fs.existsSync(sourcePacksPath)) {
+        const sourceStat = fs.lstatSync(sourcePacksPath);
+        const destinationPacksPath = sourceStat.isDirectory()
+          ? path.join(instanceHome, 'resourcepacks')
+          : path.join(instanceHome, 'resourcepacks', path.basename(sourcePacksPath));
+        const result = copyDirectoryWithoutOverwrite(sourcePacksPath, destinationPacksPath, instanceHome);
+        if (result.copied) copiedGroups += 1;
+        copiedFiles += result.copied;
+        skippedFiles += result.skipped;
+      }
+    }
+  }
+  return { copiedGroups, copiedFiles, skippedFiles };
+}
+
 function applyProfileSyncToNewProfile(profileId) {
   const config = normalizeProfileSync(launcherState.profileSync);
   if ((!config.syncNextNewProfile && !config.autoSyncEveryNewProfile) || profileId === config.sourceProfileId) return;
@@ -6629,6 +7257,8 @@ ipcMain.handle('launcher:configure-profile-sync', async (_event, payload = {}) =
       manualPaths: payload.manualPaths,
       categories: payload.categories,
       destinationProfileIds: payload.destinationProfileIds,
+      horizonDestinationInstanceIds: payload.horizonDestinationInstanceIds,
+      horizonCategories: payload.horizonCategories,
       syncNextNewProfile: payload.syncNextNewProfile,
       autoSyncEveryNewProfile: payload.autoSyncEveryNewProfile,
     });
@@ -6636,11 +7266,23 @@ ipcMain.handle('launcher:configure-profile-sync', async (_event, payload = {}) =
       throw new Error('Select a valid source profile.');
     }
     if (config.destinationProfileIds.includes(config.sourceProfileId)) throw new Error('The source profile cannot also be a destination.');
-    if (!config.categories.length) throw new Error('Select at least one synchronization category.');
+    if (config.destinationProfileIds.length && !config.categories.length) {
+      throw new Error('Select at least one Java synchronization category.');
+    }
+    if (config.horizonDestinationInstanceIds.length && !config.horizonCategories.length) {
+      throw new Error('Select at least one supported Horizon synchronization category.');
+    }
     if (config.sourceMode === 'manual') {
-      const missing = config.categories.filter(category => !config.manualPaths[category]);
+      const requiredCategories = [...new Set([
+        ...config.categories,
+        ...(config.horizonDestinationInstanceIds.length && config.horizonCategories.some(category => ['options', 'keybinds'].includes(category))
+          ? ['options']
+          : []),
+        ...(config.horizonDestinationInstanceIds.length && config.horizonCategories.includes('resourcepacks') ? ['resourcepacks'] : []),
+      ])];
+      const missing = requiredCategories.filter(category => !config.manualPaths[category]);
       if (missing.length) throw new Error(`Choose a manual source path for: ${missing.join(', ')}.`);
-      const unavailable = config.categories.filter(category => !fs.existsSync(config.manualPaths[category]));
+      const unavailable = requiredCategories.filter(category => !fs.existsSync(config.manualPaths[category]));
       if (unavailable.length) throw new Error(`These manual source paths do not exist: ${unavailable.join(', ')}.`);
     }
     launcherState.profileSync = config;
@@ -6655,10 +7297,17 @@ ipcMain.handle('launcher:run-profile-sync', async () => {
   try {
     const config = normalizeProfileSync(launcherState.profileSync);
     if (config.sourceMode === 'profile' && !launcherState.profiles.some(profile => profile.id === config.sourceProfileId)) throw new Error('Select a valid source profile.');
-    if (!config.destinationProfileIds.length) throw new Error('Select at least one destination profile.');
-    if (!config.categories.length) throw new Error('Select at least one synchronization category.');
+    if (!config.destinationProfileIds.length && !config.horizonDestinationInstanceIds.length) throw new Error('Select at least one destination profile.');
+    if (config.destinationProfileIds.length && !config.categories.length) throw new Error('Select at least one Java synchronization category.');
     const copied = syncConfiguredFiles(config.destinationProfileIds, config);
-    return { ok: true, copied, destinations: config.destinationProfileIds.length };
+    const horizon = await syncConfiguredFilesToHorizon(config.horizonDestinationInstanceIds, config);
+    return {
+      ok: true,
+      copied: copied + horizon.copiedGroups,
+      copiedFiles: horizon.copiedFiles,
+      skippedFiles: horizon.skippedFiles,
+      destinations: config.destinationProfileIds.length + config.horizonDestinationInstanceIds.length,
+    };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -11796,6 +12445,7 @@ app.whenReady().then(async () => {
   restoreRunningSessions();
   reconcileProfileFolders();
   watchProfileFolders();
+  void prewarmSelectedHorizonInstance();
   createWindow();
   if (app.isPackaged) {
     const installDirectory = path.dirname(app.getPath('exe'));
@@ -11865,35 +12515,52 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+}).catch(error => {
+  reportStartupFailure(error, 'app startup');
+  app.quit();
 });
 
-let quittingAfterPlayitStop = false;
-let playitShutdownPending = false;
+let quittingAfterManagedShutdown = false;
+let managedShutdownPending = false;
 
 app.on('before-quit', event => {
   launcherStateStore.clearWriteTimer();
   if (writeStatePending) flushStateWrite();
+  horizonPrewarmShutdownRequested = true;
+  if (quittingAfterManagedShutdown) return;
   const playitState = playitManager.state();
-  if (quittingAfterPlayitStop || !playitState.pid) return;
-  if (launcherState.settings?.playitKeepRunningOnClose === true && playitState.persistent) {
+  const keepPlayitRunning = playitState.pid
+    && launcherState.settings?.playitKeepRunningOnClose === true
+    && playitState.persistent;
+  if (keepPlayitRunning) {
     playitManager.detach();
-    return;
   }
+  const shouldStopPlayit = Boolean(playitState.pid) && !keepPlayitRunning;
+  const shouldStopHorizonPrewarm = [...horizonPrewarmedProcesses.values()]
+    .some(state => !state.child.killed && state.child.exitCode === null);
+  if (!shouldStopPlayit && !shouldStopHorizonPrewarm) return;
   event.preventDefault();
-  if (playitShutdownPending) return;
-  playitShutdownPending = true;
-  void playitManager.stop().then(result => {
-    playitShutdownPending = false;
-    if (!result.ok) {
-      emitStatus(`Playit did not stop cleanly; the launcher remains open. ${result.error || ''}`.trim());
-      return;
+  if (managedShutdownPending) return;
+  managedShutdownPending = true;
+  void (async () => {
+    if (shouldStopPlayit) {
+      try {
+        const result = await playitManager.stop();
+        if (!result.ok) {
+          emitStatus(`Playit did not stop cleanly; the launcher is closing anyway. ${result.error || ''}`.trim());
+          console.warn('[Shutdown] Playit did not stop cleanly; continuing launcher shutdown:', result.error || 'unknown error');
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        emitStatus(`Unable to stop Playit cleanly; the launcher is closing anyway. ${message}`);
+        console.warn('[Shutdown] Unable to stop Playit cleanly; continuing launcher shutdown:', message);
+      }
     }
-    quittingAfterPlayitStop = true;
+    if (shouldStopHorizonPrewarm) await stopHorizonPrewarmedProcesses();
+    managedShutdownPending = false;
+    quittingAfterManagedShutdown = true;
     app.quit();
-  }).catch(error => {
-    playitShutdownPending = false;
-    emitStatus(`Unable to stop Playit before closing: ${error instanceof Error ? error.message : String(error)}`);
-  });
+  })();
 });
 
 app.on('window-all-closed', () => {
