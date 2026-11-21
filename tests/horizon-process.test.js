@@ -91,8 +91,12 @@ test('persistent Horizon window controller reuses its PowerShell process for con
   assert.deepEqual(await controller.control(1234, 'hide', { waitForWindow: true }), { windows: 1 });
   assert.deepEqual(await controller.control(1234, 'hide-terminal', { waitForWindow: false }), { windows: 1 });
   assert.deepEqual(await controller.control(1234, 'minimize', { waitForWindow: true }), { windows: 1 });
+  assert.deepEqual(await controller.control(1234, 'mute-process-audio', { waitForWindow: false }), { windows: 1 });
+  assert.deepEqual(await controller.control(1234, 'restore-process-audio', { waitForWindow: false }), { windows: 1 });
+  assert.deepEqual(await controller.control(1234, 'limit-process-tree', { waitForWindow: false }), { windows: 1 });
+  assert.deepEqual(await controller.control(1234, 'restore-process-limits', { waitForWindow: false }), { windows: 1 });
   assert.deepEqual(await controller.control(1234, 'restore'), { windows: 1 });
-  assert.equal(calls.filter(call => typeof call === 'object' && 'rootPid' in call).length, 6);
+  assert.equal(calls.filter(call => typeof call === 'object' && 'rootPid' in call).length, 10);
   assert.equal(calls[1].action, 'hide-terminal');
   assert.equal(calls[1].rootPid, 0);
   assert.equal(calls[2].action, 'hide-prewarm');
@@ -100,9 +104,34 @@ test('persistent Horizon window controller reuses its PowerShell process for con
   assert.equal(calls[3].action, 'hide');
   assert.equal(calls[4].action, 'hide-terminal');
   assert.equal(calls[5].action, 'minimize');
-  assert.equal(calls[6].action, 'restore');
+  assert.equal(calls[6].action, 'mute-process-audio');
+  assert.equal(calls[7].action, 'restore-process-audio');
+  assert.equal(calls[8].action, 'limit-process-tree');
+  assert.equal(calls[9].action, 'restore-process-limits');
+  assert.equal(calls[10].action, 'restore');
+  assert.match(calls[0].args[3], /PrewarmCpuRate = 5000/);
   await controller.close();
   await assert.rejects(controller.control(1234, 'restore'), /closed/);
+});
+
+test('persistent window controller can hide, restore, and close Java process windows', async () => {
+  const calls = [];
+  const controller = createHorizonWindowController({
+    platform: 'win32',
+    spawnProcess: createControllerSpawn(calls),
+  });
+
+  await controller.ready;
+  assert.deepEqual(await controller.control(5678, 'hide-process', { waitForWindow: true }), { windows: 1 });
+  assert.deepEqual(await controller.control(5678, 'restore-process', { waitForWindow: false }), { windows: 1 });
+  assert.deepEqual(await controller.control(5678, 'close-process', { waitForWindow: false }), { windows: 1 });
+  assert.deepEqual(calls.filter(call => typeof call === 'object' && 'rootPid' in call).map(call => call.action), [
+    'hide-process',
+    'restore-process',
+    'close-process',
+  ]);
+  assert.match(calls[0].args[3], /close-process.*hide-process.*restore-process/);
+  await controller.close();
 });
 
 test('Horizon window controls validate process IDs and platform', async () => {

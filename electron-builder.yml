@@ -27,6 +27,8 @@ files:
   - src/**/*
   - package.json
 extraResources:
+  - from: build/app-update.yml
+    to: app-update.yml
   - from: lib/build/libs/agent-vanilla.jar
     to: lib/agent-vanilla.jar
   - from: lib/build/libs/agent-fabric.jar

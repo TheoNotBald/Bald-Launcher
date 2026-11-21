@@ -44,7 +44,6 @@ import bl.module.combat.Velocity;
 import bl.module.movement.Flight;
 import bl.module.movement.AirJump;
 import bl.module.movement.AntiWeb;
-import bl.module.movement.AutoSprint;
 import bl.module.movement.AutoSwim;
 import bl.module.movement.FastLadder;
 import bl.module.movement.FastBreak;
@@ -52,7 +51,6 @@ import bl.module.movement.LongJump;
 import bl.module.movement.NoFall;
 import bl.module.movement.NoJumpDelay;
 import bl.module.movement.NoSlow;
-import bl.module.movement.Parkour;
 import bl.module.movement.ReverseStep;
 import bl.module.movement.SafeWalk;
 import bl.module.movement.Speed;
@@ -186,8 +184,8 @@ public final class Bl {
         add(new KillAura(), new Reach(), new Hitboxes(), new Velocity(), new AutoClicker(), new Criticals(), new TriggerBot(),
                 new AimAssist(), new AutoWeapon(), new AutoShield(), new BowAim());
         add(new Sprint(), new Step(), new NoFall(), new Speed(), new Flight(), new LongJump(), new SafeWalk(),
-                new Timer(), new AutoSprint(), new AirJump(), new NoJumpDelay(), new Spider(), new ReverseStep(),
-                new NoSlow(), new Parkour(), new AutoSwim(), new FastLadder(), new AntiWeb());
+                new Timer(), new AirJump(), new NoJumpDelay(), new Spider(), new ReverseStep(),
+                new NoSlow(), new AutoSwim(), new FastLadder(), new AntiWeb());
         add(new AutoRespawn(), new FastPlace());
         add(new AutoEat(), new AutoTool(), new AutoArmor(), new AutoTotem(), new AutoFish(), new AutoLoot());
         add(new FastBreak(), new SpeedMine(), new AutoMine(), new AutoFarm(), new TreeFeller(), new AutoReplant(),
@@ -479,10 +477,6 @@ public final class Bl {
             if (instance == null || action != 1) {
                 return;
             }
-            if (AgentLock.isLocked()) {
-                instance.gui.close();
-                return;
-            }
             if (keyCode == 344) {
                 return;
             }
@@ -519,7 +513,7 @@ public final class Bl {
             Object currentScreen = bl.mc.Reflect.getField(minecraft, "currentScreen");
             // Right Shift may close the agent's own dashboard, but it must not
             // open over chat, the pause menu, or any other player screen.
-            if (pressed && !rightShiftDown && !AgentLock.isLocked()
+            if (pressed && !rightShiftDown
                     && (currentScreen == null || gui.isOpen())) {
                 System.out.println("[Bald Agent] Right Shift received by agent");
                 gui.toggle(minecraft, bl.mc.RuntimeMappings.namespace());
@@ -811,7 +805,7 @@ public final class Bl {
 
     public static void toggleModule(int index) {
         try {
-            if (!AgentLock.isLocked() && instance != null && index >= 0 && index < instance.modules.size()) {
+            if (instance != null && index >= 0 && index < instance.modules.size()) {
                 instance.modules.get(index).toggle();
                 saveConfiguration();
             }
@@ -831,6 +825,22 @@ public final class Bl {
             instance.bus.post(new BlockQueryEvent(level, pos));
         } catch (Throwable t) {
             fault(t);
+        }
+    }
+
+    /**
+     * Hook target for Player#makeStuckInBlock. Runs while the vanilla tick is
+     * still executing, before Entity#move consumes the cobweb multiplier.
+     */
+    public static void stuckInBlock(Object entity, Object state) {
+        AntiWeb antiWeb = AntiWeb.INSTANCE;
+        if (antiWeb == null || !antiWeb.enabled) {
+            return;
+        }
+        try {
+            antiWeb.onStuckInBlock(entity, state);
+        } catch (Throwable t) {
+            antiWeb.fail(t);
         }
     }
 

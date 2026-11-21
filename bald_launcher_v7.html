@@ -199,7 +199,10 @@ body.horizon-mode #newProfileModal [data-horizon-profile-field]{display:block;}
 .notification-center-header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--ui-border);color:var(--ui-text);font-weight:600;}
 .notification-list{max-height:60vh;overflow-y:auto;padding:8px;}
 .notification-item{padding:10px;border-bottom:1px solid var(--ui-border);color:var(--ui-text-secondary);font-size:12px;}
-.notification-item strong{display:block;color:var(--ui-text);margin-bottom:3px;}
+.notification-item-header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+.notification-item strong{display:block;margin-bottom:3px;color:var(--ui-text);}
+.notification-dismiss{flex:none;padding:0 3px;border:0;background:transparent;color:var(--ui-text-secondary);font:20px/1 var(--font-sans);cursor:pointer;}
+.notification-dismiss:hover{color:var(--ui-text);}
 .bald-toast-stack{position:fixed;right:20px;bottom:20px;z-index:240;display:grid;gap:10px;width:min(390px,calc(100vw - 32px));pointer-events:none;}
 .bald-toast{display:flex;align-items:flex-start;gap:11px;padding:13px 14px;border:1px solid rgba(143,200,199,.32);border-radius:12px;background:rgba(18,23,24,.96);color:#e5eeee;box-shadow:0 14px 38px rgba(0,0,0,.38);font:12px/1.5 var(--font-sans);pointer-events:auto;touch-action:pan-y;animation:bald-toast-enter .22s ease-out both;transition:transform .24s ease,opacity .24s ease;}
 .bald-toast.error{border-color:rgba(244,94,101,.55);box-shadow:0 14px 38px rgba(0,0,0,.4),inset 3px 0 #f45e65;}
@@ -1047,9 +1050,52 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
 #deleteServerConfirmationDialog{box-sizing:border-box;max-height:calc(100vh - 40px);max-height:calc(100dvh - 40px);overflow:auto;}
 #cosmeticStudioModal>div{box-sizing:border-box;width:min(96vw,1180px)!important;height:min(92vh,760px)!important;height:min(92dvh,760px)!important;max-height:calc(100dvh - 32px);}
 @media(max-width:780px){#cosmeticStudioModal{padding:10px!important;}#cosmeticStudioModal>div{width:100%!important;height:100%!important;max-height:100%;}#cosmeticStudioModal #studioWorkspace{grid-template-columns:minmax(0,1fr)!important;grid-template-rows:minmax(0,1fr) minmax(0,1fr);overflow:auto;}#cosmeticStudioModal #studioWorkspace>aside{min-height:0;}#cosmeticStudioModal #studioPreviewCanvas{min-height:0!important;}}
+.boot-splash{position:absolute;inset:0;z-index:10000;display:grid;place-items:center;overflow:hidden;background:radial-gradient(ellipse at 50% 34%,rgba(55,112,41,.2),transparent 42%),linear-gradient(145deg,#080b09,#0b0d0c 55%,#090a0a);opacity:1;transition:opacity .32s ease,visibility .32s ease;}
+.boot-splash::before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(126,241,94,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(126,241,94,.035) 1px,transparent 1px);background-size:38px 38px;mask-image:radial-gradient(ellipse at center,#000 5%,transparent 78%);pointer-events:none;}
+.boot-splash.is-dismissed{visibility:hidden;opacity:0;pointer-events:none;}
+.boot-splash-card{position:relative;width:min(440px,calc(100vw - 36px));padding:34px 36px 27px;border:1px solid rgba(151,205,136,.17);border-radius:18px;background:linear-gradient(150deg,rgba(21,27,22,.96),rgba(12,15,13,.97));box-shadow:0 28px 90px rgba(0,0,0,.52),0 0 70px rgba(93,187,73,.09);backdrop-filter:blur(16px);}
+.boot-splash-brandline{display:flex;align-items:center;gap:15px;}
+.boot-splash-logo{position:relative;display:grid;width:58px;height:58px;place-items:center;flex:none;border:1px solid rgba(126,241,94,.24);border-radius:15px;background:linear-gradient(145deg,rgba(126,241,94,.16),rgba(126,241,94,.035));box-shadow:inset 0 0 20px rgba(126,241,94,.05),0 0 30px rgba(126,241,94,.08);}
+.boot-splash-logo::after{content:"";position:absolute;inset:-5px;border:1px solid rgba(126,241,94,.12);border-radius:19px;animation:boot-orbit 4.5s ease-in-out infinite;}
+.boot-splash-logo img{width:42px;height:42px;object-fit:contain;}
+.boot-splash-brand{color:#e8f4e4;font-size:16px;font-weight:750;letter-spacing:.15em;}
+.boot-splash-brand small{display:block;margin-top:5px;color:#7a8d75;font-size:9px;font-weight:600;letter-spacing:.22em;}
+.boot-splash-copy{margin-top:31px;}
+.boot-splash-title{color:#f0f3ef;font-size:16px;font-weight:650;letter-spacing:.01em;}
+.boot-splash-phase{min-height:18px;margin-top:7px;color:#8e9a8b;font-size:11px;line-height:1.55;}
+.boot-splash-progress{height:7px;margin-top:21px;overflow:hidden;border:1px solid rgba(126,241,94,.16);border-radius:99px;background:#080b09;box-shadow:inset 0 1px 3px rgba(0,0,0,.6);}
+.boot-splash-progress>span{position:relative;display:block;width:0;height:100%;overflow:hidden;border-radius:inherit;background:linear-gradient(90deg,#4fa53c,#a0ff72);box-shadow:0 0 15px rgba(126,241,94,.48);transition:width .28s cubic-bezier(.2,.8,.2,1);}
+.boot-splash-progress>span::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.52) 50%,transparent 80%);transform:translateX(-100%);animation:boot-progress-shine 1.8s ease-in-out infinite;}
+.boot-splash-progress-meta{display:flex;justify-content:space-between;align-items:center;margin-top:9px;color:#677064;font-size:10px;}
+.boot-splash-percent{color:#c4e6b9;font-variant-numeric:tabular-nums;font-weight:700;}
+.boot-splash-foot{display:flex;align-items:center;gap:7px;margin-top:27px;color:#53614e;font-size:8px;font-weight:700;letter-spacing:.18em;}
+.boot-splash-dot{width:5px;height:5px;border-radius:50%;background:var(--accent-green);box-shadow:0 0 9px rgba(126,241,94,.85);animation:boot-dot 1.4s ease-in-out infinite;}
+.boot-splash-error{margin-top:17px;padding:12px;border:1px solid rgba(255,117,117,.25);border-radius:9px;background:rgba(95,25,25,.16);color:#e8aaaa;font-size:11px;line-height:1.5;overflow-wrap:anywhere;}
+.boot-splash-error button{margin-top:10px;padding:7px 12px;border:1px solid rgba(255,150,150,.3);border-radius:7px;background:rgba(255,130,130,.09);color:#f2c5c5;font:600 10px var(--font-sans);cursor:pointer;}
+.boot-splash.has-error .boot-splash-progress>span{background:linear-gradient(90deg,#a84141,#ff8585);box-shadow:0 0 12px rgba(255,100,100,.32);}
+@keyframes boot-progress-shine{0%,30%{transform:translateX(-110%)}75%,100%{transform:translateX(110%)}}
+@keyframes boot-orbit{0%,100%{transform:scale(1);opacity:.55}50%{transform:scale(1.055);opacity:1}}
+@keyframes boot-dot{0%,100%{opacity:.5;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}
+@media(prefers-reduced-motion:reduce){.boot-splash,.boot-splash *{animation:none!important;transition:none!important}}
 </style>
 
 <div class="app" style="position:relative;">
+  <div class="boot-splash" id="bootSplash" role="status" aria-live="polite">
+    <div class="boot-splash-card">
+      <div class="boot-splash-brandline">
+        <div class="boot-splash-logo"><img src="build/bald-launcher-mark.svg" alt="" draggable="false"></div>
+        <div class="boot-splash-brand">BALD LAUNCHER<small>JAVA EDITION · PROFILE SYSTEM</small></div>
+      </div>
+      <div class="boot-splash-copy">
+        <div class="boot-splash-title" id="bootSplashTitle">Starting Bald Launcher</div>
+        <div class="boot-splash-phase" id="bootSplashPhase">Preparing your game library...</div>
+      </div>
+      <div class="boot-splash-progress" id="bootSplashProgress" role="progressbar" aria-label="Launcher startup" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="bootSplashFill"></span></div>
+      <div class="boot-splash-progress-meta"><span id="bootSplashHint">Loading local systems</span><span class="boot-splash-percent" id="bootSplashPercent">0%</span></div>
+      <div class="boot-splash-error" id="bootSplashError" hidden></div>
+      <div class="boot-splash-foot"><span class="boot-splash-dot"></span><span>GETTING YOUR WORLDS READY</span></div>
+    </div>
+  </div>
   <div class="update-banner" id="updateBanner"><span id="updateBannerText"></span><span class="update-banner-progress" id="updateBannerProgress"></span><button id="updateButton" type="button">Check for updates</button></div>
   <div class="titlebar">
     <img class="titlebar-logo" src="build/bald-launcher-mark.svg" alt="Bald Launcher" draggable="false">
@@ -1342,6 +1388,14 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
             <div class="pd-settings-row"><span class="setting-label">Profile name</span><input class="modal-input" id="pdRename" style="max-width:180px;" /></div>
             <div class="pd-settings-row"><span class="setting-label">Minecraft version</span><select class="modal-select" id="pdVersionSel" style="max-width:180px;" onchange="onPdConfigChange()"></select></div>
             <div class="pd-settings-row"><span class="setting-label">Mod loader</span><select class="modal-select" id="pdLoaderSel" style="max-width:180px;" onchange="onPdConfigChange()"></select></div>
+            <div class="pd-settings-row" id="pdFabricLoaderVersionRow" hidden style="display:none;">
+              <span class="setting-label">Fabric Loader version</span>
+              <div style="display:flex;flex-direction:column;gap:4px;max-width:280px;width:100%;">
+                <select class="modal-select" id="pdFabricLoaderVersion" aria-label="Fabric Loader version" disabled></select>
+                <span id="pdFabricLoaderVersionStatus" role="status" style="font-size:10px;color:var(--text-secondary);"></span>
+              </div>
+            </div>
+            <div class="pd-settings-row column"><label class="setting-label" for="pdPrewarmEnabled">Prewarm this profile <input id="pdPrewarmEnabled" type="checkbox" onchange="setJavaProfilePrewarm(this.checked)" /></label><span style="font-size:11px;color:var(--text-secondary);">Keep Minecraft running invisibly so Play can restore it faster. Prewarm is capped at 50% CPU and background priority until you click Play; RAM follows this profile’s allocation.</span></div>
             <div class="pd-settings-row column">
               <span class="setting-label">Custom Skin &amp; Cape Support</span>
               <div id="pdCustomSkinLoaderStatus" style="font-size:11px;color:#777;">Checking compatibility...</div>
@@ -1377,6 +1431,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
                 <div class="horizon-settings-help">This profile uses Horizon’s isolated client data and does not change Java Edition profiles.</div>
                 <div class="pd-settings-row"><span class="setting-label">Profile name</span><input class="modal-input" id="horizonProfileName" maxlength="100" style="max-width:280px;" /></div>
                 <div class="pd-settings-row"><span class="setting-label">Minecraft version</span><select class="setting-select" id="horizonProfileVersion" aria-label="Horizon Minecraft version" disabled><option value="26.3" selected>26.3</option></select></div>
+                <div class="pd-settings-row column"><label class="setting-label" for="horizonPrewarmEnabled">Prewarm this profile <input id="horizonPrewarmEnabled" type="checkbox" onchange="setHorizonProfilePrewarm(this.checked)" /></label><span style="font-size:11px;color:var(--text-secondary);">Keep this game running invisibly for faster Play. It still uses memory and background resources.</span></div>
                 <div class="pd-settings-row" style="gap:8px;flex-wrap:wrap;">
                   <button class="modal-btn primary" type="button" onclick="saveHorizonProfileSettings()"><i class="ti ti-device-floppy" aria-hidden="true"></i> Save name</button>
                   <button class="danger-btn" type="button" onclick="deleteCurrentHorizonProfile()"><i class="ti ti-trash" aria-hidden="true"></i> Delete profile</button>
@@ -1494,7 +1549,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
           <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">Off by default. When enabled, launching may create a separate profile and install Sodium plus compatible client-side mods after exact release checks. Your existing profiles, mods, worlds, and Minecraft settings are not copied over or changed. You can keep using the original profile; FPS gains are not guaranteed.</div>
           <div class="setting-row"><span class="setting-label">JVM profile</span><select class="setting-select" id="jvmProfile" onchange="toggleJvmArgs();syncSettings()"><option value="default">Java defaults (recommended)</option><option value="zgc">ZGC (Java 21+)</option><option value="custom">Custom</option></select></div>
           <div class="setting-row"><span class="setting-label">Custom JVM arguments</span><input class="setting-input" id="customJvmArgs" value="" placeholder="Only when Custom is selected" style="width:260px;" onchange="syncSettings()"/></div>
-          <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">The launcher does not edit Minecraft video settings, change process priority, or promise a specific FPS gain.</div>
+          <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">The launcher does not edit Minecraft video settings or promise a specific FPS gain. Background prewarm uses lower process priority and a 50% CPU cap; both limits are lifted when you click Play.</div>
         </div>
         <div class="settings-section"><div class="ss-title">Minecraft in-game menus</div>
           <label class="setting-row"><span class="setting-label">Enable Bald Client mod on supported launches</span><input type="checkbox" id="minecraftClientModEnabled" onchange="syncSettings()"/></label>
@@ -2738,14 +2793,23 @@ function setPdTab(tab){
   document.getElementById('horizonProfileContent').hidden = !horizonModeActive || tab !== 'content';
   document.getElementById('javaProfileSettings').hidden = horizonModeActive || tab !== 'settings';
   document.getElementById('horizonProfileSettings').hidden = !horizonModeActive || tab !== 'settings';
-  document.getElementById('javaProfileLogs').hidden = horizonModeActive || tab !== 'logs';
-  document.getElementById('horizonProfileLogs').hidden = !horizonModeActive || tab !== 'logs';
+  const showJavaLogs = !horizonModeActive && tab === 'logs';
+  const showHorizonLogs = horizonModeActive && tab === 'logs';
+  const javaProfileLogs = document.getElementById('javaProfileLogs');
+  const horizonProfileLogs = document.getElementById('horizonProfileLogs');
+  javaProfileLogs.hidden = !showJavaLogs;
+  javaProfileLogs.style.display = showJavaLogs ? 'flex' : 'none';
+  horizonProfileLogs.hidden = !showHorizonLogs;
+  horizonProfileLogs.style.display = showHorizonLogs ? 'flex' : 'none';
   if (horizonModeActive) {
     document.getElementById('horizonProfileStatus').hidden = true;
     if (tab==='logs') void loadHorizonLogs();
     if (tab==='content') refreshHorizonInstalledContent();
     return;
   }
+  const horizonStatus = document.getElementById('horizonProfileStatus');
+  horizonStatus.hidden = true;
+  horizonStatus.textContent = '';
   if (tab==='logs') renderProfileLogs(true);
   if (tab==='content' && currentProfileId) refreshProfileContent(currentProfileId, true);
 }
@@ -4110,12 +4174,89 @@ async function installFromBrowseFromButton(button){
 }
 
 // ---------------- Profile settings tab ----------------
+let pdFabricLoaderRequestId = 0;
+let pdFabricLoaderVersionsPromise = Promise.resolve();
+let pdFabricLoaderVersionLocked = false;
+
+function refreshPdFabricLoaderVersions(mcVersion, loader, preferredVersion) {
+  const row = document.getElementById('pdFabricLoaderVersionRow');
+  const select = document.getElementById('pdFabricLoaderVersion');
+  const status = document.getElementById('pdFabricLoaderVersionStatus');
+  const requestId = ++pdFabricLoaderRequestId;
+  const isFabric = loader === 'fabric';
+  row.hidden = !isFabric;
+  row.style.display = isFabric ? '' : 'none';
+  if (!isFabric) {
+    select.disabled = pdFabricLoaderVersionLocked;
+    status.textContent = '';
+    pdFabricLoaderVersionsPromise = Promise.resolve();
+    return pdFabricLoaderVersionsPromise;
+  }
+
+  const selectedVersion = preferredVersion ?? select.value;
+  select.disabled = true;
+  status.style.color = 'var(--text-secondary)';
+  status.textContent = 'Loading Fabric Loader versions...';
+  const request = (async () => {
+    try {
+      const result = await launcherBridge?.getFabricLoaderVersions?.(mcVersion);
+      if (requestId !== pdFabricLoaderRequestId) return;
+      if (!result?.ok || !Array.isArray(result.versions)) {
+        throw new Error(result?.error || 'Could not load Fabric Loader versions.');
+      }
+      const versions = result.versions;
+      select.replaceChildren();
+      const latestOption = document.createElement('option');
+      latestOption.value = '';
+      latestOption.textContent = versions.length ? `Latest stable (${versions[0]})` : 'Latest stable (selected at launch)';
+      select.appendChild(latestOption);
+      for (const version of versions) {
+        const option = document.createElement('option');
+        option.value = version;
+        option.textContent = version;
+        select.appendChild(option);
+      }
+      select.value = versions.includes(selectedVersion) ? selectedVersion : '';
+      status.textContent = versions.length ? `${versions.length} compatible versions available` : 'No versions listed; latest will be selected at launch.';
+      select.disabled = pdFabricLoaderVersionLocked;
+    } catch (error) {
+      if (requestId !== pdFabricLoaderRequestId) return;
+      select.replaceChildren();
+      const latestOption = document.createElement('option');
+      latestOption.value = '';
+      latestOption.textContent = 'Latest stable (selected at launch)';
+      select.appendChild(latestOption);
+      if (selectedVersion) {
+        const savedOption = document.createElement('option');
+        savedOption.value = selectedVersion;
+        savedOption.textContent = `${selectedVersion} (saved; verification unavailable)`;
+        select.appendChild(savedOption);
+      }
+      select.value = selectedVersion || '';
+      select.disabled = pdFabricLoaderVersionLocked;
+      status.style.color = '#d88989';
+      status.textContent = error?.message || String(error);
+    }
+  })();
+  pdFabricLoaderVersionsPromise = request;
+  return request;
+}
+
 function populatePdSettingsForm(p){
   document.getElementById('pdRename').value = p.name;
+  document.getElementById('pdPrewarmEnabled').checked = p.prewarmEnabled !== false;
   document.getElementById('pdJavaPath').value = p.javaPath || '';
   document.getElementById('pdMemoryMax').value = p.memoryMax || 6;
   document.getElementById('pdJvmProfile').value = p.jvmProfile || 'default';
   document.getElementById('pdCustomJvmArgs').value = p.customJvmArgs || '';
+  pdFabricLoaderVersionLocked = p.optimizationManaged === true;
+  const fabricVersionSelect = document.getElementById('pdFabricLoaderVersion');
+  fabricVersionSelect.replaceChildren();
+  const currentFabricVersionOption = document.createElement('option');
+  currentFabricVersionOption.value = p.fabricLoaderVersion || '';
+  currentFabricVersionOption.textContent = p.fabricLoaderVersion || 'Latest stable';
+  fabricVersionSelect.appendChild(currentFabricVersionOption);
+  fabricVersionSelect.value = p.fabricLoaderVersion || '';
   populateVersionLoaderSelects('pdVersionSel','pdLoaderSel', p.mcVersion, p.loader);
   document.getElementById('pdVersionSel').disabled = p.optimizationManaged === true;
   document.getElementById('pdLoaderSel').disabled = p.optimizationManaged === true;
@@ -4125,7 +4266,7 @@ function populatePdSettingsForm(p){
     rendererOptions.style.opacity = p.optimizationManaged ? '0.55' : '';
     rendererOptions.setAttribute('aria-disabled', p.optimizationManaged ? 'true' : 'false');
   }
-  onPdConfigChange(p.rendererMode);
+  onPdConfigChange(p.rendererMode, p.fabricLoaderVersion || '');
   refreshCustomSkinLoaderStatus(p.id);
 }
 async function refreshCustomSkinLoaderStatus(profileId){
@@ -4189,22 +4330,31 @@ async function disableCustomSkinLoaderSupport(profileId){
   refreshCustomSkinLoaderStatus(profileId);
 }
 let pdSelectedRenderer = null;
-async function onPdConfigChange(forceRenderer){
+async function onPdConfigChange(forceRenderer, preferredFabricLoaderVersion){
   const version = document.getElementById('pdVersionSel').value;
   const loader = document.getElementById('pdLoaderSel').value;
+  const fabricLoaderVersionsRequest = refreshPdFabricLoaderVersions(
+    version,
+    loader,
+    preferredFabricLoaderVersion ?? document.getElementById('pdFabricLoaderVersion').value,
+  );
   document.getElementById('pdRendererOptions').innerHTML = '<div style="color:#444;font-size:11px;">Checking availability...</div>';
   const opts = await renderersFor(version, loader);
   pdSelectedRenderer = (forceRenderer && opts.some(o=>o.id===forceRenderer)) ? forceRenderer : opts[0].id;
   renderRendererOptions('pdRendererOptions', opts, pdSelectedRenderer, id => { pdSelectedRenderer = id; onPdConfigChange(id); });
+  await fabricLoaderVersionsRequest;
 }
 async function savePdSettings(){
   const p = getProfile(currentProfileId);
+  await pdFabricLoaderVersionsPromise;
   const payload = {
     id: p.id,
     name: document.getElementById('pdRename').value.trim() || p.name,
     mcVersion: document.getElementById('pdVersionSel').value,
     loader: document.getElementById('pdLoaderSel').value,
+    fabricLoaderVersion: document.getElementById('pdFabricLoaderVersion').value,
     rendererMode: pdSelectedRenderer,
+    prewarmEnabled: document.getElementById('pdPrewarmEnabled').checked,
     javaPath: document.getElementById('pdJavaPath').value.trim(),
     memoryMax: Number(document.getElementById('pdMemoryMax').value) || 6,
     jvmProfile: document.getElementById('pdJvmProfile').value,
@@ -4229,6 +4379,40 @@ async function savePdSettings(){
   openProfile(p.id);
   if (rendererChanged && newRendererMode && newRendererMode !== 'vanilla'){
     openBundleModal(newRendererMode, getProfile(p.id));
+  }
+}
+async function setJavaProfilePrewarm(enabled){
+  const profile = getProfile(currentProfileId);
+  if (!profile || !launcherBridge?.updateProfile) return;
+  try {
+    const result = await launcherBridge.updateProfile({ id: profile.id, prewarmEnabled: enabled === true });
+    if (result?.ok === false) {
+      document.getElementById('pdPrewarmEnabled').checked = profile.prewarmEnabled !== false;
+      alert(result.error || 'Could not update this profile’s prewarm setting.');
+      return;
+    }
+    state = result.state || state;
+    renderProfileGrid();
+    if (enabled) {
+      if (runningProfileIds.has(profile.id)) return;
+      const warmResult = await launcherBridge.launch({
+        profileId: profile.id,
+        accountId: state.activeAccountId,
+        prewarming: true,
+        skipAutoOptimization: true,
+      });
+      if (warmResult?.ok === false) {
+        document.getElementById('sbStatus').textContent = `Prewarm skipped · ${warmResult.error || profile.name}`;
+      }
+    } else {
+      const stopResult = await launcherBridge.stopPrewarm(profile.id);
+      if (stopResult?.ok === false) {
+        document.getElementById('sbStatus').textContent = stopResult.error || 'Could not stop profile prewarm.';
+      }
+    }
+  } catch (error) {
+    document.getElementById('pdPrewarmEnabled').checked = profile.prewarmEnabled !== false;
+    document.getElementById('sbStatus').textContent = `Prewarm setting failed · ${error?.message || String(error)}`;
   }
 }
 let profileActionTargetId = null;
@@ -5161,6 +5345,7 @@ async function openHorizonProfile(instanceId){
   document.getElementById('pdSub').textContent = `Horizon · ${instance.minecraftVersion || HORIZON_MINECRAFT_VERSION}`;
   document.getElementById('horizonProfileName').value = name;
   document.getElementById('horizonProfileVersion').value = String(instance.minecraftVersion || HORIZON_MINECRAFT_VERSION);
+  document.getElementById('horizonPrewarmEnabled').checked = state.settings?.horizonPrewarmByInstance?.[instance.id] !== false;
   document.getElementById('horizonProfileStatus').hidden = true;
   populateHorizonJavaProfiles();
   populateHorizonBaldAccounts();
@@ -5172,6 +5357,23 @@ async function openHorizonProfile(instanceId){
 function closeHorizonProfile(){
   if (document.getElementById('panel-profile')?.style.display !== 'none') showPanel('home');
   else renderHorizonInstances();
+}
+async function setHorizonProfilePrewarm(enabled){
+  const instanceId = selectedHorizonInstanceId();
+  if (!instanceId || !launcherBridge?.setHorizonPrewarm) return;
+  const result = await launcherBridge.setHorizonPrewarm(instanceId, enabled === true);
+  if (!result?.ok) {
+    document.getElementById('horizonPrewarmEnabled').checked = state.settings?.horizonPrewarmByInstance?.[instanceId] !== false;
+    document.getElementById('horizonProfileStatus').textContent = result?.error || 'Could not update this profile’s prewarm setting.';
+    document.getElementById('horizonProfileStatus').hidden = false;
+    return;
+  }
+  state = result.state || await launcherBridge.getState();
+  if (result.skipped && result.error) {
+    document.getElementById('horizonProfileStatus').textContent = result.error;
+    document.getElementById('horizonProfileStatus').hidden = false;
+  }
+  renderPlayButton();
 }
 function setHorizonProfileTab(tab){
   const validTabs = new Set(['mod', 'resource', 'shader', 'modpack', 'datapack']);
@@ -5749,17 +5951,33 @@ async function loadDiagnostics(){
 const notificationHistory = (() => {
   try { return JSON.parse(localStorage.getItem('bald:notifications') || '[]'); } catch (_error) { return []; }
 })();
+const baldToastByNotificationId = new Map();
 function persistNotifications(){ try { localStorage.setItem('bald:notifications', JSON.stringify(notificationHistory.slice(-100))); } catch (_error) {} }
 function addNotification(title, message, kind = 'info'){
-  notificationHistory.push({ id: `notification-${Date.now()}-${Math.random()}`, title, message, kind, createdAt: new Date().toISOString() });
+  const notification = { id: `notification-${Date.now()}-${Math.random()}`, title, message, kind, createdAt: new Date().toISOString() };
+  notificationHistory.push(notification);
   while (notificationHistory.length > 100) notificationHistory.shift();
   persistNotifications(); renderNotifications();
-  showBaldToast(title, message, kind);
+  showBaldToast(title, message, kind, notification.id);
 }
 function renderNotifications(){
   const list = document.getElementById('notificationList');
   if (!list) return;
-  list.innerHTML = notificationHistory.slice().reverse().map(item => `<div class="notification-item"><strong>${escapeHtml(item.title)}</strong>${escapeHtml(item.message)}<div style="margin-top:4px;font-size:10px;color:var(--ui-text-secondary);">${new Date(item.createdAt).toLocaleString()}</div></div>`).join('') || '<div class="notification-item">No notifications yet.</div>';
+  list.innerHTML = notificationHistory.slice().reverse().map(item => `<div class="notification-item"><div class="notification-item-header"><strong>${escapeHtml(item.title)}</strong><button class="notification-dismiss" type="button" data-dismiss-notification="${escapeHtml(item.id)}" aria-label="Remove notification">&times;</button></div>${escapeHtml(item.message)}<div style="margin-top:4px;font-size:10px;color:var(--ui-text-secondary);">${new Date(item.createdAt).toLocaleString()}</div></div>`).join('') || '<div class="notification-item">No notifications yet.</div>';
+  list.onclick = event => {
+    const button = event.target.closest?.('[data-dismiss-notification]');
+    if (button) removeNotification(button.dataset.dismissNotification);
+  };
+}
+function removeNotification(notificationId){
+  const index = notificationHistory.findIndex(item => item.id === String(notificationId || ''));
+  if (index < 0) return false;
+  const [notification] = notificationHistory.splice(index, 1);
+  persistNotifications();
+  renderNotifications();
+  const toast = baldToastByNotificationId.get(notification.id);
+  if (toast) dismissBaldToast(toast);
+  return true;
 }
 function toggleNotificationCenter(){
   const center = document.getElementById('notificationCenter');
@@ -5771,7 +5989,12 @@ function closeNotificationCenter(){
   const center = document.getElementById('notificationCenter');
   if (center) center.style.display = 'none';
 }
-function clearNotifications(){ notificationHistory.splice(0); persistNotifications(); renderNotifications(); }
+function clearNotifications(){
+  notificationHistory.splice(0);
+  persistNotifications();
+  renderNotifications();
+  for (const toast of baldToastByNotificationId.values()) dismissBaldToast(toast);
+}
 
 const baldToastTimers = new WeakMap();
 function playErrorDing(){
@@ -5801,18 +6024,28 @@ function dismissBaldToast(toast){
   if (!toast || toast.classList.contains('leaving')) return;
   clearTimeout(baldToastTimers.get(toast));
   toast.classList.add('leaving');
-  window.setTimeout(() => toast.remove(), 260);
+  window.setTimeout(() => {
+    toast.remove();
+    const notificationId = toast.dataset.notificationId;
+    if (notificationId && baldToastByNotificationId.get(notificationId) === toast) {
+      baldToastByNotificationId.delete(notificationId);
+    }
+  }, 260);
 }
 
-function showBaldToast(title, message, kind = 'info'){
+function showBaldToast(title, message, kind = 'info', notificationId = ''){
   const stack = document.getElementById('baldToastStack');
   if (!stack) return;
   const toast = document.createElement('div');
   toast.className = `bald-toast${kind === 'error' ? ' error' : ''}`;
+  toast.dataset.notificationId = notificationId;
   toast.innerHTML = `<span class="bald-toast-icon" aria-hidden="true">${kind === 'error' ? '<i class="ti ti-alert-circle"></i>' : '<i class="ti ti-bell"></i>'}</span><div class="bald-toast-copy"><strong></strong><span></span></div><button class="bald-toast-dismiss" type="button" aria-label="Dismiss notification">&times;</button>`;
   toast.querySelector('.bald-toast-copy strong').textContent = String(title || 'Bald Launcher');
   toast.querySelector('.bald-toast-copy span').textContent = String(message || '');
-  toast.querySelector('.bald-toast-dismiss').addEventListener('click', () => dismissBaldToast(toast));
+  toast.querySelector('.bald-toast-dismiss').addEventListener('click', () => {
+    if (notificationId) removeNotification(notificationId);
+    else dismissBaldToast(toast);
+  });
   let dragStart = null;
   toast.addEventListener('pointerdown', event => {
     if (event.target.closest('button')) return;
@@ -5837,6 +6070,7 @@ function showBaldToast(title, message, kind = 'info'){
     toast.classList.remove('dragging');
   });
   stack.appendChild(toast);
+  if (notificationId) baldToastByNotificationId.set(notificationId, toast);
   baldToastTimers.set(toast, window.setTimeout(() => dismissBaldToast(toast), 10000));
   if (kind === 'error') playErrorDing();
 }
@@ -8197,18 +8431,59 @@ clickableObserver.observe(document.body, { childList: true, subtree: true });
 enhanceClickableKeyboardAccess();
 
 // ---------------- Boot ----------------
+const BOOT_SPLASH_MIN_DURATION_MS = 1800;
+const bootSplashStartedAt = performance.now();
+function updateBootSplash(progress, phase, hint){
+  const overlay = document.getElementById('bootSplash');
+  if (!overlay || overlay.classList.contains('is-dismissed')) return;
+  const percent = Math.max(0, Math.min(100, Math.round(Number(progress) || 0)));
+  const fill = document.getElementById('bootSplashFill');
+  const progressBar = document.getElementById('bootSplashProgress');
+  const percentLabel = document.getElementById('bootSplashPercent');
+  const phaseLabel = document.getElementById('bootSplashPhase');
+  const hintLabel = document.getElementById('bootSplashHint');
+  if (fill) fill.style.width = `${percent}%`;
+  if (progressBar) progressBar.setAttribute('aria-valuenow', String(percent));
+  if (percentLabel) percentLabel.textContent = `${percent}%`;
+  if (phaseLabel && phase) phaseLabel.textContent = phase;
+  if (hintLabel && hint) hintLabel.textContent = hint;
+}
+function showBootSplashError(error){
+  const overlay = document.getElementById('bootSplash');
+  const title = document.getElementById('bootSplashTitle');
+  const phase = document.getElementById('bootSplashPhase');
+  const errorPanel = document.getElementById('bootSplashError');
+  if (!overlay || !errorPanel) return;
+  overlay.classList.add('has-error');
+  if (title) title.textContent = 'Launcher startup needs attention';
+  if (phase) phase.textContent = 'Bald Launcher could not finish loading your profile data.';
+  errorPanel.textContent = error?.message || String(error);
+  const retry = document.createElement('button');
+  retry.type = 'button';
+  retry.textContent = 'Retry startup';
+  retry.addEventListener('click', () => window.location.reload(), { once: true });
+  errorPanel.append(retry);
+  errorPanel.hidden = false;
+}
 async function boot(){
+  updateBootSplash(6, 'Starting the launcher workspace...', 'Initializing the desktop client');
   if (launcherBridge?.getVersions){
+    updateBootSplash(15, 'Checking the Minecraft version catalog...', 'Loading game metadata');
     try {
       const versions = await launcherBridge.getVersions();
       const normalized = normalizeVersionOptions(versions);
       if (normalized.length) VERSIONS = normalized;
-    } catch (error) { /* keep FALLBACK_VERSIONS */ }
+      updateBootSplash(31, 'Game versions are ready.', 'Restoring saved profiles');
+    } catch (error) {
+      updateBootSplash(31, 'Using the built-in version list.', 'Restoring saved profiles');
+    }
   }
   if (launcherBridge?.getState){
+    updateBootSplash(39, 'Restoring your profiles and settings...', 'Reading launcher state');
     state = await launcherBridge.getState();
     sessionLogs = (state.sessions || []).flatMap(session => (session.logs || []).map(entry => ({ ...entry, profileName: entry.profileName || session.profileName }))).slice(-10000);
     (state.sessions || []).filter(session => session.running && session.pid).forEach(session => runningProfileIds.add(session.profileId));
+    updateBootSplash(58, 'Profile data restored.', 'Building your workspace');
   } else {
     state = {
       accounts: [
@@ -8249,12 +8524,14 @@ async function boot(){
   const savedServer = (() => { try { return localStorage.getItem('bald:last-server'); } catch (_error) { return null; } })();
   const recoveredProfile = getProfile(savedProfile) ? savedProfile : state.activeProfileId;
   if (recoveredProfile) currentProfileId = recoveredProfile;
+  updateBootSplash(68, 'Building your launcher workspace...', 'Loading profiles and services');
   renderProfileGrid();
   renderServers();
   renderAccounts();
   if (savedPage === 'profile' && recoveredProfile) openProfile(recoveredProfile);
   else if (savedPage === 'server-detail' && getServer(savedServer)) openServerDetail(savedServer);
   else showPanel(['home','servers','accounts','settings','performance','appearance','capes','resource-packs'].includes(savedPage) ? savedPage : 'home');
+  updateBootSplash(80, 'Workspace is ready.', 'Connecting launcher services');
   if (savedPage !== 'capes') refreshAccountCosmetics(false);
   renderNotifications();
   if (launcherBridge?.onStatus){
@@ -8264,6 +8541,10 @@ async function boot(){
       if (statusNode) statusNode.textContent = text;
 
       if (!text) return;
+      if (/^Prewarm complete:/i.test(text)) {
+        addNotification('Prewarm complete', text.replace(/^Prewarm complete:\s*/i, ''), 'success');
+        return;
+      }
       if (/^Download started:/i.test(text)) {
         addNotification('Download started', text.replace(/^Download started:\s*/i, ''), 'info');
         return;
@@ -8354,6 +8635,22 @@ async function boot(){
       }
     });
   }
+  if (launcherBridge?.onPrewarmProfile) {
+    launcherBridge.onPrewarmProfile(payload => {
+      const profile = getProfile(payload?.profileId);
+      if (!profile || profile.prewarmEnabled === false || runningProfileIds.has(profile.id)) return;
+      void launcherBridge.launch({
+        profileId: profile.id,
+        accountId: state.activeAccountId,
+        prewarming: true,
+        skipAutoOptimization: true,
+      }).then(result => {
+        if (result?.ok === false && !result.skipped) {
+          console.warn(`Could not prewarm ${profile.name}:`, result.error || 'Unknown error');
+        }
+      }).catch(error => console.error(`Could not prewarm ${profile.name}:`, error));
+    });
+  }
   if (launcherBridge?.onLog){
     launcherBridge.onLog(entry => {
       sessionLogs.push(entry);
@@ -8363,6 +8660,38 @@ async function boot(){
       appendProfileLog(entry);
     });
   }
+  void (async () => {
+    try {
+      const horizonResult = await launcherBridge?.prewarmEnabledHorizonInstances?.();
+      if (horizonResult?.ok === false) console.warn('Could not prewarm enabled Horizon profiles:', horizonResult.error || 'Unknown error');
+    } catch (error) {
+      console.error('Could not prewarm enabled Horizon profiles:', error);
+    }
+    const profiles = state.profiles || [];
+    const preferredProfileId = currentProfileId || state.activeProfileId;
+    const orderedProfiles = [
+      ...profiles.filter(profile => profile.id === preferredProfileId),
+      ...profiles.filter(profile => profile.id !== preferredProfileId),
+    ];
+    for (const profile of orderedProfiles) {
+      if (profile.prewarmEnabled === false || runningProfileIds.has(profile.id)) continue;
+      try {
+        const result = await launcherBridge?.launch?.({
+          profileId: profile.id,
+          accountId: state.activeAccountId,
+          prewarming: true,
+          skipAutoOptimization: true,
+        });
+        if (result?.ok === false && !result.skipped) {
+          console.warn(`Could not prewarm ${profile.name}:`, result.error || 'Unknown error');
+        }
+        if (result?.code === 'PREWARM_AUTH_FAILED') break;
+      } catch (error) {
+        console.error(`Could not prewarm ${profile.name}:`, error);
+      }
+    }
+  })();
+  updateBootSplash(96, 'Launcher ready.', 'Preparing enabled profiles in the background');
 }
 document.getElementById('updateButton')?.addEventListener('click', async event => {
   const button = event.currentTarget;
@@ -8406,12 +8735,23 @@ window.addEventListener('error', event => {
     renderProfileLogs();
   }
 });
-boot().then(() => {
+boot().then(async () => {
+  updateBootSplash(100, 'Launcher ready.', 'Startup complete');
+  await new Promise(resolve => window.setTimeout(
+    resolve,
+    Math.max(0, BOOT_SPLASH_MIN_DURATION_MS - (performance.now() - bootSplashStartedAt)),
+  ));
+  window.setTimeout(() => {
+    const overlay = document.getElementById('bootSplash');
+    overlay?.classList.add('is-dismissed');
+    window.setTimeout(() => overlay?.remove(), 360);
+  }, 180);
   enhanceKeyboardAccess();
 }).catch(error => {
   const message = error?.message || String(error);
   const status = document.getElementById('sbStatus');
   if (status) status.textContent = `Launcher startup failed · ${message}`;
+  showBootSplashError(error);
   console.error('Launcher startup failed:', error);
 });
 

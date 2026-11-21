@@ -16,6 +16,7 @@ import bl.agent.hook.ReceiveMotionHook;
 import bl.agent.hook.RenderLevelHook;
 import bl.agent.hook.SendPositionHook;
 import bl.agent.hook.SetScreenHook;
+import bl.agent.hook.StuckHook;
 import bl.agent.hook.TickHook;
 import bl.agent.hook.UseItemOnHook;
 
@@ -32,6 +33,7 @@ public final class Agent {
             patcher.register(Descriptors.CLASS_KEYBOARD_KEY_PRESS, new KeyboardHook());
             patcher.register(Descriptors.CLASS_MINECRAFT_SET_SCREEN, new SetScreenHook());
             patcher.register(Descriptors.CLASS_PLAYER_ATTACK, new AttackHook());
+            patcher.register(Descriptors.CLASS_PLAYER_MAKE_STUCK, new StuckHook());
             patcher.register(Descriptors.CLASS_MULTIPLAYER_ATTACK, new CriticalAttackHook());
             patcher.register(Descriptors.CLASS_USE_ITEM_ON, new UseItemOnHook());
             patcher.register(Descriptors.CLASS_LISTENER_SEND, new PacketHook(true));

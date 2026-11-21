@@ -7,6 +7,17 @@ const path = require('node:path');
 const test = require('node:test');
 const { configureUpdaterFeed } = require('../src/shared/updater-feed');
 
+test('packages updater metadata for unpacked Windows builds', () => {
+  const builderConfig = fs.readFileSync(path.join(__dirname, '..', 'electron-builder.yml'), 'utf8');
+  const updateConfig = fs.readFileSync(path.join(__dirname, '..', 'build', 'app-update.yml'), 'utf8');
+
+  assert.match(builderConfig, /from: build\/app-update\.yml\s+to: app-update\.yml/);
+  assert.match(updateConfig, /^provider: github$/m);
+  assert.match(updateConfig, /^owner: TheoNotBald$/m);
+  assert.match(updateConfig, /^repo: Bald-Launcher$/m);
+  assert.match(updateConfig, /^updaterCacheDirName: bald-launcher-updater$/m);
+});
+
 test('uses the GitHub feed when packaged build metadata is missing', t => {
   const resourcesPath = fs.mkdtempSync(path.join(os.tmpdir(), 'bald-updater-feed-'));
   t.after(() => fs.rmSync(resourcesPath, { recursive: true, force: true }));

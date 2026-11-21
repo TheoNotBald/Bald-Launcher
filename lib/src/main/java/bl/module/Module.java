@@ -5,7 +5,6 @@ import java.util.List;
 import java.util.Map;
 
 import bl.Bl;
-import bl.AgentLock;
 import bl.rotation.RotationManager;
 
 public abstract class Module {
@@ -45,7 +44,7 @@ public abstract class Module {
     }
 
     public void enable() {
-        if (enabled || AgentLock.isLocked()) {
+        if (enabled) {
             return;
         }
         enabled = true;
@@ -169,7 +168,6 @@ public abstract class Module {
             Map.entry("AutoTotem", "Automatically equips a totem in your offhand."),
             Map.entry("AirJump", "Lets you jump in mid-air."),
             Map.entry("AntiWeb", "Prevents cobwebs from slowing you down."),
-            Map.entry("AutoSprint", "Automatically sprints."),
             Map.entry("AutoSwim", "Automatically swims."),
             Map.entry("FastLadder", "Climbs ladders faster."),
             Map.entry("Flight", "Allows you to fly."),
@@ -177,7 +175,6 @@ public abstract class Module {
             Map.entry("NoFall", "Prevents fall damage."),
             Map.entry("NoJumpDelay", "Removes the jump cooldown."),
             Map.entry("NoSlow", "Prevents items from slowing you down."),
-            Map.entry("Parkour", "Automatically jumps across gaps."),
             Map.entry("ReverseStep", "Pulls you down quickly."),
             Map.entry("SafeWalk", "Prevents you from walking off edges."),
             Map.entry("Speed", "Makes you move faster."),

@@ -47,21 +47,28 @@ public final class Flight extends Module {
         Object clientAbilities = Reflect.call(player, "getAbilities");
         Object serverPlayer = serverPlayer(mc, player);
         Object serverAbilities = serverPlayer == null ? null : Reflect.call(serverPlayer, "getAbilities");
-        if (clientAbilities == null || serverPlayer == null || serverAbilities == null) {
+        if (clientAbilities == null) {
             restoreAbilities();
             return;
         }
 
-        if (clientState == null || clientState.owner() != player || clientState.abilities() != clientAbilities
-                || serverState == null || serverState.owner() != serverPlayer
-                || serverState.abilities() != serverAbilities) {
+        boolean clientChanged = clientState == null || clientState.owner() != player
+                || clientState.abilities() != clientAbilities;
+        boolean serverChanged = serverPlayer != null
+                && (serverState == null || serverState.owner() != serverPlayer
+                        || serverState.abilities() != serverAbilities);
+        if (clientChanged || serverChanged) {
             restoreAbilities();
             clientState = snapshot(player, clientAbilities);
-            serverState = snapshot(serverPlayer, serverAbilities);
+            serverState = serverPlayer == null || serverAbilities == null
+                    ? null : snapshot(serverPlayer, serverAbilities);
         }
 
         applyFlightState(clientState.abilities(), flyingSpeed.getDouble());
-        synchronizeServerFlight(Reflect.call(mc, "getSingleplayerServer"), serverState, flyingSpeed.getDouble());
+        Object server = Reflect.call(mc, "getSingleplayerServer");
+        if (server != null && serverState != null) {
+            synchronizeServerFlight(server, serverState, flyingSpeed.getDouble());
+        }
 
         Object motion = Reflect.call(player, "getDeltaMovement");
         if (motion == null) {
@@ -107,13 +114,13 @@ public final class Flight extends Module {
         Object server = Reflect.call(mc, "getSingleplayerServer");
         Object playerList = Reflect.call(server, "getPlayerList");
         Object uuid = Reflect.call(player, "getUUID");
-        return uuid == null ? null : Reflect.call(playerList, "getPlayer", uuid);
+        return uuid == null || playerList == null ? null : Reflect.call(playerList, "getPlayer", uuid);
     }
 
     private AbilityState snapshot(Object owner, Object abilities) {
-        Object mayfly = Reflect.getField(abilities, "mayfly");
+        Object mayfly = mayfly(abilities);
         Object flying = Reflect.getField(abilities, "flying");
-        Object speed = Reflect.call(abilities, "getFlyingSpeed");
+        Object speed = flyingSpeed(abilities);
         if (!(mayfly instanceof Boolean mayflyValue) || !(flying instanceof Boolean flyingValue)
                 || !(speed instanceof Number speedValue)) {
             throw new IllegalStateException("Could not read player flight ability state");
@@ -123,7 +130,7 @@ public final class Flight extends Module {
 
     private boolean applyFlightState(Object abilities, double speed) {
         boolean changed = false;
-        if (!Boolean.TRUE.equals(Reflect.getField(abilities, "mayfly"))) {
+        if (!Boolean.TRUE.equals(mayfly(abilities))) {
             set(abilities, "mayfly", true);
             changed = true;
         }
@@ -131,10 +138,11 @@ public final class Flight extends Module {
             set(abilities, "flying", true);
             changed = true;
         }
-        Object currentSpeed = Reflect.call(abilities, "getFlyingSpeed");
+        Object currentSpeed = flyingSpeed(abilities);
         if (!(currentSpeed instanceof Number number)
                 || Math.abs(number.floatValue() - (float) speed) > 0.0001f) {
-            if (!Reflect.invoke(abilities, "setFlyingSpeed", (float) speed)) {
+            if (!Reflect.invoke(abilities, "setFlyingSpeed", (float) speed)
+                    && !Reflect.invoke(abilities, "setFlySpeed", (float) speed)) {
                 throw new IllegalStateException("Could not set player flying speed");
             }
             changed = true;
@@ -142,14 +150,22 @@ public final class Flight extends Module {
         return changed;
     }
 
+    private Object mayfly(Object abilities) {
+        return Reflect.getFieldAny(abilities, "mayfly", "allowFlying");
+    }
+
+    private Object flyingSpeed(Object abilities) {
+        Object value = Reflect.call(abilities, "getFlyingSpeed");
+        return value == null ? Reflect.call(abilities, "getFlySpeed") : value;
+    }
+
     private void restoreAbilities() {
         AbilityState savedServerState = serverState;
         restore(clientState);
-        if (savedServerState != null) {
-            Object server = Reflect.call(Reflect.instance(), "getSingleplayerServer");
-            if (server != null) {
-                scheduleServerRestore(server, savedServerState);
-            }
+        Object minecraft = Reflect.instance();
+        Object server = minecraft == null ? null : Reflect.call(minecraft, "getSingleplayerServer");
+        if (savedServerState != null && server != null) {
+            scheduleServerRestore(server, savedServerState);
         }
         clientState = null;
         serverState = null;
@@ -186,11 +202,11 @@ public final class Flight extends Module {
     }
 
     private boolean needsFlightState(Object abilities, double speed) {
-        if (!Boolean.TRUE.equals(Reflect.getField(abilities, "mayfly"))
+        if (!Boolean.TRUE.equals(mayfly(abilities))
                 || !Boolean.TRUE.equals(Reflect.getField(abilities, "flying"))) {
             return true;
         }
-        Object currentSpeed = Reflect.call(abilities, "getFlyingSpeed");
+        Object currentSpeed = flyingSpeed(abilities);
         return !(currentSpeed instanceof Number number)
                 || Math.abs(number.floatValue() - (float) speed) > 0.0001f;
     }
@@ -215,7 +231,7 @@ public final class Flight extends Module {
             return false;
         }
         boolean changed = false;
-        if (!Boolean.valueOf(state.mayfly()).equals(Reflect.getField(state.abilities(), "mayfly"))) {
+        if (!Boolean.valueOf(state.mayfly()).equals(mayfly(state.abilities()))) {
             set(state.abilities(), "mayfly", state.mayfly());
             changed = true;
         }
@@ -223,9 +239,10 @@ public final class Flight extends Module {
             set(state.abilities(), "flying", state.flying());
             changed = true;
         }
-        Object speed = Reflect.call(state.abilities(), "getFlyingSpeed");
+        Object speed = flyingSpeed(state.abilities());
         if (!(speed instanceof Number number) || Math.abs(number.floatValue() - state.speed()) > 0.0001f) {
-            if (!Reflect.invoke(state.abilities(), "setFlyingSpeed", state.speed())) {
+            if (!Reflect.invoke(state.abilities(), "setFlyingSpeed", state.speed())
+                    && !Reflect.invoke(state.abilities(), "setFlySpeed", state.speed())) {
                 throw new IllegalStateException("Could not restore player flying speed");
             }
             changed = true;
@@ -242,7 +259,8 @@ public final class Flight extends Module {
     }
 
     private void set(Object target, String field, boolean value) {
-        if (!Reflect.setField(target, field, value)) {
+        String alias = field.equals("mayfly") ? "allowFlying" : field;
+        if (!Reflect.setFieldAny(target, value, field, alias)) {
             throw new IllegalStateException("Could not update player ability " + field);
         }
     }

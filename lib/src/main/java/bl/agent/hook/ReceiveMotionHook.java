@@ -1,6 +1,9 @@
 package bl.agent.hook;
 
+import java.util.List;
+
 import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.InsnList;
 import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
@@ -12,9 +15,14 @@ import bl.agent.Descriptors;
 public final class ReceiveMotionHook implements ClassHook {
 
     @Override
-    public void apply(org.objectweb.asm.tree.ClassNode node) {
-        for (MethodNode method : Hooks.findRequired(
-                node, Descriptors.CLIENT_SET_ENTITY_MOTION, "ClientPacketListener.handleSetEntityMotion")) {
+    public void apply(ClassNode node) {
+        List<MethodNode> handlers = Hooks.findByDescriptor(node, Descriptors.CLIENT_SET_ENTITY_MOTION);
+        if (handlers.isEmpty()) {
+            System.out.println("[Bald Agent] incoming velocity hook skipped: no velocity handler in "
+                    + node.name);
+            return;
+        }
+        for (MethodNode method : handlers) {
             InsnList list = new InsnList();
             list.add(new VarInsnNode(Opcodes.ALOAD, 1));
             list.add(new MethodInsnNode(Opcodes.INVOKESTATIC, "bl/Bl", "onReceiveMotion",

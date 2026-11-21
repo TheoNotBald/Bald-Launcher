@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Bald Launcher Native")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1fda90e133a2a7cafbd0ea27266aa042ee7e7081")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d81612f6ed6288f1a7d97343ed8d012b53d25af3")]
 [assembly: System.Reflection.AssemblyProductAttribute("Bald Launcher Native")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Bald Launcher Native")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -161,6 +161,39 @@ public final class Reflect {
         }
     }
 
+    /**
+     * Reads the first field that exists. Minecraft 1.21.11 has both official
+     * and Yarn names for several client members, and the runtime namespace is
+     * not always known when a module is written.
+     */
+    public static Object getFieldAny(Object target, String... names) {
+        for (String name : names) {
+            Object value = getField(target, name);
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    public static boolean setFieldAny(Object target, Object value, String... names) {
+        for (String name : names) {
+            if (setField(target, name, value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean invokeAny(Object target, String... names) {
+        for (String name : names) {
+            if (invoke(target, name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static Optional<Method> resolveMethod(Class<?> type, String name, boolean staticTarget, Object[] args) {
         List<Class<?>> argumentTypes = new ArrayList<>(args.length);
         for (Object argument : args) {

@@ -104,12 +104,106 @@ $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @'
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
+
+[ComImport]
+[Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
+class MMDeviceEnumeratorComObject
+{
+}
+
+[ComImport]
+[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMMDeviceEnumerator
+{
+    [PreserveSig] int EnumAudioEndpoints(int dataFlow, int stateMask, IntPtr devices);
+    [PreserveSig] int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice device);
+    [PreserveSig] int GetDevice([MarshalAs(UnmanagedType.LPWStr)] string id, out IMMDevice device);
+}
+
+[ComImport]
+[Guid("D666063F-1587-4E43-81F1-B948E807363F")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IMMDevice
+{
+    [PreserveSig] int Activate(ref Guid interfaceId, int classContext, IntPtr activationParams, [MarshalAs(UnmanagedType.IUnknown)] out object instance);
+}
+
+[ComImport]
+[Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioSessionManager2
+{
+    [PreserveSig] int GetAudioSessionControl(IntPtr sessionId, int streamFlags, out IAudioSessionControl session);
+    [PreserveSig] int GetSimpleAudioVolume(IntPtr sessionId, int streamFlags, out ISimpleAudioVolume volume);
+    [PreserveSig] int GetSessionEnumerator(out IAudioSessionEnumerator sessions);
+    [PreserveSig] int RegisterSessionNotification(IntPtr notification);
+    [PreserveSig] int UnregisterSessionNotification(IntPtr notification);
+    [PreserveSig] int RegisterDuckNotification([MarshalAs(UnmanagedType.LPWStr)] string sessionId, IntPtr notification);
+    [PreserveSig] int UnregisterDuckNotification(IntPtr notification);
+}
+
+[ComImport]
+[Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioSessionEnumerator
+{
+    [PreserveSig] int GetCount(out int count);
+    [PreserveSig] int GetSession(int index, out IAudioSessionControl2 session);
+}
+
+[ComImport]
+[Guid("F4B1A599-7266-4319-A8CA-E70ACB11E8CD")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioSessionControl
+{
+    [PreserveSig] int GetState(out int state);
+    [PreserveSig] int GetDisplayName(out IntPtr displayName);
+    [PreserveSig] int SetDisplayName([MarshalAs(UnmanagedType.LPWStr)] string displayName, ref Guid eventContext);
+    [PreserveSig] int GetIconPath(out IntPtr iconPath);
+    [PreserveSig] int SetIconPath([MarshalAs(UnmanagedType.LPWStr)] string iconPath, ref Guid eventContext);
+    [PreserveSig] int GetGroupingParam(out Guid groupingId);
+    [PreserveSig] int SetGroupingParam(ref Guid groupingId, ref Guid eventContext);
+    [PreserveSig] int RegisterAudioSessionNotification(IntPtr notification);
+    [PreserveSig] int UnregisterAudioSessionNotification(IntPtr notification);
+}
+
+[ComImport]
+[Guid("BFB7FF88-7239-4FC9-8FA2-07C950BE9C6D")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface IAudioSessionControl2 : IAudioSessionControl
+{
+    [PreserveSig] int GetSessionIdentifier(out IntPtr sessionId);
+    [PreserveSig] int GetSessionInstanceIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string sessionInstanceId);
+    [PreserveSig] int GetProcessId(out int processId);
+    [PreserveSig] int IsSystemSoundsSession();
+    [PreserveSig] int SetDuckingPreference([MarshalAs(UnmanagedType.Bool)] bool optOut);
+}
+
+[ComImport]
+[Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+interface ISimpleAudioVolume
+{
+    [PreserveSig] int GetMasterVolume(out float volume);
+    [PreserveSig] int SetMasterVolume(float volume, ref Guid eventContext);
+    [PreserveSig] int GetMute([MarshalAs(UnmanagedType.Bool)] out bool muted);
+    [PreserveSig] int SetMute([MarshalAs(UnmanagedType.Bool)] bool muted, ref Guid eventContext);
+}
 
 public static class BaldHorizonPersistentWindowController
 {
     private delegate bool EnumWindowsCallback(IntPtr window, IntPtr state);
     private delegate void WinEventCallback(IntPtr hook, uint eventType, IntPtr window, int objectId, int childId, uint eventThread, uint eventTime);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CpuRateControlInformation
+    {
+        public uint ControlFlags;
+        public uint CpuRate;
+    }
 
     [DllImport("user32.dll")]
     private static extern bool EnumWindows(EnumWindowsCallback callback, IntPtr state);
@@ -144,6 +238,11 @@ public static class BaldHorizonPersistentWindowController
         string title = WindowTitle(window);
         return String.Equals(title.Trim(), "Horizon", StringComparison.OrdinalIgnoreCase)
             && !IsHorizonTerminalWindow(window);
+    }
+
+    private static bool IsJavaToolkitWindow(IntPtr window)
+    {
+        return WindowTitle(window).IndexOf("AwtToolkitWindow", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private static bool IsHorizonTerminalWindow(IntPtr window)
@@ -219,6 +318,9 @@ public static class BaldHorizonPersistentWindowController
     private static readonly object watchLock = new object();
     private static readonly HashSet<int> watchedProcessIds = new HashSet<int>();
     private static readonly HashSet<IntPtr> hiddenWindows = new HashSet<IntPtr>();
+    private static readonly Dictionary<string, bool> audioMuteStates = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<int, uint> originalPriorityClasses = new Dictionary<int, uint>();
+    private static readonly object resourceLock = new object();
     private static readonly System.Threading.ManualResetEvent watcherReady = new System.Threading.ManualResetEvent(false);
     private static readonly WinEventCallback watcherCallback = OnWindowEvent;
     private static System.Threading.Thread watcherThread;
@@ -227,6 +329,116 @@ public static class BaldHorizonPersistentWindowController
     private static bool watchEnabled;
     private static bool watchTerminalsOnly;
     private static bool watchHorizonByTitle;
+    private static IntPtr prewarmJob;
+
+    private const uint CpuRateControlEnabled = 0x1;
+    private const uint CpuRateControlHardCap = 0x4;
+    private const uint PrewarmCpuRate = 5000;
+    private const uint BelowNormalPriorityClass = 0x4000;
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr CreateJobObject(IntPtr jobAttributes, string name);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetInformationJobObject(IntPtr job, int informationClass, ref CpuRateControlInformation information, uint length);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(uint desiredAccess, bool inheritHandle, int processId);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool IsProcessInJob(IntPtr process, IntPtr job, out bool result);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern uint GetPriorityClass(IntPtr process);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetPriorityClass(IntPtr process, uint priorityClass);
+
+    private static void ConfigurePrewarmJob(bool limit)
+    {
+        if (prewarmJob == IntPtr.Zero)
+        {
+            prewarmJob = CreateJobObject(IntPtr.Zero, null);
+            if (prewarmJob == IntPtr.Zero)
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not create the Minecraft prewarm resource limit.");
+        }
+
+        var information = new CpuRateControlInformation();
+        if (limit)
+        {
+            information.ControlFlags = CpuRateControlEnabled | CpuRateControlHardCap;
+            information.CpuRate = PrewarmCpuRate;
+        }
+        if (!SetInformationJobObject(prewarmJob, 15, ref information, (uint)Marshal.SizeOf(typeof(CpuRateControlInformation))))
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not configure the Minecraft prewarm CPU limit.");
+    }
+
+    private static int LimitPrewarmProcesses(IEnumerable<int> processIds)
+    {
+        lock (resourceLock)
+        {
+            ConfigurePrewarmJob(true);
+            var limited = 0;
+            foreach (int processId in processIds)
+            {
+                IntPtr process = OpenProcess(0x0001 | 0x0100 | 0x1000, false, processId);
+                if (process == IntPtr.Zero)
+                    continue;
+                try
+                {
+                    uint originalPriority = GetPriorityClass(process);
+                    if (originalPriority != 0 && !originalPriorityClasses.ContainsKey(processId))
+                        originalPriorityClasses[processId] = originalPriority;
+                    SetPriorityClass(process, BelowNormalPriorityClass);
+
+                    bool alreadyLimited;
+                    if (IsProcessInJob(process, prewarmJob, out alreadyLimited) && alreadyLimited)
+                    {
+                        limited++;
+                    }
+                    else if (AssignProcessToJobObject(prewarmJob, process))
+                    {
+                        limited++;
+                    }
+                }
+                finally
+                {
+                    CloseHandle(process);
+                }
+            }
+            return limited;
+        }
+    }
+
+    private static int RestorePrewarmProcessLimits()
+    {
+        lock (resourceLock)
+        {
+            ConfigurePrewarmJob(false);
+            foreach (var entry in originalPriorityClasses)
+            {
+                IntPtr process = OpenProcess(0x0001 | 0x0100 | 0x1000, false, entry.Key);
+                if (process == IntPtr.Zero)
+                    continue;
+                try
+                {
+                    SetPriorityClass(process, entry.Value);
+                }
+                finally
+                {
+                    CloseHandle(process);
+                }
+            }
+            originalPriorityClasses.Clear();
+            return 0;
+        }
+    }
 
     private static void WatcherLoop()
     {
@@ -302,6 +514,83 @@ public static class BaldHorizonPersistentWindowController
             PostThreadMessage(watcherThreadId, 0x0012, UIntPtr.Zero, IntPtr.Zero);
     }
 
+    private static int SetProcessAudioMute(HashSet<int> processIds, bool mute)
+    {
+        IMMDeviceEnumerator enumerator = null;
+        IMMDevice device = null;
+        IAudioSessionManager2 manager = null;
+        IAudioSessionEnumerator sessions = null;
+        int matched = 0;
+        try
+        {
+            enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
+            Marshal.ThrowExceptionForHR(enumerator.GetDefaultAudioEndpoint(0, 0, out device));
+            Guid managerId = new Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F");
+            object managerObject;
+            Marshal.ThrowExceptionForHR(device.Activate(ref managerId, 23, IntPtr.Zero, out managerObject));
+            manager = (IAudioSessionManager2)managerObject;
+            Marshal.ThrowExceptionForHR(manager.GetSessionEnumerator(out sessions));
+            int count;
+            Marshal.ThrowExceptionForHR(sessions.GetCount(out count));
+            for (int index = 0; index < count; index++)
+            {
+                IAudioSessionControl2 session = null;
+                ISimpleAudioVolume volume = null;
+                try
+                {
+                    if (sessions.GetSession(index, out session) < 0 || session == null)
+                        continue;
+                    int processId;
+                    if (session.GetProcessId(out processId) < 0 || !processIds.Contains(processId))
+                        continue;
+                    string instanceId;
+                    if (session.GetSessionInstanceIdentifier(out instanceId) < 0 || String.IsNullOrEmpty(instanceId))
+                        continue;
+                    volume = (ISimpleAudioVolume)session;
+                    bool currentMute;
+                    if (volume.GetMute(out currentMute) < 0)
+                        continue;
+                    if (mute)
+                    {
+                        if (!audioMuteStates.ContainsKey(instanceId))
+                            audioMuteStates[instanceId] = currentMute;
+                        if (!currentMute)
+                        {
+                            Guid context = Guid.Empty;
+                            if (volume.SetMute(true, ref context) < 0)
+                                continue;
+                        }
+                        matched++;
+                    }
+                    else
+                    {
+                        bool previousMute;
+                        if (!audioMuteStates.TryGetValue(instanceId, out previousMute))
+                            continue;
+                        Guid context = Guid.Empty;
+                        if (volume.SetMute(previousMute, ref context) >= 0)
+                        {
+                            matched++;
+                            audioMuteStates.Remove(instanceId);
+                        }
+                    }
+                }
+                finally
+                {
+                    if (session != null) Marshal.ReleaseComObject(session);
+                }
+            }
+        }
+        finally
+        {
+            if (sessions != null) Marshal.ReleaseComObject(sessions);
+            if (manager != null) Marshal.ReleaseComObject(manager);
+            if (device != null) Marshal.ReleaseComObject(device);
+            if (enumerator != null) Marshal.ReleaseComObject(enumerator);
+        }
+        return matched;
+    }
+
     private static void ActivateWindow(IntPtr window)
     {
         Message message;
@@ -337,7 +626,15 @@ public static class BaldHorizonPersistentWindowController
     {
         var targets = new HashSet<int>(processIds);
         var count = 0;
-        bool monitorWindows = action == "hide" || action == "hide-terminal" || action == "hide-prewarm" || action == "restore";
+        if (action == "limit-process-tree")
+            return LimitPrewarmProcesses(targets);
+        if (action == "restore-process-limits")
+            return RestorePrewarmProcessLimits();
+        if (action == "mute-process-audio")
+            return SetProcessAudioMute(targets, true);
+        if (action == "restore-process-audio")
+            return SetProcessAudioMute(targets, false);
+        bool monitorWindows = action == "hide" || action == "hide-process" || action == "hide-terminal" || action == "hide-prewarm";
         bool terminalsOnly = action == "hide-terminal" || action == "restore";
         UpdateWatch(targets, monitorWindows, terminalsOnly, action == "hide-prewarm");
         IntPtr titledWindow = IntPtr.Zero;
@@ -382,11 +679,54 @@ public static class BaldHorizonPersistentWindowController
                 }
                 return true;
             }
+            if (action == "hide-process")
+            {
+                if (isTarget)
+                {
+                    if (IsWindowVisible(window))
+                    {
+                        ShowWindow(window, 0);
+                        lock (watchLock)
+                            hiddenWindows.Add(window);
+                    }
+                    lock (watchLock)
+                    {
+                        if (hiddenWindows.Contains(window) && !IsJavaToolkitWindow(window))
+                            count++;
+                    }
+                }
+                return true;
+            }
+            if (action == "close-process")
+            {
+                if (isTarget && PostMessage(window, 0x0010, IntPtr.Zero, IntPtr.Zero))
+                    count++;
+                return true;
+            }
             bool wasHidden = false;
-            if (action == "restore")
+            if (action == "restore" || action == "restore-process")
             {
                 lock (watchLock)
                     wasHidden = hiddenWindows.Contains(window);
+            }
+            if (action == "restore-process")
+            {
+                if (!isTarget && !wasHidden)
+                    return true;
+                if (IsJavaToolkitWindow(window))
+                {
+                    if (IsWindowVisible(window))
+                        ShowWindow(window, 0);
+                    lock (watchLock)
+                        hiddenWindows.Add(window);
+                    return true;
+                }
+                ShowWindow(window, 9);
+                lock (watchLock)
+                    hiddenWindows.Remove(window);
+                count++;
+                titledWindow = window;
+                return true;
             }
             if (!isTarget && !isTerminal && !(action == "restore" && wasHidden))
                 return true;
@@ -432,7 +772,7 @@ public static class BaldHorizonPersistentWindowController
             }
             return true;
         }, IntPtr.Zero);
-        if (action == "restore")
+        if (action == "restore" || action == "restore-process")
         {
             if (titledWindow != IntPtr.Zero)
                 ActivateWindow(titledWindow);
@@ -453,14 +793,14 @@ while ($null -ne ($line = [Console]::In.ReadLine())) {
     $action = [string]$request.action
     $timeoutMs = [int]$request.timeoutMs
     $waitForWindow = $request.waitForWindow -eq $true
-    if ($rootPid -lt 0 -or ($rootPid -eq 0 -and $action -notin @('hide-terminal', 'hide-prewarm')) -or $timeoutMs -lt 1 -or $action -notin @('close', 'hide', 'hide-terminal', 'hide-prewarm', 'minimize', 'restore')) {
+    if ($rootPid -lt 0 -or ($rootPid -eq 0 -and $action -notin @('hide-terminal', 'hide-prewarm')) -or $timeoutMs -lt 1 -or $action -notin @('close', 'close-process', 'hide', 'hide-process', 'hide-terminal', 'hide-prewarm', 'limit-process-tree', 'minimize', 'mute-process-audio', 'restore', 'restore-process', 'restore-process-audio', 'restore-process-limits')) {
       throw 'The Horizon window-control request is invalid.'
     }
     $deadline = [DateTime]::UtcNow.AddMilliseconds($timeoutMs)
     do {
       if ($rootPid -eq 0) {
         $targetIds = [int[]]@()
-      } elseif (-not $waitForWindow -and $processTargetsByRoot.ContainsKey($rootPid)) {
+      } elseif (-not $waitForWindow -and $action -notin @('limit-process-tree', 'mute-process-audio', 'restore-process-audio', 'restore-process-limits') -and $processTargetsByRoot.ContainsKey($rootPid)) {
         $targetIds = $processTargetsByRoot[$rootPid]
       } else {
         $processes = @(Get-CimInstance Win32_Process)
@@ -474,8 +814,10 @@ while ($null -ne ($line = [Console]::In.ReadLine())) {
             }
           }
         } while ($changed)
-        [void]$targets.Remove($rootPid)
-        $targetIds = [int[]]@($targets | Where-Object { $_ -ne $rootPid })
+        if ($action -notin @('close-process', 'hide-prewarm', 'hide-process', 'limit-process-tree', 'restore-process', 'mute-process-audio', 'restore-process-audio', 'restore-process-limits')) {
+          [void]$targets.Remove($rootPid)
+        }
+        $targetIds = [int[]]@($targets)
         $processTargetsByRoot[$rootPid] = $targetIds
       }
       $windowCount = [BaldHorizonPersistentWindowController]::Control($targetIds, $action)
@@ -704,7 +1046,7 @@ function createHorizonWindowController({
     if (!Number.isSafeInteger(rootPid) || rootPid < 0 || (rootPid === 0 && action !== 'hide-terminal' && action !== 'hide-prewarm')) {
       return Promise.reject(new TypeError('A valid Horizon launcher process ID is required.'));
     }
-    if (!['close', 'hide', 'hide-terminal', 'hide-prewarm', 'minimize', 'restore'].includes(action)) {
+    if (!['close', 'close-process', 'hide', 'hide-process', 'hide-terminal', 'hide-prewarm', 'limit-process-tree', 'minimize', 'mute-process-audio', 'restore', 'restore-process', 'restore-process-audio', 'restore-process-limits'].includes(action)) {
       return Promise.reject(new TypeError('The Horizon window action is invalid.'));
     }
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {

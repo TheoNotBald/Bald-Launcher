@@ -29,6 +29,27 @@ final class Hooks {
         return found;
     }
 
+    /**
+     * Matches on the packet descriptor only. Method names drift between 1.21
+     * point releases (handleSetEntityMotion became onEntityVelocityUpdate),
+     * while the payload type in the descriptor stays stable.
+     */
+    static List<MethodNode> findByDescriptor(ClassNode node, String[][] spec) {
+        List<MethodNode> found = new ArrayList<>();
+        for (MethodNode method : node.methods) {
+            if ((method.access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_NATIVE)) != 0) {
+                continue;
+            }
+            for (String[] candidate : spec) {
+                if (method.desc.equals(candidate[2]) || method.desc.equals(candidate[3])) {
+                    found.add(method);
+                    break;
+                }
+            }
+        }
+        return found;
+    }
+
     static List<MethodNode> findRequired(ClassNode node, String[][] spec, String description) {
         List<MethodNode> found = find(node, spec);
         if (found.isEmpty()) {

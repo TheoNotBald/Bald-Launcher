@@ -120,6 +120,65 @@ public final class Worlds {
         return value instanceof Boolean bool && bool;
     }
 
+    /**
+     * Reads a block state with a chunk-level fallback. ClientLevel can expose
+     * getBlockState through an interface rather than a declared method, and a
+     * single failed reflective lookup must not disable a movement module.
+     */
+    public static Object blockState(Object world, double x, double y, double z) {
+        if (world == null) {
+            return null;
+        }
+        Class<?> blockPosType = Types.find("net/minecraft/core/BlockPos");
+        if (blockPosType == null) {
+            return null;
+        }
+        Object pos = Reflect.call(blockPosType, "containing", x, y, z);
+        if (pos == null) {
+            return null;
+        }
+        Object state = Reflect.call(world, "getBlockState", pos);
+        if (state != null) {
+            return state;
+        }
+        Object chunk = Reflect.call(world, "getChunk", pos);
+        if (chunk == null) {
+            chunk = Reflect.call(world, "getChunk",
+                    (int) Math.floor(x) >> 4, (int) Math.floor(z) >> 4);
+        }
+        return chunk == null ? null : Reflect.call(chunk, "getBlockState", pos);
+    }
+
+    /** Collision-shape test for a world position; unreadable positions read as air. */
+    public static boolean solid(Object world, double x, double y, double z) {
+        Object state = blockState(world, x, y, z);
+        if (state == null) {
+            return false;
+        }
+        Class<?> blockPosType = Types.find("net/minecraft/core/BlockPos");
+        Object pos = blockPosType == null ? null : Reflect.call(blockPosType, "containing", x, y, z);
+        if (pos == null) {
+            return false;
+        }
+        Object shape = Reflect.call(state, "getCollisionShape", world, pos);
+        if (shape != null) {
+            Object empty = Reflect.call(shape, "isEmpty");
+            if (empty instanceof Boolean isEmpty) {
+                return !isEmpty;
+            }
+        }
+        Object solid = Reflect.call(state, "isSolid");
+        return solid instanceof Boolean isSolid && isSolid;
+    }
+
+    public static boolean cobweb(Object world, double x, double y, double z) {
+        Object state = blockState(world, x, y, z);
+        if (state == null) {
+            return false;
+        }
+        return Types.isInstanceOf(Reflect.call(state, "getBlock"), "net/minecraft/block/CobwebBlock");
+    }
+
     public static String displayName(Object entity) {
         Object name = Reflect.call(entity, "getName");
         Object text = name == null ? null : Reflect.call(name, "getString");

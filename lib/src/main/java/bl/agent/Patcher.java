@@ -106,13 +106,28 @@ public final class Patcher implements ClassFileTransformer {
                 System.out.println("[Bald Agent] KeyboardHandler loaded as " + className
                         + "; matched key methods: " + matchedMethods);
             }
+            int appliedHooks = 0;
+            boolean hookFailure = false;
             for (ClassHook matchingHook : matchingHooks) {
-                matchingHook.apply(node);
+                try {
+                    matchingHook.apply(node);
+                    appliedHooks++;
+                } catch (Throwable failure) {
+                    // One stale descriptor must not cost the other hooks on the
+                    // same class: Minecraft puts several handlers side by side.
+                    hookFailure = true;
+                    System.err.println("[Bald Agent] " + matchingHook.getClass().getSimpleName()
+                            + " hook transformation failed for " + className + ": " + failure);
+                    if (Boolean.getBoolean("lib.debug")) {
+                        failure.printStackTrace(System.err);
+                    }
+                }
             }
             if (matchingHooks.size() > 1) {
-                System.out.println("[Bald Agent] Applied " + matchingHooks.size()
-                        + " hooks to " + className);
+                System.out.println("[Bald Agent] Applied " + appliedHooks + " of "
+                        + matchingHooks.size() + " hooks to " + className);
             }
+            if (!hookFailure) {
             if (keyboardHook) {
                 System.out.println("[Bald Agent] Keyboard hook applied to " + matchedMethods + " method(s)");
             }
@@ -133,6 +148,7 @@ public final class Patcher implements ClassFileTransformer {
             }
             if (criticalAttackHook) {
                 System.out.println("[Bald Agent] game-mode attack hook applied");
+            }
             }
             ClassWriter writer = new ClassWriter(ClassWriter.COMPUTE_MAXS);
             node.accept(writer);

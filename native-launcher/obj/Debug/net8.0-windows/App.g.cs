@@ -58,7 +58,7 @@ namespace BaldLauncher.Native {
             
             #line default
             #line hidden
-            System.Uri resourceLocater = new System.Uri("/Bald Launcher Native;component/app.xaml", System.UriKind.Relative);
+            System.Uri resourceLocater = new System.Uri("/Bald Launcher Native;V1.0.0.0;component/app.xaml", System.UriKind.Relative);
             
             #line 1 "..\..\..\App.xaml"
             System.Windows.Application.LoadComponent(this, resourceLocater);

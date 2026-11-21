@@ -1,8 +1,201 @@
 diff --git a/node_modules/minecraft-launcher-core/components/handler.js b/node_modules/minecraft-launcher-core/components/handler.js
-index 111a797..085ee8f 100644
+index 111a797..77f4af0 100644
 --- a/node_modules/minecraft-launcher-core/components/handler.js
 +++ b/node_modules/minecraft-launcher-core/components/handler.js
-@@ -294,7 +294,8 @@ class Handler {
+@@ -5,11 +5,53 @@ const checksum = require('checksum')
+ const Zip = require('adm-zip')
+ const child = require('child_process')
+ let counter = 0
++const assetValidationCaches = new Map()
++const assetDownloadTasks = new Map()
++const assetCachePersistenceTasks = new Map()
++const assetValidationCacheLimit = 50000
++
++async function mapWithConcurrency (items, concurrency, callback) {
++  let index = 0
++  const requestedWorkers = Math.floor(Number(concurrency))
++  const workerCount = Math.min(items.length, 64, Number.isFinite(requestedWorkers) && requestedWorkers > 0 ? requestedWorkers : 1)
++  await Promise.all(Array.from({ length: workerCount }, async () => {
++    while (index < items.length) {
++      const currentIndex = index++
++      await callback(items[currentIndex], currentIndex)
++    }
++  }))
++}
+ 
+ class Handler {
+   constructor (client) {
+     this.client = client
+     this.options = client.options
++    this.assetValidationCachePath = this.options.overrides.assetValidationCachePath
++    const assetRoot = path.resolve(this.options.overrides.assetRoot || path.join(this.options.root, 'assets'))
++    const cacheKey = path.resolve(this.assetValidationCachePath || assetRoot)
++    if (!assetValidationCaches.has(cacheKey)) {
++      const cache = new Map()
++      if (this.assetValidationCachePath) {
++        try {
++          const saved = JSON.parse(fs.readFileSync(this.assetValidationCachePath, 'utf8'))
++          if (saved.version === 1 && Array.isArray(saved.files)) {
++            for (const [file, record] of saved.files.slice(-assetValidationCacheLimit)) {
++              if (typeof file === 'string' && typeof record?.hash === 'string'
++                && Number.isFinite(record.size) && Number.isFinite(record.mtimeMs) && Number.isFinite(record.ctimeMs)) {
++                cache.set(file, record)
++              }
++            }
++          }
++        } catch (error) {
++          if (error.code !== 'ENOENT') {
++            this.client.emit('debug', `[MCLC]: Could not load the asset verification cache: ${error.message}`)
++          }
++        }
++      }
++      assetValidationCaches.set(cacheKey, cache)
++    }
++    this.assetValidationCache = assetValidationCaches.get(cacheKey)
++    this.assetValidationCacheDirty = false
+     this.baseRequest = request.defaults({
+       pool: { maxSockets: this.options.overrides.maxSockets || 2 },
+       timeout: this.options.timeout || 50000
+@@ -102,6 +144,109 @@ class Handler {
+     })
+   }
+ 
++  async isVerifiedAsset (hash, file) {
++    const key = path.resolve(file)
++    let stat
++    try {
++      stat = fs.lstatSync(file)
++      if (stat.isSymbolicLink()) throw new Error(`Refusing to verify a symbolic-link asset: ${file}`)
++      if (!stat.isFile()) return false
++    } catch (error) {
++      if (error.code === 'ENOENT') {
++        if (this.assetValidationCache.delete(key)) this.assetValidationCacheDirty = true
++        return false
++      }
++      throw error
++    }
++
++    const cached = this.assetValidationCache.get(key)
++    if (cached && cached.hash === hash && cached.size === stat.size
++      && cached.mtimeMs === stat.mtimeMs && cached.ctimeMs === stat.ctimeMs) {
++      this.assetValidationCache.delete(key)
++      this.assetValidationCache.set(key, cached)
++      return true
++    }
++
++    if (!await this.checkSum(hash, file)) {
++      if (this.assetValidationCache.delete(key)) this.assetValidationCacheDirty = true
++      return false
++    }
++
++    this.assetValidationCache.delete(key)
++    this.assetValidationCache.set(key, {
++      hash,
++      size: stat.size,
++      mtimeMs: stat.mtimeMs,
++      ctimeMs: stat.ctimeMs
++    })
++    while (this.assetValidationCache.size > assetValidationCacheLimit) {
++      this.assetValidationCache.delete(this.assetValidationCache.keys().next().value)
++    }
++    this.assetValidationCacheDirty = true
++    return true
++  }
++
++  async persistAssetValidationCache () {
++    if (!this.assetValidationCachePath || !this.assetValidationCacheDirty) return
++    const cachePath = this.assetValidationCachePath
++    const previousWrite = assetCachePersistenceTasks.get(cachePath) || Promise.resolve()
++    const writeTask = previousWrite.catch(() => {}).then(async () => {
++      if (!this.assetValidationCacheDirty) return
++      await this.writeAssetValidationCache()
++    })
++    assetCachePersistenceTasks.set(cachePath, writeTask)
++    try {
++      await writeTask
++    } finally {
++      if (assetCachePersistenceTasks.get(cachePath) === writeTask) assetCachePersistenceTasks.delete(cachePath)
++    }
++  }
++
++  async writeAssetValidationCache () {
++    if (!this.assetValidationCachePath || !this.assetValidationCacheDirty) return
++    const tempPath = `${this.assetValidationCachePath}.${process.pid}.tmp`
++    try {
++      fs.mkdirSync(path.dirname(this.assetValidationCachePath), { recursive: true })
++      await fs.promises.writeFile(tempPath, JSON.stringify({
++        version: 1,
++        files: [...this.assetValidationCache]
++      }))
++      try {
++        await fs.promises.rename(tempPath, this.assetValidationCachePath)
++      } catch (error) {
++        if (!['EEXIST', 'EPERM'].includes(error.code)) throw error
++        await fs.promises.rm(this.assetValidationCachePath, { force: true })
++        await fs.promises.rename(tempPath, this.assetValidationCachePath)
++      }
++      this.assetValidationCacheDirty = false
++    } catch (error) {
++      this.client.emit('debug', `[MCLC]: Could not save the asset verification cache: ${error.message}`)
++      await fs.promises.rm(tempPath, { force: true }).catch(() => {})
++    }
++  }
++
++  async ensureAsset (hash, url, directory, name) {
++    const file = path.join(directory, name)
++    const key = path.resolve(file)
++    const existingTask = assetDownloadTasks.get(key)
++    if (existingTask) {
++      await existingTask
++      return this.isVerifiedAsset(hash, file)
++    }
++
++    const task = (async () => {
++      if (await this.isVerifiedAsset(hash, file)) return
++      await this.downloadAsync(url, directory, name, true, 'assets')
++      await this.isVerifiedAsset(hash, file)
++    })()
++    assetDownloadTasks.set(key, task)
++    try {
++      await task
++    } finally {
++      if (assetDownloadTasks.get(key) === task) assetDownloadTasks.delete(key)
++    }
++  }
++
+   getVersion () {
+     return new Promise(resolve => {
+       const versionJsonPath = this.options.overrides.versionJson || path.join(this.options.directory, `${this.options.version.number}.json`)
+@@ -172,21 +317,21 @@ class Handler {
+       total: Object.keys(index.objects).length
+     })
+ 
+-    await Promise.all(Object.keys(index.objects).map(async asset => {
++    const assets = Object.keys(index.objects)
++    const assetConcurrency = this.options.overrides.assetConcurrency || this.options.overrides.maxSockets || 8
++    await mapWithConcurrency(assets, assetConcurrency, async asset => {
+       const hash = index.objects[asset].hash
+       const subhash = hash.substring(0, 2)
+       const subAsset = path.join(assetDirectory, 'objects', subhash)
+-
+-      if (!fs.existsSync(path.join(subAsset, hash)) || !await this.checkSum(hash, path.join(subAsset, hash))) {
+-        await this.downloadAsync(`${this.options.overrides.url.resource}/${subhash}/${hash}`, subAsset, hash, true, 'assets')
+-      }
++      await this.ensureAsset(hash, `${this.options.overrides.url.resource}/${subhash}/${hash}`, subAsset, hash)
+       counter++
+       this.client.emit('progress', {
+         type: 'assets',
+         task: counter,
+-        total: Object.keys(index.objects).length
++        total: assets.length
+       })
+-    }))
++    })
++    await this.persistAssetValidationCache()
+     counter = 0
+ 
+     // Copy assets to legacy if it's an older Minecraft version.
+@@ -294,7 +439,8 @@ class Handler {
            // All is well.
            console.warn(e)
          }

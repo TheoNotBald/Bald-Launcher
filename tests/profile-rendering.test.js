@@ -6,6 +6,45 @@ const vm = require('node:vm');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'bald_launcher_v7.html'), 'utf8').replace(/\r\n/g, '\n');
 
+test('notification dismiss removes its history entry and associated toast', () => {
+  const renderStart = html.indexOf('function renderNotifications(){');
+  const removeStart = html.indexOf('function removeNotification(notificationId){', renderStart);
+  const removeEnd = html.indexOf('\nfunction toggleNotificationCenter()', removeStart);
+  assert.ok(renderStart >= 0 && removeStart > renderStart && removeEnd > removeStart, 'notification rendering and removal handlers should exist');
+
+  const toast = {};
+  const list = { innerHTML: '', onclick: null };
+  const notificationHistory = [{
+    id: 'notice-1',
+    title: 'Prewarm complete',
+    message: 'Profile is ready.',
+    createdAt: new Date().toISOString(),
+  }];
+  let persistCount = 0;
+  let dismissedToast = null;
+  const context = {
+    notificationHistory,
+    baldToastByNotificationId: new Map([['notice-1', toast]]),
+    document: { getElementById: id => id === 'notificationList' ? list : null },
+    escapeHtml: value => String(value),
+    persistNotifications: () => { persistCount += 1; },
+    dismissBaldToast: value => { dismissedToast = value; },
+  };
+  vm.runInNewContext(
+    `${html.slice(renderStart, removeEnd)}\nrenderNotifications();`,
+    context,
+  );
+
+  assert.match(list.innerHTML, /data-dismiss-notification="notice-1"/);
+  const button = { dataset: { dismissNotification: 'notice-1' } };
+  list.onclick({ target: { closest: selector => selector === '[data-dismiss-notification]' ? button : null } });
+
+  assert.equal(notificationHistory.length, 0);
+  assert.equal(persistCount, 1);
+  assert.equal(dismissedToast, toast);
+  assert.match(list.innerHTML, /No notifications yet/);
+});
+
 test('profile cards render profile-supplied text as escaped text', () => {
   const start = html.indexOf('function renderProfileGrid(){');
   const end = html.indexOf('\n// ---------------- New profile modal', start);

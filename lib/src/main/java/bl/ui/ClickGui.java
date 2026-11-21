@@ -18,7 +18,6 @@ import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 
-import bl.AgentLock;
 import bl.Bl;
 import bl.mc.RuntimeMappings;
 import bl.module.Category;
@@ -98,10 +97,6 @@ public final class ClickGui {
     }
 
     public void toggle(Object source, int runtimeNamespace) {
-        if (AgentLock.isLocked()) {
-            close();
-            return;
-        }
         try {
             if (source == null || runtimeNamespace < 0 || runtimeNamespace > 1) {
                 throw new IllegalStateException("Missing Minecraft keyboard context");
@@ -186,10 +181,6 @@ public final class ClickGui {
     }
 
     public void click(Object screen, Object event) {
-        if (AgentLock.isLocked()) {
-            close();
-            return;
-        }
         if (menu == null || uiFailureReported) {
             return;
         }

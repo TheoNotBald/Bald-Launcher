@@ -16,10 +16,13 @@ public final class FastLadder extends Module {
     @Override
     protected void onTick() {
         Object player = Reflect.player();
-        if (player == null || !Boolean.TRUE.equals(Reflect.call(player, "onClimbable"))) {
+        if (player == null || !climbing(player)) {
             return;
         }
         Object motion = Reflect.call(player, "getDeltaMovement");
+        if (motion == null) {
+            motion = Reflect.call(player, "getVelocity");
+        }
         if (motion == null || !Reflect.invoke(player, "setDeltaMovement",
                 component(motion, "x"), Math.max(component(motion, "y"), climbSpeed.getDouble()),
                 component(motion, "z"))) {
@@ -27,9 +30,13 @@ public final class FastLadder extends Module {
         }
     }
 
-    @Override
-    protected boolean runsAfterVanillaTick() {
-        return true;
+    private boolean climbing(Object player) {
+        Object value = Reflect.call(player, "onClimbable");
+        if (value instanceof Boolean climbing && climbing) {
+            return true;
+        }
+        value = Reflect.call(player, "isClimbing");
+        return value instanceof Boolean climbing && climbing;
     }
 
     private double component(Object vec, String axis) {

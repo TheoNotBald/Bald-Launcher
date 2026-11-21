@@ -1,56 +1,106 @@
 package bl.module.movement;
 
+import java.util.List;
+
+import bl.mc.KeyHold;
 import bl.mc.Reflect;
 import bl.mc.Types;
+import bl.mc.Worlds;
 import bl.module.Category;
 import bl.module.Module;
 import bl.module.Setting;
 
 public final class AntiWeb extends Module {
 
-    private final Setting escapeSpeed = setting(Setting.decimal("Escape speed", 0.4, 0.1, 0.8));
+    public static AntiWeb INSTANCE;
+
+    private static Object zeroVector;
+
+    // Bypass rewrites the cobweb multiplier inside the vanilla hook. Escape
+    // never touches movement at all: it only holds the jump key while the
+    // player is inside a cobweb, which is how a vanilla player leaves one.
+    private final Setting mode = setting(Setting.enumeration("Mode", "Bypass", List.of("Bypass", "Escape")));
+    private final KeyHold jump = new KeyHold("keyJump", "jumpKey");
 
     public AntiWeb() {
-        super("AntiWeb", Category.MOVEMENT, true);
+        super("AntiWeb", Category.MOVEMENT);
+        INSTANCE = this;
     }
 
     @Override
     protected void onTick() {
-        Object player = Reflect.player();
-        Object world = Reflect.world();
-        if (player == null || world == null) {
+        if (!escape()) {
+            jump.release();
             return;
         }
-        Object blockPos = Types.find("net/minecraft/core/BlockPos");
-        Object pos = Reflect.call(blockPos, "containing",
-                Reflect.call(player, "getX"), Reflect.call(player, "getY"), Reflect.call(player, "getZ"));
-        Object state = Reflect.call(world, "getBlockState", pos);
-        Object block = Reflect.call(state, "getBlock");
-        if (!Types.isInstanceOf(block, "net/minecraft/world/level/block/CobwebBlock")) {
+        if (Reflect.player() == null || !inCobweb()) {
+            jump.release();
             return;
         }
-        Object motion = Reflect.call(player, "getDeltaMovement");
-        if (motion == null || !Reflect.invoke(player, "setDeltaMovement",
-                component(motion, "x") * escapeSpeed.getDouble(),
-                Math.max(component(motion, "y"), 0.0),
-                component(motion, "z") * escapeSpeed.getDouble())) {
-            throw new IllegalStateException("Could not escape cobweb movement slowdown");
-        }
+        jump.set(true);
     }
 
     @Override
-    protected boolean runsAfterVanillaTick() {
-        return true;
+    protected void onDisable() {
+        jump.release();
     }
 
-    private double component(Object vec, String axis) {
-        Object value = Reflect.call(vec, axis);
-        if (!(value instanceof Number)) {
-            value = Reflect.getField(vec, axis);
+    @Override
+    protected void onUnavailable() {
+        jump.release();
+    }
+
+    private boolean escape() {
+        return mode.getEnum().equals("Escape");
+    }
+
+    private boolean inCobweb() {
+        Object world = Reflect.world();
+        if (world == null) {
+            return false;
         }
-        if (!(value instanceof Number number)) {
-            throw new IllegalStateException("Could not read movement " + axis);
+        double x = Reflect.posX();
+        double y = Reflect.posY();
+        double z = Reflect.posZ();
+        return Worlds.cobweb(world, x, y, z)
+                || Worlds.cobweb(world, x, y + 0.5, z)
+                || Worlds.cobweb(world, x, y + 1.0, z);
+    }
+
+    /**
+     * Called by the Player.makeStuckInBlock hook immediately after vanilla stores
+     * the cobweb multiplier. A zero multiplier makes Entity.move skip both the
+     * speed reduction and its velocity reset, so momentum is preserved.
+     */
+    public void onStuckInBlock(Object entity, Object state) {
+        if (!enabled || escape() || entity == null || entity != Reflect.player()) {
+            return;
         }
-        return number.doubleValue();
+        if (!isCobweb(state)) {
+            return;
+        }
+        Object zero = zeroVector();
+        if (zero == null || !Reflect.setFieldAny(entity, zero,
+                "movementMultiplier", "stuckSpeedMultiplier")) {
+            throw new IllegalStateException("Could not clear the cobweb movement multiplier");
+        }
+    }
+
+    private boolean isCobweb(Object state) {
+        if (state == null) {
+            return false;
+        }
+        Object block = Reflect.call(state, "getBlock");
+        return Types.isInstanceOf(block, "net/minecraft/block/CobwebBlock");
+    }
+
+    private Object zeroVector() {
+        if (zeroVector == null) {
+            Class<?> vec = Types.find("net/minecraft/world/phys/Vec3");
+            if (vec != null) {
+                zeroVector = Reflect.call(vec, "ZERO");
+            }
+        }
+        return zeroVector;
     }
 }

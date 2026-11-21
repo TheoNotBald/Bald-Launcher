@@ -328,6 +328,7 @@ val genDescriptors = tasks.register("genDescriptors") {
             "SCREEN_ON_CLOSE" to Triple("net/minecraft/client/gui/screens/Screen", "onClose", "()V"),
             "MINECRAFT_SET_SCREEN" to Triple("net/minecraft/client/Minecraft", "setScreen", "Screen;)V"),
             "PLAYER_ATTACK" to Triple("net/minecraft/world/entity/player/Player", "attack", "Entity;)V"),
+            "PLAYER_MAKE_STUCK" to Triple("net/minecraft/world/entity/player/Player", "makeStuckInBlock", "BlockState;Lnet/minecraft/world/phys/Vec3;)V"),
             "MULTIPLAYER_ATTACK" to Triple("net/minecraft/client/multiplayer/MultiPlayerGameMode", "attack", "Player;Lnet/minecraft/world/entity/Entity;)V"),
             "USE_ITEM_ON" to Triple("net/minecraft/client/multiplayer/MultiPlayerGameMode", "useItemOn", "InteractionHand;Lnet/minecraft/world/phys/BlockHitResult;"),
             "LISTENER_SEND" to Triple("net/minecraft/client/multiplayer/ClientCommonPacketListenerImpl", "send", "protocol/Packet;)V"),

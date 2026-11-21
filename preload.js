@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('launcherAPI', {
 
   // profiles
   getRendererOptions: (mcVersion, loader) => ipcRenderer.invoke('launcher:get-renderer-options', { mcVersion, loader }),
+  getFabricLoaderVersions: mcVersion => ipcRenderer.invoke('launcher:get-fabric-loader-versions', mcVersion),
   getVersions: () => ipcRenderer.invoke('launcher:get-versions'),
   resolveCustomSkinLoader: profileId => ipcRenderer.invoke('launcher:custom-skin-loader:resolve', { profileId }),
   diagnoseCustomSkinLoader: profileId => ipcRenderer.invoke('launcher:custom-skin-loader:diagnose', { profileId }),
@@ -78,6 +79,12 @@ contextBridge.exposeInMainWorld('launcherAPI', {
 
   // launch
   launch: payload => ipcRenderer.invoke('launcher:launch', payload),
+  stopPrewarm: profileId => ipcRenderer.invoke('launcher:stop-prewarm', { profileId }),
+  onPrewarmProfile: callback => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('launcher:prewarm-profile', handler);
+    return () => ipcRenderer.removeListener('launcher:prewarm-profile', handler);
+  },
   stop: profileId => ipcRenderer.invoke('launcher:stop', { profileId }),
   getDiagnostics: () => ipcRenderer.invoke('launcher:get-diagnostics'),
   analyzeCrash: profileId => ipcRenderer.invoke('launcher:analyze-crash', profileId),
@@ -100,6 +107,8 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   renameHorizonInstance: (instanceId, name) => ipcRenderer.invoke('horizon:rename-instance', { instanceId, name }),
   deleteHorizonInstance: instanceId => ipcRenderer.invoke('horizon:delete-instance', { instanceId }),
   setHorizonInstance: instanceId => ipcRenderer.invoke('horizon:set-instance', { instanceId }),
+  setHorizonPrewarm: (instanceId, enabled) => ipcRenderer.invoke('horizon:set-prewarm', { instanceId, enabled: enabled === true }),
+  prewarmEnabledHorizonInstances: () => ipcRenderer.invoke('horizon:prewarm-enabled'),
   launchHorizon: instanceId => ipcRenderer.invoke('horizon:launch', { instanceId }),
   stopHorizon: instanceId => ipcRenderer.invoke('horizon:stop', { instanceId }),
   getHorizonLogs: instanceId => ipcRenderer.invoke('horizon:get-logs', { instanceId }),

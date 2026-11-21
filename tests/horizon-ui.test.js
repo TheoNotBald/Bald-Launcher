@@ -45,6 +45,8 @@ test('Horizon and Java reuse the shared profile list and profile detail structur
   assert.doesNotMatch(html, /id="horizonProfileLibrary"/);
   assert.match(html, /Import Java world/);
   assert.match(html, /id="horizonProfileSettings"[\s\S]*?Import Java world/);
+  assert.match(html, /id="pdPrewarmEnabled" type="checkbox" onchange="setJavaProfilePrewarm\(this\.checked\)"/);
+  assert.match(html, /id="horizonPrewarmEnabled" type="checkbox" onchange="setHorizonProfilePrewarm\(this\.checked\)"/);
   assert.match(html, /id="npHorizonMinecraftVersion" disabled[\s\S]*?<option value="26\.3" selected>26\.3<\/option>/);
   assert.match(html, /id="horizonProfileVersion"[^>]*disabled[\s\S]*?<option value="26\.3" selected>26\.3<\/option>/);
   assert.match(html, /id="pdPlayButton"/);
@@ -53,6 +55,27 @@ test('Horizon and Java reuse the shared profile list and profile detail structur
   assert.match(html, /id="horizonInstalledContentList"/);
   assert.match(html, /id="horizonBrowseWorldRow"/);
   assert.match(html, /if \(horizonModeActive\) \{\s*await runHorizonBrowseSearch\(\);/);
+});
+
+test('Java and Horizon profile prewarming is enabled by default and starts for each enabled profile', () => {
+  assert.match(main, /prewarmEnabled: profile\?\.prewarmEnabled !== false/);
+  assert.match(main, /horizonPrewarmByInstance[\s\S]*?\[instance\.id\]: enabled/);
+  assert.match(html, /const preferredProfileId = currentProfileId \|\| state\.activeProfileId;[\s\S]*?for \(const profile of orderedProfiles\)[\s\S]*?profile\.prewarmEnabled === false[\s\S]*?prewarming: true/);
+  assert.match(html, /prewarmEnabledHorizonInstances\?\.\(\)/);
+  const horizonPrewarmCall = html.indexOf('const horizonResult = await launcherBridge?.prewarmEnabledHorizonInstances?.()');
+  assert.ok(
+    horizonPrewarmCall >= 0
+      && horizonPrewarmCall < html.indexOf('const profiles = state.profiles || [];', horizonPrewarmCall),
+    'Horizon warm-ups must start before Java warm-ups, without requiring a mode switch',
+  );
+  assert.match(main, /function prewarmSelectedHorizonInstance\(instanceIdOverride\)/);
+  assert.match(main, /if \(launcherState\.settings\?\.horizonPrewarmByInstance\?\.\[instanceId\] === false\)/);
+  const enabledPrewarm = main.slice(
+    main.indexOf('async function prewarmEnabledHorizonInstances()'),
+    main.indexOf('async function stopHorizonPrewarmedProcesses()', main.indexOf('async function prewarmEnabledHorizonInstances()')),
+  );
+  assert.match(enabledPrewarm, /ensureHorizonLauncherInstalled\(\)/);
+  assert.ok(enabledPrewarm.indexOf('ensureHorizonLauncherInstalled()') < enabledPrewarm.indexOf('await getHorizonInstances()'));
 });
 
 test('Horizon cards use the shared grid with profile metadata and no Java loader chips', () => {
@@ -100,6 +123,7 @@ test('opening a Horizon profile populates the shared Java profile header and tab
     ['pdSub', { textContent: '' }],
     ['horizonProfileName', { value: '' }],
     ['horizonProfileVersion', { value: '' }],
+    ['horizonPrewarmEnabled', { checked: false }],
     ['horizonProfileStatus', { hidden: false }],
   ]);
   const calls = [];
@@ -107,6 +131,7 @@ test('opening a Horizon profile populates the shared Java profile header and tab
     HORIZON_MINECRAFT_VERSION: '26.3',
     horizonInstances: [{ id: 'alpha', name: 'Alpha', kind: 'own', version: '26.3' }],
     horizonSelectedInstanceId: '',
+    state: { settings: {} },
     document: { getElementById: id => nodes.get(id) || null },
     async selectHorizonInstance(id) { context.horizonSelectedInstanceId = String(id); return true; },
     populateHorizonJavaProfiles() {},
@@ -239,18 +264,14 @@ test('Horizon Play skips repeated preparation for ready builds and verifies firs
   const warmRestore = handler.indexOf("warmState.windowController.control(warmState.child.pid, 'restore')");
   const preparedCheck = handler.indexOf('isHorizonBuildPrepared(horizonBuild)');
   const accountCheck = handler.indexOf("runHorizonCli(['account', 'list']");
-  const preparedGuard = handler.indexOf('if (!prepared)');
-  const prepare = handler.indexOf('runHorizonCli(buildHorizonPrepareArgs(horizonBuild)');
-  const ownershipGate = handler.indexOf('getHorizonAccountRequirement(accountResult.accounts)');
-  const downloadPrepare = handler.indexOf('buildHorizonPrepareArgs(horizonBuild, { download: true })');
+  const prepare = handler.indexOf('ensureHorizonBuildPrepared(horizonBuild, prepared, accountResult, sendPreparingStatus)');
   const spawn = handler.indexOf('startHorizonClient(instance, executablePath, roots)');
   assert.ok(warmCheck >= 0 && warmRestore > warmCheck && warmCheck < selectedBuild, 'A ready warm process must be reused before running CLI checks');
   assert.ok(selectedBuild >= 0 && preparedCheck > selectedBuild, 'Horizon must check preparation for its selected installed build');
-  assert.ok(accountCheck > selectedBuild && accountCheck < preparedGuard, 'Account state should be read alongside the prepared-state check');
-  assert.ok(preparedGuard > preparedCheck && prepare > preparedGuard, 'A prepared build must skip the prepare command');
-  assert.ok(ownershipGate > prepare && downloadPrepare > ownershipGate, 'A failed local prepare must check ownership before Mojang download');
-  assert.ok(spawn > downloadPrepare, 'Horizon must verify preparation before starting a cold play process');
-  assert.match(handler, /if \(!prepared\) \{/);
+  assert.ok(accountCheck > selectedBuild && accountCheck < prepare, 'Account state should be read alongside the prepared-state check');
+  assert.ok(prepare > preparedCheck, 'The launch path must prepare resources only after checking the selected build');
+  assert.match(main, /async function ensureHorizonBuildPrepared[\s\S]*?runHorizonCli\(buildHorizonPrepareArgs\(buildTag\)[\s\S]*?getHorizonAccountRequirement\(accountResult\?\.accounts\)[\s\S]*?buildHorizonPrepareArgs\(buildTag, \{ download: true \}\)/);
+  assert.ok(spawn > prepare, 'Horizon must verify preparation before starting a cold play process');
   assert.match(handler, /preparing: true/);
   assert.match(html, /processState\?\.preparing/);
   assert.match(main, /HORIZON_(?:SIGN_IN|OWNERSHIP)_REQUIRED/);
@@ -258,10 +279,18 @@ test('Horizon Play skips repeated preparation for ready builds and verifies firs
 
 test('Horizon stays hidden during warm-up and starts warming again after Play exits', () => {
   assert.match(main, /function prewarmSelectedHorizonInstance\(instanceIdOverride\)/);
-  assert.match(main, /windowController\.control\(0, 'hide-prewarm',\s*\{[\s\S]*?waitForWindow: true/);
+  assert.match(main, /while \(Date\.now\(\) < windowDeadline && !result\.windows\)[\s\S]*?windowController\.control\(child\.pid, 'hide-prewarm',\s*\{[\s\S]*?waitForWindow: false[\s\S]*?windowController\.control\(child\.pid, 'mute-process-audio'/);
+  assert.match(main, /function restoreHorizonPrewarmAudio\(state\)[\s\S]*?restore-process-audio/);
+  assert.match(horizonProcess, /volume = \(ISimpleAudioVolume\)session;/);
+  assert.match(horizonProcess, /-notin @\('limit-process-tree', 'mute-process-audio', 'restore-process-audio', 'restore-process-limits'\)/);
+  assert.match(main, /emitStatus\(`Prewarm complete: Horizon profile \$\{instance\.name\} is ready\.`\)/);
+  assert.match(main, /emitStatus\(`Prewarm complete: Java profile \$\{profile\.name\} is ready\.`\)/);
+  assert.match(html, /if \(\/\^Prewarm complete:\/i\.test\(text\)\)[\s\S]*?addNotification\('Prewarm complete'/);
   assert.match(main, /function acquireHorizonPrewarmCover\(\)/);
   assert.match(main, /releaseWindowCover = acquireHorizonPrewarmCover\(\)/);
   assert.match(main, /mainWindow\.setAlwaysOnTop\(true\)/);
+  assert.match(main, /mainWindow\.setAlwaysOnTop\(false\)/);
+  assert.doesNotMatch(main, /horizonPrewarmCoverWasAlwaysOnTop/);
   assert.match(main, /releaseWindowCover\(\);\s*state\.ready = true/);
   assert.match(main, /state\.activated && !horizonPrewarmShutdownRequested[\s\S]*?prewarmSelectedHorizonInstance\(instance\.id\)/);
   assert.match(main, /warmState\.activated = true/);
@@ -276,10 +305,23 @@ test('Horizon stays hidden during warm-up and starts warming again after Play ex
   assert.match(horizonProcess, /wasHidden/);
   assert.match(horizonProcess, /SetForegroundWindow\(window\)/);
   assert.match(horizonProcess, /ActivateWindow\(titledWindow\)/);
+  assert.match(horizonProcess, /IsJavaToolkitWindow\(window\)/);
+  assert.match(horizonProcess, /action == "hide-process"[\s\S]*?hiddenWindows\.Contains\(window\) && !IsJavaToolkitWindow\(window\)/);
+  assert.match(horizonProcess, /monitorWindows = action == "hide" \|\| action == "hide-process"/);
   assert.match(main, /windowController\.control\(0, 'hide-terminal', \{ waitForWindow: false \}\)/);
   assert.match(main, /windowController\.control\(0, 'hide-prewarm', \{ waitForWindow: false \}\)/);
   assert.match(main, /warmState\.windowController\.control\(warmState\.child\.pid, 'hide-terminal', \{ waitForWindow: false \}\)/);
   assert.match(main, /windowController\.control\(child\.pid, 'hide-terminal', \{ waitForWindow: false \}\)/);
+});
+
+test('prewarm CPU is capped until Play and fresh Minecraft launches are foregrounded', () => {
+  assert.match(horizonProcess, /PrewarmCpuRate = 5000/);
+  assert.match(horizonProcess, /CpuRateControlEnabled \| CpuRateControlHardCap/);
+  assert.match(main, /limit-process-tree/);
+  assert.match(main, /restore-process-limits/);
+  assert.match(main, /activateMinecraftWindow\(child\.pid, profile\.name\)/);
+  assert.match(main, /control\(child\.pid, 'restore', \{\s*timeoutMs: 30_000,\s*waitForWindow: true/);
+  assert.match(main, /blurLauncherWindowForGame\(\)/);
 });
 
 test('closing the launcher requests app shutdown before the window is destroyed', () => {
@@ -442,6 +484,85 @@ test('Horizon renderer reports IPC failures in its inline status region', () => 
   assert.match(html, /id="horizonProfileStatus"[^>]*role="status"/);
   assert.match(html, /catch \(error\) \{\s*setHorizonStatus\(error\?\.message \|\| String\(error\), true\);/);
   assert.match(html, /id="horizonProfileLogStatus" role="status"/);
+});
+
+test('Java profile tabs clear stale Horizon status text', () => {
+  const setPdTab = extractFunction('function setPdTab(tab){', '\nconst PROFILE_SYNC_CATEGORIES =');
+  const ids = [
+    'pdtab-content',
+    'pdtab-settings',
+    'pdtab-logs',
+    'pd-content-view',
+    'pd-settings-view',
+    'pd-logs-view',
+    'javaProfileContent',
+    'horizonProfileContent',
+    'javaProfileSettings',
+    'horizonProfileSettings',
+    'javaProfileLogs',
+    'horizonProfileLogs',
+    'horizonProfileStatus',
+  ];
+  const elements = new Map(ids.map(id => [id, {
+    classList: { toggle() {} },
+    style: {},
+    hidden: false,
+    textContent: id === 'horizonProfileStatus' ? 'Showing the ready Horizon window for Horizon…' : '',
+  }]));
+  const context = {
+    document: { getElementById: id => elements.get(id) },
+    horizonModeActive: false,
+    currentProfileId: null,
+    renderProfileLogs() {},
+  };
+  vm.runInNewContext(`${setPdTab}\nsetPdTab('content')`, context);
+
+  assert.equal(elements.get('horizonProfileStatus').hidden, true);
+  assert.equal(elements.get('horizonProfileStatus').textContent, '');
+  assert.equal(elements.get('javaProfileContent').hidden, false);
+});
+
+test('profile log tabs show only the active mode logs', () => {
+  const setPdTab = extractFunction('function setPdTab(tab){', '\nconst PROFILE_SYNC_CATEGORIES =');
+  const ids = [
+    'pdtab-content',
+    'pdtab-settings',
+    'pdtab-logs',
+    'pd-content-view',
+    'pd-settings-view',
+    'pd-logs-view',
+    'javaProfileContent',
+    'horizonProfileContent',
+    'javaProfileSettings',
+    'horizonProfileSettings',
+    'javaProfileLogs',
+    'horizonProfileLogs',
+    'horizonProfileStatus',
+  ];
+  const elements = new Map(ids.map(id => [id, {
+    classList: { toggle() {} },
+    style: {},
+    hidden: false,
+    textContent: '',
+  }]));
+  const context = {
+    document: { getElementById: id => elements.get(id) },
+    horizonModeActive: false,
+    currentProfileId: null,
+    renderProfileLogs() {},
+    loadHorizonLogs() {},
+  };
+  vm.runInNewContext(`${setPdTab}\nsetPdTab('logs')`, context);
+  assert.equal(elements.get('javaProfileLogs').style.display, 'flex');
+  assert.equal(elements.get('horizonProfileLogs').hidden, true);
+  assert.equal(elements.get('horizonProfileLogs').style.display, 'none');
+
+  context.horizonModeActive = true;
+  vm.runInNewContext('setPdTab("logs")', context);
+  assert.equal(elements.get('javaProfileLogs').hidden, true);
+  assert.equal(elements.get('javaProfileLogs').style.display, 'none');
+  assert.equal(elements.get('horizonProfileLogs').hidden, false);
+  assert.equal(elements.get('horizonProfileLogs').style.display, 'flex');
 });
 
 test('Java profile browser retains its original scrolling layout', () => {

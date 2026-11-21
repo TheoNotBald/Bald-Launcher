@@ -13,12 +13,17 @@ public final class SafeWalk extends Module {
             { 1.0, 1.0 }, { 1.0, -1.0 }, { -1.0, 1.0 }, { -1.0, -1.0 }
     };
 
-    private final Setting edgeMargin = setting(Setting.decimal("Edge margin", 0.3, 0.1, 0.5));
+    // Sneak input is sampled one tick after the key state changes, so the
+    // default margin has to cover a full sprint step or SafeWalk reaches the
+    // edge before crouching starts.
+    private final Setting edgeMargin = setting(Setting.decimal("Edge margin", 0.45, 0.1, 0.6));
     private final Setting includeDiagonalEdges = setting(Setting.bool("Check diagonal edges", true));
-    private Object forcedPlayer;
+    private Object forcedKey;
+    private boolean forcedKeyInjected;
+    private boolean forcedKeyWasPressed;
 
     public SafeWalk() {
-        super("SafeWalk", Category.MOVEMENT, true);
+        super("SafeWalk", Category.MOVEMENT);
     }
 
     @Override
@@ -56,16 +61,7 @@ public final class SafeWalk extends Module {
             }
         }
         if (nearEdge) {
-            Object sneaking = Reflect.call(player, "isShiftKeyDown");
-            if (!(sneaking instanceof Boolean state)) {
-                throw new IllegalStateException("Could not read player sneak state");
-            }
-            if (!state) {
-                if (!Reflect.invoke(player, "setShiftKeyDown", true)) {
-                    throw new IllegalStateException("Could not enable edge sneak");
-                }
-                forcedPlayer = player;
-            }
+            forceSneak();
         } else {
             releaseForcedSneak();
         }
@@ -81,36 +77,58 @@ public final class SafeWalk extends Module {
         releaseForcedSneak();
     }
 
-    private void releaseForcedSneak() {
-        Object player = forcedPlayer;
-        if (player == null) {
+    private void forceSneak() {
+        if (forcedKeyInjected) {
             return;
         }
-        Object current = Reflect.call(player, "isShiftKeyDown");
         Object mc = Reflect.instance();
-        Object options = Reflect.getField(mc, "options");
-        Object shiftKey = Reflect.getField(options, "keyShift");
-        Object physicalState = Reflect.call(shiftKey, "isPressed");
-        boolean shouldSneak = physicalState instanceof Boolean down && down;
-        if (current instanceof Boolean state && state != shouldSneak
-                && !Reflect.invoke(player, "setShiftKeyDown", shouldSneak)) {
+        Object options = mc == null ? null : Reflect.getField(mc, "options");
+        Object key = options == null ? null : Reflect.getFieldAny(options, "keyShift", "sneakKey");
+        if (key == null) {
+            throw new IllegalStateException("Could not resolve the sneak key binding");
+        }
+        Object pressed = Reflect.call(key, "isPressed");
+        if (!(pressed instanceof Boolean)) {
+            pressed = Reflect.call(key, "isDown");
+        }
+        forcedKeyWasPressed = Boolean.TRUE.equals(pressed);
+        if (forcedKeyWasPressed) {
+            return;
+        }
+        if (!Reflect.invoke(key, "setPressed", true)
+                && !Reflect.setField(key, "isDown", true)) {
+            throw new IllegalStateException("Could not enable edge sneak");
+        }
+        forcedKey = key;
+        forcedKeyInjected = true;
+    }
+
+    private void releaseForcedSneak() {
+        Object key = forcedKey;
+        boolean injected = forcedKeyInjected;
+        forcedKey = null;
+        forcedKeyInjected = false;
+        if (!injected || key == null || forcedKeyWasPressed) {
+            return;
+        }
+        forcedKeyWasPressed = false;
+        if (!Reflect.invoke(key, "setPressed", false)
+                && !Reflect.setField(key, "isDown", false)) {
             throw new IllegalStateException("Could not restore player sneak state");
         }
-        forcedPlayer = null;
     }
 
     private boolean solid(Object world, double x, double y, double z) {
-        Class<?> blockPos = bl.mc.Types.find("net/minecraft/core/BlockPos");
-        if (blockPos == null) {
-            throw new IllegalStateException("Minecraft BlockPos type is unavailable");
-        }
-        Object pos = Reflect.call(blockPos, "containing", x, y, z);
-        if (pos == null) {
-            throw new IllegalStateException("Could not create block position");
-        }
-        Object state = Reflect.call(world, "getBlockState", pos);
+        Object state = Worlds.blockState(world, x, y, z);
         if (state == null) {
-            throw new IllegalStateException("Could not read block below player");
+            // An unloaded or unreadable position is treated as air so SafeWalk
+            // errs toward sneaking instead of disabling itself mid-game.
+            return false;
+        }
+        Class<?> blockPos = bl.mc.Types.find("net/minecraft/core/BlockPos");
+        Object pos = blockPos == null ? null : Reflect.call(blockPos, "containing", x, y, z);
+        if (pos == null) {
+            return false;
         }
         Object shape = Reflect.call(state, "getCollisionShape", world, pos);
         if (shape != null) {

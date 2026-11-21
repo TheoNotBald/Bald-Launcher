@@ -42,6 +42,7 @@ public final class Velocity extends Module {
             () -> !jumpReset()));
     private final Setting vertical = setting(Setting.decimal("Vertical knockback", 0.85, 0.0, 1.0,
             () -> !jumpReset()));
+    private final Setting autoForward = setting(Setting.bool("Auto forward", true));
     private final Setting auraOnly = setting(Setting.bool("Only with KillAura", false));
     private final Setting groundedOnly = setting(Setting.bool("Only while grounded", false));
 
@@ -50,6 +51,8 @@ public final class Velocity extends Module {
     private int jumpRetryTicks;
     private boolean jumpKeyInjected;
     private int releaseTicks;
+    private boolean forwardKeyInjected;
+    private int forwardReleaseTicks;
     private boolean velocitySeeded;
     private double lastVelocityX;
     private double lastVelocityY;
@@ -102,7 +105,8 @@ public final class Velocity extends Module {
     }
 
     private void queueJump() {
-        if (jumpKeyInjected || !movingForward()) return;
+        if (jumpKeyInjected) return;
+        if (!autoForward.getBool() && !movingForward()) return;
         int delay = jumpDelay.getInt();
         jumpQueued = true;
         jumpDelayTicks = delay;
@@ -122,7 +126,7 @@ public final class Velocity extends Module {
             return false;
         }
         Object jumpKey = jumpKey(minecraft);
-        if (jumpKey == null || !movingForward(minecraft)) return false;
+        if (jumpKey == null || !ensureForward(minecraft)) return false;
         if (Boolean.TRUE.equals(Reflect.call(jumpKey, "isPressed"))) {
             return true;
         }
@@ -131,6 +135,28 @@ public final class Velocity extends Module {
         }
         jumpKeyInjected = true;
         releaseTicks = 1;
+        return true;
+    }
+
+    private boolean ensureForward(Object minecraft) {
+        if (movingForward(minecraft)) {
+            return true;
+        }
+        if (!autoForward.getBool()) {
+            return false;
+        }
+        Object forwardKey = forwardKey(minecraft);
+        if (forwardKey == null) {
+            return false;
+        }
+        if (Boolean.TRUE.equals(Reflect.call(forwardKey, "isPressed"))) {
+            return true;
+        }
+        if (!Reflect.invoke(forwardKey, "setPressed", true)) {
+            throw new IllegalStateException("Could not press the forward key for a jump reset");
+        }
+        forwardKeyInjected = true;
+        forwardReleaseTicks = 1;
         return true;
     }
 
@@ -148,6 +174,20 @@ public final class Velocity extends Module {
         }
     }
 
+    private void releaseForwardKey() {
+        if (!forwardKeyInjected) {
+            return;
+        }
+        forwardKeyInjected = false;
+        Object forwardKey = forwardKey();
+        if (forwardKey == null) {
+            return;
+        }
+        if (!Reflect.invoke(forwardKey, "setPressed", false)) {
+            throw new IllegalStateException("Could not release the forward key after a jump reset");
+        }
+    }
+
     private Object jumpKey() {
         Object minecraft = Reflect.instance();
         return minecraft == null ? null : jumpKey(minecraft);
@@ -155,7 +195,17 @@ public final class Velocity extends Module {
 
     private Object jumpKey(Object minecraft) {
         Object options = Reflect.getField(minecraft, "options");
-        return options == null ? null : Reflect.getField(options, "jumpKey");
+        return options == null ? null : Reflect.getFieldAny(options, "keyJump", "jumpKey");
+    }
+
+    private Object forwardKey() {
+        Object minecraft = Reflect.instance();
+        return minecraft == null ? null : forwardKey(minecraft);
+    }
+
+    private Object forwardKey(Object minecraft) {
+        Object options = Reflect.getField(minecraft, "options");
+        return options == null ? null : Reflect.getFieldAny(options, "keyUp", "forwardKey");
     }
 
     private boolean movingForward() {
@@ -164,8 +214,7 @@ public final class Velocity extends Module {
     }
 
     private boolean movingForward(Object minecraft) {
-        Object options = Reflect.getField(minecraft, "options");
-        Object forward = options == null ? null : Reflect.getField(options, "forwardKey");
+        Object forward = forwardKey(minecraft);
         return Boolean.TRUE.equals(Reflect.call(forward, "isPressed"));
     }
 
@@ -205,6 +254,7 @@ public final class Velocity extends Module {
             jumpQueued = false;
             jumpRetryTicks = 0;
             releaseJumpKey();
+            releaseForwardKey();
             return;
         }
         detectKnockback();
@@ -213,6 +263,13 @@ public final class Velocity extends Module {
                 releaseTicks--;
             } else {
                 releaseJumpKey();
+            }
+        }
+        if (forwardKeyInjected) {
+            if (forwardReleaseTicks > 0) {
+                forwardReleaseTicks--;
+            } else {
+                releaseForwardKey();
             }
         }
         if (!jumpQueued) {
@@ -246,6 +303,9 @@ public final class Velocity extends Module {
             return;
         }
         Object movement = Reflect.call(player, "getVelocity");
+        if (movement == null) {
+            movement = Reflect.call(player, "getDeltaMovement");
+        }
         if (movement == null) return;
         double x = componentOrNaN(movement, "x");
         double y = componentOrNaN(movement, "y");
@@ -287,5 +347,6 @@ public final class Velocity extends Module {
         jumpRetryTicks = 0;
         velocitySeeded = false;
         releaseJumpKey();
+        releaseForwardKey();
     }
 }

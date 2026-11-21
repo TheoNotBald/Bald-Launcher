@@ -5,7 +5,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
@@ -145,7 +144,6 @@ public final class BaldLauncherClient implements ClientModInitializer {
     private static KeyBinding openHudEditorKey;
     private static final long[] CLICK_TIMESTAMPS = new long[64];
     private static int clickTimestampIndex;
-    private static boolean agentLockLookupFailed;
 
     @Override
     public synchronized void onInitializeClient() {
@@ -153,18 +151,6 @@ public final class BaldLauncherClient implements ClientModInitializer {
         initialized = true;
         loadConfiguration();
         loadProfilePreferences();
-        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
-            if (!client.isInSingleplayer()) {
-                armAgentLock();
-                engageAgentLock();
-            }
-        });
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> releaseAgentLock());
-        ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (isAgentLocked()) {
-                enforceAgentLock();
-            }
-        });
         if (!clientModEnabled) return;
         KeyBinding.Category category = KeyBinding.Category.create(
                 Identifier.of("baldlauncher", "client_controls"));
@@ -221,65 +207,6 @@ public final class BaldLauncherClient implements ClientModInitializer {
                 }
             }
         });
-    }
-
-    private static void armAgentLock() {
-        invokeAgentLock("arm", new Class<?>[0]);
-    }
-
-    private static void engageAgentLock() {
-        invokeAgentLock("engage", new Class<?>[0]);
-    }
-
-    private static void enforceAgentLock() {
-        invokeAgentLock("enforceDisabled", new Class<?>[0]);
-    }
-
-    private static void releaseAgentLock() {
-        invokeAgentLock("release", new Class<?>[0]);
-    }
-
-    private static boolean isAgentLocked() {
-        try {
-            Class<?> lock = loadAgentLockClass();
-            return (boolean) lock.getMethod("isLocked").invoke(null);
-        } catch (ClassNotFoundException error) {
-            reportMissingAgentLock(error);
-            return false;
-        } catch (ReflectiveOperationException error) {
-            throw new IllegalStateException("Could not check the agent lock state", error);
-        }
-    }
-
-    private static void invokeAgentLock(String method, Class<?>[] parameterTypes, Object... arguments) {
-        try {
-            Class<?> lock = loadAgentLockClass();
-            lock.getMethod(method, parameterTypes).invoke(null, arguments);
-        } catch (ClassNotFoundException error) {
-            reportMissingAgentLock(error);
-        } catch (ReflectiveOperationException error) {
-            throw new IllegalStateException("Could not invoke agent lock method " + method, error);
-        }
-    }
-
-    private static Class<?> loadAgentLockClass() throws ClassNotFoundException {
-        ClassLoader systemLoader = ClassLoader.getSystemClassLoader();
-        try {
-            return Class.forName("bl.AgentLock", true, systemLoader);
-        } catch (ClassNotFoundException systemError) {
-            ClassLoader contextLoader = Thread.currentThread().getContextClassLoader();
-            if (contextLoader == null || contextLoader == systemLoader) {
-                throw systemError;
-            }
-            return Class.forName("bl.AgentLock", true, contextLoader);
-        }
-    }
-
-    private static void reportMissingAgentLock(ClassNotFoundException error) {
-        if (!agentLockLookupFailed) {
-            agentLockLookupFailed = true;
-            System.out.println("[Bald Launcher] Agent lock is unavailable: " + error.getMessage());
-        }
     }
 
     private static void loadConfiguration() {

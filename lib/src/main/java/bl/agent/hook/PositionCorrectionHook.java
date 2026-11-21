@@ -1,5 +1,7 @@
 package bl.agent.hook;
 
+import java.util.List;
+
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.InsnList;
@@ -13,8 +15,12 @@ public final class PositionCorrectionHook implements ClassHook {
 
     @Override
     public void apply(ClassNode node) {
-        for (MethodNode method : Hooks.findRequired(
-                node, Descriptors.PLAYER_POSITION_LOOK, "client player position correction")) {
+        List<MethodNode> handlers = Hooks.findByDescriptor(node, Descriptors.PLAYER_POSITION_LOOK);
+        if (handlers.isEmpty()) {
+            System.out.println("[Bald Agent] position correction hook skipped: no handler in " + node.name);
+            return;
+        }
+        for (MethodNode method : handlers) {
             boolean injected = false;
             for (var instruction = method.instructions.getFirst(); instruction != null;
                     instruction = instruction.getNext()) {
@@ -28,7 +34,8 @@ public final class PositionCorrectionHook implements ClassHook {
                 injected = true;
             }
             if (!injected) {
-                throw new IllegalStateException("Position correction handler has no normal return");
+                System.out.println("[Bald Agent] position correction hook skipped: "
+                        + method.name + " has no normal return");
             }
         }
     }

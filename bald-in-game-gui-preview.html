@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bald Launcher | Minecraft menu concept</title>
+  <style>
+    :root {
+      --green: #83ee5d;
+      --green-light: #b5ff91;
+      --ink: #111713;
+      --muted: #aab5ac;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 22px;
+      color: #fff;
+      background: #090d0b;
+      font-family: "Segoe UI", Arial, sans-serif;
+    }
+
+    button { font: inherit; }
+
+    .game {
+      position: relative;
+      width: min(1440px, 100%);
+      aspect-ratio: 16 / 9;
+      min-height: 590px;
+      overflow: hidden;
+      border: 1px solid #ffffff22;
+      background: #76a8c0;
+      box-shadow: 0 24px 80px #000b;
+    }
+
+    .sky {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(#71b4d0 0 43%, #a6c6af 43% 59%, #7b9e4d 59% 100%);
+    }
+
+    .sun {
+      position: absolute;
+      top: 12%;
+      right: 17%;
+      width: 70px;
+      height: 70px;
+      background: #ffe99b;
+      box-shadow: 0 0 55px 14px #fff3b044;
+    }
+
+    .cloud {
+      position: absolute;
+      width: 74px;
+      height: 15px;
+      background: #e8f1df;
+      box-shadow: 18px -14px #e8f1df, 52px 0 #e8f1df, 71px -11px #e8f1df;
+      opacity: .8;
+    }
+
+    .cloud.one { top: 20%; left: 13%; }
+    .cloud.two { top: 31%; right: 31%; transform: scale(.72); opacity: .55; }
+
+    .mountain {
+      position: absolute;
+      bottom: 24%;
+      width: 0;
+      height: 0;
+      border-right: 190px solid transparent;
+      border-bottom: 175px solid #688779;
+      border-left: 190px solid transparent;
+      filter: drop-shadow(45px 20px #587361);
+    }
+
+    .mountain.left { left: 3%; }
+    .mountain.right { right: 2%; transform: scale(1.2); border-bottom-color: #819884; }
+
+    .terrain {
+      position: absolute;
+      inset: 70% 0 0;
+      border-top: 18px solid #85a94d;
+      background:
+        linear-gradient(90deg, transparent 49%, #0000000c 50%, transparent 51%),
+        #6d5136;
+      background-size: 68px 100%, auto;
+      box-shadow: inset 0 4px #a1bb5d;
+    }
+
+    .tree {
+      position: absolute;
+      bottom: 30%;
+      width: 20px;
+      height: 100px;
+      background: #654a2f;
+    }
+
+    .tree::before {
+      position: absolute;
+      top: -76px;
+      left: -39px;
+      width: 98px;
+      height: 88px;
+      background: #4e783f;
+      box-shadow: inset -15px -13px #426b38;
+      content: "";
+    }
+
+    .tree.left { left: 17%; transform: scale(.75); }
+    .tree.right { right: 15%; transform: scale(1.1); }
+
+    .block {
+      position: absolute;
+      bottom: 24%;
+      width: 80px;
+      height: 64px;
+      background:
+        linear-gradient(135deg, transparent 47%, #0002 48%),
+        repeating-linear-gradient(45deg, #8b6944 0 10px, #795c3e 10px 20px);
+      box-shadow: 8px 8px #3f382b, 9px 9px 0 1px #0003;
+    }
+
+    .block.left { left: 9%; transform: scale(.8); }
+    .block.right { right: 11%; bottom: 19%; transform: scale(1.12); }
+
+    .shade { position: absolute; inset: 0; background: #070b0a9c; }
+
+    .screen {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-columns: minmax(220px, .82fr) minmax(330px, .9fr);
+      align-items: center;
+      justify-content: center;
+      gap: clamp(28px, 6vw, 90px);
+      padding: 7%;
+    }
+
+    .branding {
+      justify-self: end;
+      width: min(430px, 100%);
+      text-align: center;
+    }
+
+    .logo-mark {
+      display: grid;
+      width: 78px;
+      height: 78px;
+      margin: 0 auto 15px;
+      place-items: center;
+      border: 3px solid #c8ffb3;
+      color: #10200d;
+      background: var(--green);
+      box-shadow: 0 7px 0 #315e27, 0 0 35px #7ef15e44;
+      font-size: 38px;
+      font-weight: 950;
+      letter-spacing: -5px;
+      text-indent: -4px;
+    }
+
+    .brand-name {
+      color: #fff;
+      font-size: clamp(29px, 4.1vw, 54px);
+      font-weight: 900;
+      letter-spacing: -.055em;
+      line-height: 1;
+      text-shadow: 0 4px #0007;
+    }
+
+    .brand-name span { color: var(--green); }
+
+    .tagline {
+      margin-top: 11px;
+      color: #d1ddd4;
+      font-size: 11px;
+      letter-spacing: .17em;
+      text-transform: uppercase;
+      text-shadow: 0 2px #0008;
+    }
+
+    .credit {
+      margin-top: 35px;
+      color: #e0e9e2;
+      font-size: 11px;
+      text-shadow: 0 2px #0008;
+    }
+
+    .credit strong { color: var(--green-light); font-weight: 700; }
+
+    .skin-card {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      width: min(300px, 100%);
+      margin: 23px auto 0;
+      padding: 10px 13px;
+      border: 1px solid #ffffff36;
+      background: #111915c9;
+      box-shadow: 0 7px 22px #0003, inset 0 1px #ffffff0b;
+      text-align: left;
+      backdrop-filter: blur(5px);
+    }
+
+    .skin-avatar {
+      display: block;
+      width: 56px;
+      height: 76px;
+      flex: 0 0 56px;
+      image-rendering: pixelated;
+      filter: drop-shadow(0 4px 5px #0007);
+    }
+
+    .skin-info { min-width: 0; }
+    .skin-kicker {
+      color: var(--green-light);
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    .skin-name {
+      overflow: hidden;
+      margin-top: 5px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 750;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .skin-status {
+      margin-top: 4px;
+      color: #acb9ae;
+      font-size: 9px;
+    }
+
+    .skin-status::before {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      margin-right: 5px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px #7ef15e99;
+      content: "";
+    }
+
+    .menu {
+      justify-self: start;
+      width: min(390px, 100%);
+      padding: 21px;
+      border: 1px solid #ffffff2b;
+      background: linear-gradient(145deg, #151d18eF, #101612f2);
+      box-shadow: 0 18px 55px #0008, inset 0 1px #ffffff12;
+    }
+
+    .menu-heading {
+      margin: 1px 0 14px;
+      color: #d9e2dc;
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: .15em;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .buttons { display: grid; gap: 8px; }
+
+    .game-button {
+      position: relative;
+      display: flex;
+      min-height: 45px;
+      align-items: center;
+      gap: 11px;
+      padding: 9px 13px;
+      border: 1px solid #ffffff28;
+      color: #eff4ef;
+      background: linear-gradient(#303a34, #242c27);
+      box-shadow: inset 0 1px #ffffff14, 0 2px #080b09;
+      cursor: pointer;
+      text-align: left;
+      transition: transform .1s, border-color .1s, background .1s;
+    }
+
+    .game-button:hover {
+      transform: translateY(-1px);
+      border-color: #aaff91a6;
+      background: linear-gradient(#3a493c, #29352b);
+    }
+
+    .game-button:focus-visible { outline: 2px solid var(--green-light); outline-offset: 2px; }
+
+    .game-button.primary {
+      justify-content: center;
+      min-height: 50px;
+      border-color: #b8ff9a;
+      color: #13200f;
+      background: linear-gradient(#a8ff83, #72d94f);
+      box-shadow: inset 0 1px #ffffffa6, 0 3px #315e27, 0 0 22px #7ef15e20;
+      font-size: 14px;
+      font-weight: 850;
+      text-shadow: 0 1px #ffffff55;
+    }
+
+    .game-button.primary:hover { background: linear-gradient(#c0ff9f, #84e662); }
+
+    .game-button.cosmetics {
+      border-color: #82ef5e78;
+      background: linear-gradient(100deg, #263c29, #202a24);
+    }
+
+    .game-button.performance { border-color: #ffffff28; }
+
+    .icon {
+      display: grid;
+      width: 25px;
+      height: 25px;
+      flex: 0 0 25px;
+      place-items: center;
+      color: #c7d5ca;
+      font-size: 15px;
+    }
+
+    .cosmetics .icon {
+      border: 1px solid #7ef15e55;
+      color: var(--green);
+      background: #7ef15e12;
+    }
+
+    .label { font-size: 12px; font-weight: 720; }
+    .detail { display: block; margin-top: 3px; color: #a5b3a8; font-size: 9px; font-weight: 400; }
+    .chevron { margin-left: auto; color: var(--green); font-size: 19px; }
+
+    .menu-footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid #ffffff17;
+      color: #9eaaa1;
+      font-size: 9px;
+    }
+
+    .key {
+      padding: 3px 6px;
+      border: 1px solid #ffffff2c;
+      color: #e7eee8;
+      background: #ffffff08;
+      font-size: 9px;
+    }
+
+    .version {
+      position: absolute;
+      right: 12px;
+      bottom: 10px;
+      color: #ffffffbd;
+      font-size: 9px;
+      text-shadow: 1px 1px #000;
+    }
+
+    .toast {
+      position: absolute;
+      bottom: 35px;
+      left: 50%;
+      z-index: 2;
+      padding: 9px 13px;
+      transform: translate(-50%, 8px);
+      border: 1px solid #7ef15e55;
+      color: #edffea;
+      background: #111915f5;
+      opacity: 0;
+      pointer-events: none;
+      transition: .16s ease;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .toast.show { transform: translate(-50%, 0); opacity: 1; }
+
+    @media (max-width: 700px) {
+      body { padding: 8px; }
+      .game { min-height: 720px; aspect-ratio: auto; }
+      .screen {
+        grid-template-columns: 1fr;
+        align-content: center;
+        gap: 24px;
+        padding: 28px 18px;
+      }
+      .branding { justify-self: center; }
+      .logo-mark { width: 52px; height: 52px; margin-bottom: 9px; font-size: 27px; }
+      .brand-name { font-size: 34px; }
+      .tagline { margin-top: 7px; font-size: 9px; }
+      .credit { margin-top: 11px; font-size: 9px; }
+      .skin-card { width: min(270px, 100%); margin-top: 13px; padding: 7px 10px; }
+      .skin-avatar { width: 42px; height: 58px; flex-basis: 42px; }
+      .menu { justify-self: center; padding: 16px; }
+      .game-button { min-height: 41px; }
+      .version { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="game" aria-label="Bald Launcher Minecraft-style main menu preview">
+    <div class="sky" aria-hidden="true"></div>
+    <div class="sun" aria-hidden="true"></div>
+    <div class="cloud one" aria-hidden="true"></div>
+    <div class="cloud two" aria-hidden="true"></div>
+    <div class="mountain left" aria-hidden="true"></div>
+    <div class="mountain right" aria-hidden="true"></div>
+    <div class="terrain" aria-hidden="true"></div>
+    <div class="tree left" aria-hidden="true"></div>
+    <div class="tree right" aria-hidden="true"></div>
+    <div class="block left" aria-hidden="true"></div>
+    <div class="block right" aria-hidden="true"></div>
+    <div class="shade" aria-hidden="true"></div>
+
+    <section class="screen">
+      <header class="branding">
+        <div class="logo-mark" aria-hidden="true">B.</div>
+        <div class="brand-name">Bald <span>Launcher</span></div>
+        <div class="tagline">Your Minecraft, your way</div>
+        <div class="credit">Made by <strong>TheoNotBald</strong></div>
+        <div class="skin-card" aria-label="Current skin preview">
+          <canvas class="skin-avatar" width="56" height="76" role="img" aria-label="Illustrative pixel character skin preview"></canvas>
+          <div class="skin-info">
+            <div class="skin-kicker">Current skin</div>
+            <div class="skin-name">TheoNotBald</div>
+            <div class="skin-status">Active in game</div>
+          </div>
+        </div>
+      </header>
+
+      <nav class="menu" aria-label="In-game menu">
+        <div class="menu-heading">Main Menu</div>
+        <div class="buttons">
+          <button class="game-button primary" data-action="singleplayer"><span>Singleplayer</span></button>
+          <button class="game-button" data-action="multiplayer"><span class="icon">⌁</span><span class="label">Multiplayer</span></button>
+          <button class="game-button cosmetics" data-action="cosmetics">
+            <span class="icon">✦</span>
+            <span><span class="label">Cosmetics</span><span class="detail">Skins &amp; capes · Bald Launcher</span></span>
+            <span class="chevron">›</span>
+          </button>
+          <button class="game-button performance" data-action="performance"><span class="icon">◈</span><span class="label">Performance</span></button>
+          <button class="game-button" data-action="options"><span class="icon">⚙</span><span class="label">Options</span></button>
+          <button class="game-button" data-action="quit"><span class="icon">↪</span><span class="label">Quit Game</span></button>
+        </div>
+        <div class="menu-footer">
+          <span>In-game Bald menu concept</span>
+          <span><span class="key">Right Shift</span> close</span>
+        </div>
+      </nav>
+    </section>
+
+    <div class="version">Minecraft · Bald Launcher</div>
+    <div class="toast" role="status" aria-live="polite"></div>
+  </main>
+
+  <script>
+    const toast = document.querySelector(".toast");
+    let timer;
+    const skinCanvas = document.querySelector(".skin-avatar");
+    const skinContext = skinCanvas.getContext("2d");
+    skinContext.imageSmoothingEnabled = false;
+
+    const skinPixels = [
+      ["", "", "#26332b", "#26332b", "#26332b", "#26332b", "", ""],
+      ["", "#26332b", "#26332b", "#26332b", "#26332b", "#26332b", "#26332b", ""],
+      ["", "#c99367", "#c99367", "#c99367", "#c99367", "#c99367", "#c99367", ""],
+      ["", "#c99367", "#29362d", "#c99367", "#c99367", "#29362d", "#c99367", ""],
+      ["", "#c99367", "#372b24", "#c99367", "#c99367", "#372b24", "#c99367", ""],
+      ["", "", "#c99367", "#c99367", "#c99367", "#c99367", "", ""],
+      ["", "", "#4a91bf", "#4a91bf", "#4a91bf", "#4a91bf", "", ""],
+      ["#c99367", "#c99367", "#4a91bf", "#4a91bf", "#4a91bf", "#4a91bf", "#c99367", "#c99367"],
+      ["#c99367", "#c99367", "#3479a9", "#4a91bf", "#4a91bf", "#3479a9", "#c99367", "#c99367"],
+      ["", "", "#4a91bf", "#4a91bf", "#4a91bf", "#4a91bf", "", ""],
+      ["", "", "#263d73", "#263d73", "#263d73", "#263d73", "", ""],
+      ["", "", "#263d73", "#263d73", "#263d73", "#263d73", "", ""],
+      ["", "", "#263d73", "#263d73", "#263d73", "#263d73", "", ""],
+      ["", "#263d73", "#263d73", "", "", "#263d73", "#263d73", ""],
+      ["", "#263d73", "#263d73", "", "", "#263d73", "#263d73", ""],
+      ["", "#263d73", "#263d73", "", "", "#263d73", "#263d73", ""]
+    ];
+    const pixelWidth = skinCanvas.width / 8;
+    const pixelHeight = skinCanvas.height / skinPixels.length;
+    skinPixels.forEach((row, y) => row.forEach((color, x) => {
+      if (!color) return;
+      skinContext.fillStyle = color;
+      skinContext.fillRect(x * pixelWidth, y * pixelHeight, pixelWidth, pixelHeight);
+    }));
+
+    const previewMessages = {
+      singleplayer: "Singleplayer · preview only",
+      multiplayer: "Multiplayer · preview only",
+      cosmetics: "Would open Bald Launcher skins and capes · preview only",
+      performance: "Bald performance controls · preview only",
+      options: "Minecraft options · preview only",
+      quit: "Quit game · preview only"
+    };
+
+    document.querySelectorAll("[data-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        toast.textContent = previewMessages[button.dataset.action];
+        toast.classList.add("show");
+        clearTimeout(timer);
+        timer = setTimeout(() => toast.classList.remove("show"), 1800);
+      });
+    });
+  </script>
+</body>
+</html>

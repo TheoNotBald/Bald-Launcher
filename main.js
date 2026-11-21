@@ -667,6 +667,7 @@ const DEFAULT_STATE = {
       rendererMode: 'vulkan',
       icon: 'B',
       mods: [],
+      prewarmEnabled: true,
       customSkinLoader: {
         enabled: false,
         state: 'disabled',
@@ -696,6 +697,7 @@ const DEFAULT_STATE = {
     playitKeepRunningOnClose: false,
     horizonLauncherPath: '',
     horizonInstanceId: '',
+    horizonPrewarmByInstance: {},
     horizonAccountId: '',
   },
   themes: {
@@ -774,12 +776,13 @@ const launcherStateStore = createStateStore({
   onPersistError: error => console.error('State persistence error:', error),
 });
 const runningProcesses = new Map();
+const javaPrewarmedProcesses = new Map();
+const javaPrewarmTasks = new Map();
 const horizonProcesses = new Map();
 const horizonPrewarmedProcesses = new Map();
 const horizonPrewarmTasks = new Map();
 let horizonPrewarmShutdownRequested = false;
 let horizonPrewarmCoverCount = 0;
-let horizonPrewarmCoverWasAlwaysOnTop = false;
 const profilePlaytimeIntervals = new Map();
 const serverProcesses = new Map();
 const serverStartupTasks = new Map();
@@ -2665,14 +2668,14 @@ function accountProfilePlaytime(profileId) {
 }
 
 function startProfilePlaytimeTracking(profile, session, startedAt = Date.now()) {
-  if (!profile || !session) return;
+  if (!profile || !session || session.running !== true) return;
   if (!Number.isFinite(Number(session.playtimeStartedAt))) {
     session.playtimeStartedAt = startedAt;
   }
   if (!Number.isFinite(Number(session.playtimeLastAccountedAt))) {
     session.playtimeLastAccountedAt = session.playtimeStartedAt;
   }
-  profile.lastPlayedAt = Number(profile.lastPlayedAt) || startedAt;
+  profile.lastPlayedAt = startedAt;
   const existing = profilePlaytimeIntervals.get(profile.id);
   if (existing) clearInterval(existing);
   const interval = setInterval(() => accountProfilePlaytime(profile.id), 15000);
@@ -2755,7 +2758,9 @@ function normalizeProfile(profile) {
       : null,
     mcVersion,
     loader,
+    fabricLoaderVersion: loader === 'fabric' ? normalizeFabricLoaderVersion(profile?.fabricLoaderVersion) : '',
     rendererMode,
+    prewarmEnabled: profile?.prewarmEnabled !== false,
     icon: String(profile?.icon || name.slice(0, 1).toUpperCase()).slice(0, 2),
     modpackIconUrl: String(profile?.modpackIconUrl || '').slice(0, 1000) || null,
     javaPath: String(profile?.javaPath || '').trim(),
@@ -3138,6 +3143,11 @@ function normalizeSettings(settings) {
     playitKeepRunningOnClose: settings?.playitKeepRunningOnClose === true,
     horizonLauncherPath: String(settings?.horizonLauncherPath || '').trim().slice(0, 2048),
     horizonInstanceId: String(settings?.horizonInstanceId || '').trim().slice(0, 160),
+    horizonPrewarmByInstance: settings?.horizonPrewarmByInstance && typeof settings.horizonPrewarmByInstance === 'object'
+      ? Object.fromEntries(Object.entries(settings.horizonPrewarmByInstance)
+        .filter(([id, enabled]) => typeof id === 'string' && id.length > 0 && typeof enabled === 'boolean')
+        .slice(0, 500))
+      : {},
     horizonAccountId: String(settings?.horizonAccountId || '').trim().slice(0, 160),
     ...normalizeBaldMenuSettings(settings),
   };
@@ -3506,8 +3516,17 @@ async function getLaunchAuthorization(account) {
     scheduleStateWrite();
     return authorization;
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`Could not refresh the Minecraft session for "${account.name}". Relink this Microsoft account from the Accounts screen and try again. (${reason})`);
+    const reason = [
+      error instanceof Error ? error.message : null,
+      typeof error === 'string' ? error : null,
+      typeof error?.message === 'string' ? error.message : null,
+      typeof error?.error_description === 'string' ? error.error_description : null,
+      typeof error?.error?.message === 'string' ? error.error.message : null,
+      typeof error?.error?.error_description === 'string' ? error.error.error_description : null,
+    ].find(value => value && value.trim()) || 'The authentication provider returned an error.';
+    const refreshError = new Error(`Could not refresh the Minecraft session for "${account.name}". Relink this Microsoft account from the Accounts screen and try again. (${reason.slice(0, 240)})`);
+    refreshError.code = 'MINECRAFT_SESSION_REFRESH_FAILED';
+    throw refreshError;
   }
 }
 
@@ -3515,15 +3534,18 @@ function getActiveProfile() {
   return launcherState.profiles.find(p => p.id === launcherState.activeProfileId) || launcherState.profiles[0] || null;
 }
 
-function getLoaderCachePath(profile, mcVersion, loader) {
-  return path.join(getMinecraftRootFor(profile.id), 'versions', `.bald-${loader}-${mcVersion}.json`);
+function getLoaderCachePath(profile, mcVersion, loader, loaderVersion = '') {
+  const versionSuffix = loader === 'fabric' && loaderVersion ? `-${loaderVersion}` : '';
+  return path.join(getMinecraftRootFor(profile.id), 'versions', `.bald-${loader}-${mcVersion}${versionSuffix}.json`);
 }
 
-function getLoaderVersionId(profile, mcVersion, loader) {
-  const cachePath = getLoaderCachePath(profile, mcVersion, loader);
+function getLoaderVersionId(profile, mcVersion, loader, loaderVersion = '') {
+  const cachePath = getLoaderCachePath(profile, mcVersion, loader, loaderVersion);
   try {
     const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-    if (cached.versionId && fs.existsSync(path.join(getMinecraftRootFor(profile.id), 'versions', cached.versionId, `${cached.versionId}.json`))) {
+    if ((!loaderVersion || cached.loaderVersion === loaderVersion)
+      && cached.versionId
+      && fs.existsSync(path.join(getMinecraftRootFor(profile.id), 'versions', cached.versionId, `${cached.versionId}.json`))) {
       return cached.versionId;
     }
   } catch (_error) {
@@ -4113,6 +4135,46 @@ async function ensureFabricApi(profile) {
   return true;
 }
 
+function normalizeFabricLoaderVersion(version) {
+  const normalized = String(version || '').trim();
+  return /^[0-9][a-zA-Z0-9.+_-]{0,39}$/.test(normalized) ? normalized : '';
+}
+
+function normalizeFabricLoaderVersions(items) {
+  const versions = (Array.isArray(items) ? items : [])
+    .map(item => normalizeFabricLoaderVersion(item?.loader?.version))
+    .filter((version, index, list) => version && list.indexOf(version) === index);
+  const stableVersions = (Array.isArray(items) ? items : [])
+    .filter(item => item?.loader?.stable === true)
+    .map(item => normalizeFabricLoaderVersion(item?.loader?.version))
+    .filter((version, index, list) => version && list.indexOf(version) === index);
+  return stableVersions.length ? stableVersions : versions;
+}
+
+async function getFabricLoaderVersions(mcVersion) {
+  const version = String(mcVersion || '').trim();
+  if (!/^\d+\.\d+(?:\.\d+)?$/.test(version)) throw new Error('A valid Minecraft version is required to list Fabric Loader versions.');
+  const cachePath = path.join(app.getPath('userData'), 'cache', `fabric-loader-versions-${version}.json`);
+  try {
+    const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+    const cachedVersions = Array.isArray(cached.versions)
+      ? cached.versions.map(normalizeFabricLoaderVersion).filter((item, index, list) => item && list.indexOf(item) === index)
+      : [];
+    if (Date.now() - cached.fetchedAt < VERSION_CACHE_TTL_MS && cachedVersions.length) {
+      return cachedVersions;
+    }
+  } catch (_error) {}
+  const response = await axios.get(`https://meta.fabricmc.net/v2/versions/loader/${encodeURIComponent(version)}`, {
+    timeout: 15000,
+    headers: { 'User-Agent': 'BaldLauncher/0.1.0 (contact: none)' },
+  });
+  const versions = normalizeFabricLoaderVersions(response.data);
+  if (!versions.length) throw new Error(`No Fabric Loader versions are available for Minecraft ${version}.`);
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fs.writeFileSync(cachePath, JSON.stringify({ fetchedAt: Date.now(), versions }));
+  return versions;
+}
+
 async function getLoaderManifest(mcVersion, loader) {
   const cachePath = path.join(app.getPath('userData'), 'cache', `${loader}-${mcVersion}.json`);
   try {
@@ -4149,8 +4211,15 @@ function runInstaller(javaPath, installerPath, args, cwd) {
   return runInstallerProcess(spawn, javaPath, installerPath, args, cwd, emitStatus);
 }
 
-function findInstalledVersionId(rootPath, mcVersion, loader, before) {
+function findInstalledVersionId(rootPath, mcVersion, loader, before, loaderVersion = '') {
   const versionsPath = path.join(rootPath, 'versions');
+  if (loader === 'fabric' && loaderVersion) {
+    const expectedId = `fabric-loader-${loaderVersion}-${mcVersion}`;
+    return fs.readdirSync(versionsPath, { withFileTypes: true })
+      .some(entry => entry.isDirectory() && entry.name.toLowerCase() === expectedId.toLowerCase())
+      ? expectedId
+      : null;
+  }
   const matchesLoader = name => loader === 'neoforge'
     ? name.toLowerCase().startsWith('neoforge-') || name.toLowerCase().startsWith(`${mcVersion}-neoforge-`)
     : loader === 'fabric'
@@ -4169,7 +4238,8 @@ function findInstalledVersionId(rootPath, mcVersion, loader, before) {
 async function installLoader(profile) {
   const { mcVersion, loader } = profile;
   if (loader === 'vanilla') return mcVersion;
-  const cachedVersionId = getLoaderVersionId(profile, mcVersion, loader);
+  const requestedFabricLoaderVersion = loader === 'fabric' ? normalizeFabricLoaderVersion(profile.fabricLoaderVersion) : '';
+  const cachedVersionId = getLoaderVersionId(profile, mcVersion, loader, requestedFabricLoaderVersion);
   if (cachedVersionId) return cachedVersionId;
 
   const rootPath = getMinecraftRootFor(profile.id);
@@ -4182,7 +4252,15 @@ async function installLoader(profile) {
   let installerArgs;
 
   if (loader === 'fabric' || loader === 'quilt') {
-    loaderVersion = await getLoaderManifest(mcVersion, loader);
+    if (loader === 'fabric' && requestedFabricLoaderVersion) {
+      const availableVersions = await getFabricLoaderVersions(mcVersion);
+      if (!availableVersions.includes(requestedFabricLoaderVersion)) {
+        throw new Error(`Fabric Loader ${requestedFabricLoaderVersion} is not available for Minecraft ${mcVersion}.`);
+      }
+      loaderVersion = requestedFabricLoaderVersion;
+    } else {
+      loaderVersion = await getLoaderManifest(mcVersion, loader);
+    }
     installerUrl = loader === 'fabric'
       ? 'https://maven.fabricmc.net/net/fabricmc/fabric-installer/1.0.3/fabric-installer-1.0.3.jar'
       : 'https://maven.quiltmc.org/repository/release/org/quiltmc/quilt-installer/0.8.1/quilt-installer-0.8.1.jar';
@@ -4217,9 +4295,15 @@ async function installLoader(profile) {
   if (loader === 'forge' || loader === 'neoforge') ensureLauncherProfilesFile(rootPath);
   emitStatus(`Installing ${loader} ${loaderVersion}...`);
   await runInstaller(javaPath, installerPath, installerArgs, rootPath);
-  const versionId = findInstalledVersionId(rootPath, mcVersion, loader === 'neoforge' ? 'neoforge' : loader, before);
+  const versionId = findInstalledVersionId(
+    rootPath,
+    mcVersion,
+    loader === 'neoforge' ? 'neoforge' : loader,
+    before,
+    requestedFabricLoaderVersion,
+  );
   if (!versionId) throw new Error(`${loader} installer completed but no launch profile was created`);
-  fs.writeFileSync(getLoaderCachePath(profile, mcVersion, loader), JSON.stringify({ loaderVersion, versionId }, null, 2));
+  fs.writeFileSync(getLoaderCachePath(profile, mcVersion, loader, requestedFabricLoaderVersion), JSON.stringify({ loaderVersion, versionId }, null, 2));
   return versionId;
 }
 
@@ -4480,7 +4564,20 @@ function startHorizonClient(instance, executablePath, roots, { prewarming = fals
     ready: !prewarming,
     readiness,
     resolveReadiness,
+    audioMuteTimer: null,
+    audioMuteInFlight: false,
+    audioMuteErrorReported: false,
+    resourceLimitTimer: null,
+    resourceLimitInFlight: false,
+    resourceLimitErrorReported: false,
   };
+  if (prewarming && Number.isSafeInteger(child.pid)) {
+    try {
+      os.setPriority(child.pid, os.constants.priority.PRIORITY_BELOW_NORMAL);
+    } catch (error) {
+      console.warn(`[Horizon] Could not lower background process priority for ${instance.name}:`, error.message);
+    }
+  }
   const closeForegroundController = () => {
     if (state.prewarming || !state.windowController) return;
     const controller = state.windowController;
@@ -4501,6 +4598,10 @@ function startHorizonClient(instance, executablePath, roots, { prewarming = fals
   captureOutput(child.stderr, 'warn');
 
   child.once('error', error => {
+    if (state.audioMuteTimer) clearInterval(state.audioMuteTimer);
+    state.audioMuteTimer = null;
+    if (state.resourceLimitTimer) clearInterval(state.resourceLimitTimer);
+    state.resourceLimitTimer = null;
     closeForegroundController();
     if (horizonProcesses.get(instance.id) === child) horizonProcesses.delete(instance.id);
     if (horizonPrewarmedProcesses.get(instance.id) === state) horizonPrewarmedProcesses.delete(instance.id);
@@ -4520,6 +4621,10 @@ function startHorizonClient(instance, executablePath, roots, { prewarming = fals
     }
   });
   child.once('close', code => {
+    if (state.audioMuteTimer) clearInterval(state.audioMuteTimer);
+    state.audioMuteTimer = null;
+    if (state.resourceLimitTimer) clearInterval(state.resourceLimitTimer);
+    state.resourceLimitTimer = null;
     closeForegroundController();
     if (horizonProcesses.get(instance.id) === child) horizonProcesses.delete(instance.id);
     if (horizonPrewarmedProcesses.get(instance.id) === state) horizonPrewarmedProcesses.delete(instance.id);
@@ -4562,7 +4667,6 @@ function acquireHorizonPrewarmCover() {
     return () => {};
   }
   if (horizonPrewarmCoverCount === 0) {
-    horizonPrewarmCoverWasAlwaysOnTop = mainWindow.isAlwaysOnTop();
     mainWindow.setAlwaysOnTop(true);
   }
   horizonPrewarmCoverCount++;
@@ -4572,8 +4676,106 @@ function acquireHorizonPrewarmCover() {
     released = true;
     horizonPrewarmCoverCount = Math.max(0, horizonPrewarmCoverCount - 1);
     if (horizonPrewarmCoverCount === 0 && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.setAlwaysOnTop(horizonPrewarmCoverWasAlwaysOnTop);
+      mainWindow.setAlwaysOnTop(false);
     }
+  };
+}
+
+function blurLauncherWindowForGame() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setAlwaysOnTop(false);
+    mainWindow.blur();
+  }
+}
+
+function activateMinecraftWindow(pid, profileName) {
+  if (!Number.isSafeInteger(pid)) return;
+  void (async () => {
+    let windowController;
+    try {
+      windowController = createHorizonWindowController();
+      await windowController.ready;
+      const restored = await windowController.control(pid, 'restore-process', {
+        timeoutMs: 30_000,
+        waitForWindow: true,
+      });
+      if (!restored.windows) {
+        console.warn(`[Minecraft] Could not find a game window to bring forward for ${profileName}.`);
+        return;
+      }
+      blurLauncherWindowForGame();
+    } catch (error) {
+      console.warn(`[Minecraft] Could not bring the game window forward for ${profileName}:`, error.message);
+    } finally {
+      await windowController?.close().catch(error => {
+        console.warn(`[Minecraft] Could not stop the game-window controller for ${profileName}:`, error.message);
+      });
+    }
+  })();
+}
+
+function requestJavaProfilePrewarm(profileId) {
+  if (!mainWindow || mainWindow.isDestroyed() || !profileId) return;
+  mainWindow.webContents.send('launcher:prewarm-profile', { profileId });
+}
+
+async function stopJavaPrewarmedProfile(profileId) {
+  const state = javaPrewarmedProcesses.get(String(profileId || ''));
+  if (!state || !state.prewarming || state.child.killed || state.child.exitCode !== null) return { ok: true, stopped: false };
+  state.session.stopRequested = true;
+  try {
+    if (Number.isSafeInteger(state.child.pid)) {
+      await state.windowController.control(state.child.pid, 'close-process', {
+        timeoutMs: 8_000,
+        waitForWindow: false,
+      });
+    }
+    const exited = await new Promise(resolve => {
+      if (state.child.exitCode !== null) return resolve(true);
+      const timer = setTimeout(() => resolve(false), 8_000);
+      state.child.once('close', () => {
+        clearTimeout(timer);
+        resolve(true);
+      });
+    });
+    if (!exited && !state.child.killed && state.child.exitCode === null) {
+      state.child.kill();
+      await new Promise(resolve => {
+        if (state.child.exitCode !== null) return resolve();
+        const timer = setTimeout(resolve, 2_000);
+        state.child.once('close', () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+    }
+    return { ok: true, stopped: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  } finally {
+    if (javaPrewarmedProcesses.get(state.profile.id) === state) javaPrewarmedProcesses.delete(state.profile.id);
+    state.releaseWindowCover?.();
+    await state.windowController?.close().catch(error => {
+      console.warn(`[Prewarm] Could not stop Java window controller for ${state.profile.name}:`, error.message);
+    });
+  }
+}
+
+async function stopJavaPrewarmedProfiles() {
+  for (const profileId of [...javaPrewarmedProcesses.keys()]) {
+    const result = await stopJavaPrewarmedProfile(profileId);
+    if (!result.ok) console.warn(`[Prewarm] Could not stop Java profile ${profileId}:`, result.error);
+  }
+}
+
+function getPrewarmMemoryHeadroomGb(profileMemoryMax = 4) {
+  const freeGb = os.freemem() / 1073741824;
+  const requestedGb = Number(profileMemoryMax);
+  const requiredGb = Number.isFinite(requestedGb) ? Math.min(8, Math.max(4, requestedGb)) : 4;
+  return {
+    allowed: freeGb >= requiredGb,
+    freeGb,
+    requiredGb,
   };
 }
 
@@ -4599,12 +4801,42 @@ async function prewarmHorizonInstance(instance, executablePath, roots, startedAt
     state.windowController = windowController;
     const { spawned } = client;
     await spawned;
-    const result = await windowController.control(0, 'hide-prewarm', {
-      timeoutMs: 30_000,
-      waitForWindow: true,
-    });
+    const windowDeadline = Date.now() + 30_000;
+    let result = { windows: 0 };
+    let audioErrorReported = false;
+    while (Date.now() < windowDeadline && !result.windows) {
+      result = await windowController.control(child.pid, 'hide-prewarm', {
+        timeoutMs: 2_000,
+        waitForWindow: false,
+      });
+      await limitHorizonPrewarmResources(state);
+      try {
+        await windowController.control(child.pid, 'mute-process-audio', {
+          timeoutMs: 2_000,
+          waitForWindow: false,
+        });
+      } catch (audioError) {
+        if (!audioErrorReported) {
+          audioErrorReported = true;
+          console.warn(`[Horizon] Could not mute background audio for ${instance.name}:`, audioError.message);
+        }
+      }
+      if (!result.windows && child.exitCode === null) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
     if (!result.windows) throw new Error('Horizon did not create a game window to prewarm.');
     if (child.exitCode !== null) throw new Error('Horizon exited before its warm-up completed.');
+    state.audioMuteTimer = setInterval(() => {
+      void muteHorizonPrewarmAudio(state).catch(error => {
+        if (state.audioMuteErrorReported) return;
+        state.audioMuteErrorReported = true;
+        console.warn(`[Horizon] Could not keep background audio muted for ${instance.name}:`, error.message);
+      });
+    }, 500);
+    state.resourceLimitTimer = setInterval(() => {
+      void limitHorizonPrewarmResources(state);
+    }, 1_000);
     releaseWindowCover();
     state.ready = true;
     state.resolveReadiness?.({ ok: true });
@@ -4614,10 +4846,13 @@ async function prewarmHorizonInstance(instance, executablePath, roots, startedAt
       prewarmed: true,
       pid: child.pid,
     });
+    emitStatus(`Prewarm complete: Horizon profile ${instance.name} is ready.`);
     console.info(`[Horizon] Background warm-up is ready for ${instance.name} in ${Date.now() - startedAt} ms.`);
     return true;
   } catch (error) {
     if (state) {
+      await restoreHorizonPrewarmResources(state);
+      await restoreHorizonPrewarmAudio(state);
       state.ready = true;
       state.resolveReadiness?.({ ok: false, error });
       if (horizonPrewarmedProcesses.get(instance.id) === state) horizonPrewarmedProcesses.delete(instance.id);
@@ -4656,9 +4891,106 @@ async function prewarmHorizonInstance(instance, executablePath, roots, startedAt
   }
 }
 
+async function muteHorizonPrewarmAudio(state) {
+  if (state.audioMuteInFlight || !Number.isSafeInteger(state.child.pid)
+    || state.child.killed || state.child.exitCode !== null) return;
+  state.audioMuteInFlight = true;
+  try {
+    const result = await state.windowController.control(state.child.pid, 'mute-process-audio', {
+      timeoutMs: 4_000,
+      waitForWindow: false,
+    });
+    if (result.windows > 0 && !state.audioMutedLogWritten) {
+      state.audioMutedLogWritten = true;
+      console.info(`[Horizon] Background audio muted for ${state.instance.name}.`);
+    }
+  } finally {
+    state.audioMuteInFlight = false;
+  }
+}
+
+async function limitHorizonPrewarmResources(state) {
+  if (state.resourceLimitInFlight || !Number.isSafeInteger(state.child.pid)
+    || state.child.killed || state.child.exitCode !== null) return;
+  state.resourceLimitInFlight = true;
+  try {
+    await state.windowController.control(state.child.pid, 'limit-process-tree', {
+      timeoutMs: 4_000,
+      waitForWindow: false,
+    });
+  } catch (error) {
+    if (state.resourceLimitErrorReported) return;
+    state.resourceLimitErrorReported = true;
+    console.warn(`[Horizon] Could not cap background CPU use for ${state.instance.name}:`, error.message);
+  } finally {
+    state.resourceLimitInFlight = false;
+  }
+}
+
+async function restoreHorizonPrewarmResources(state) {
+  if (state.resourceLimitTimer) clearInterval(state.resourceLimitTimer);
+  state.resourceLimitTimer = null;
+  if (!Number.isSafeInteger(state.child.pid) || state.child.exitCode !== null) return;
+  try {
+    await state.windowController.control(state.child.pid, 'restore-process-limits', {
+      timeoutMs: 4_000,
+      waitForWindow: false,
+    });
+  } catch (error) {
+    console.warn(`[Horizon] Could not restore normal CPU use for ${state.instance.name}:`, error.message);
+  }
+}
+
+async function restoreHorizonPrewarmAudio(state) {
+  if (state.audioMuteTimer) clearInterval(state.audioMuteTimer);
+  state.audioMuteTimer = null;
+  if (!Number.isSafeInteger(state.child.pid) || state.child.exitCode !== null) return;
+  try {
+    await state.windowController.control(state.child.pid, 'restore-process-audio', {
+      timeoutMs: 4_000,
+      waitForWindow: false,
+    });
+  } catch (error) {
+    console.warn(`[Horizon] Could not restore audio for ${state.instance.name}:`, error.message);
+  }
+}
+
+async function ensureHorizonBuildPrepared(buildTag, prepared, accountResult, reportStatus = () => {}) {
+  if (prepared) return { ok: true };
+  reportStatus(`Preparing Minecraft resources with Horizon build ${buildTag}…`);
+  try {
+    await runHorizonCli(buildHorizonPrepareArgs(buildTag), { timeoutMs: 10 * 60 * 1000 });
+    if (!(await isHorizonBuildPrepared(buildTag))) {
+      throw new Error('Horizon preparation returned successfully but did not produce complete Minecraft resources.');
+    }
+    return { ok: true };
+  } catch (localPrepareError) {
+    if (accountResult?.error) {
+      return {
+        ok: false,
+        code: 'HORIZON_SIGN_IN_REQUIRED',
+        error: 'Horizon could not prepare Minecraft from a local installation. Sign in to an account that owns Minecraft, then try again.',
+      };
+    }
+    const accountRequirement = getHorizonAccountRequirement(accountResult?.accounts);
+    if (accountRequirement) return { ok: false, ...accountRequirement };
+    reportStatus('Downloading Minecraft resources from Mojang…');
+    try {
+      await runHorizonCli(buildHorizonPrepareArgs(buildTag, { download: true }), { timeoutMs: 10 * 60 * 1000 });
+    } catch (downloadError) {
+      throw new Error(`Horizon could not prepare Minecraft. Local preparation failed: ${localPrepareError.message} Mojang download failed: ${downloadError.message}`);
+    }
+    if (!(await isHorizonBuildPrepared(buildTag))) {
+      throw new Error('Horizon preparation completed but its Minecraft resources are still incomplete. Check Horizon’s preparation output and try again.');
+    }
+    return { ok: true };
+  }
+}
+
 function prewarmSelectedHorizonInstance(instanceIdOverride) {
   if (process.platform !== 'win32' || horizonPrewarmShutdownRequested) return Promise.resolve();
   const instanceId = String(instanceIdOverride || launcherState.settings?.horizonInstanceId || '').trim();
+  if (launcherState.settings?.horizonPrewarmByInstance?.[instanceId] === false) return Promise.resolve();
   if (!instanceId || !String(launcherState.settings?.horizonLauncherPath || '').trim()) return Promise.resolve();
   const existingTask = horizonPrewarmTasks.get(instanceId);
   if (existingTask) return existingTask;
@@ -4666,6 +4998,11 @@ function prewarmSelectedHorizonInstance(instanceIdOverride) {
   const task = (async () => {
     const startedAt = Date.now();
     try {
+      const headroom = getPrewarmMemoryHeadroomGb();
+      if (!headroom.allowed) {
+        console.info(`[Horizon] Background warm-up skipped for ${instanceId}: ${headroom.freeGb.toFixed(1)} GB free; ${headroom.requiredGb.toFixed(1)} GB required.`);
+        return;
+      }
       const executablePath = getConfiguredHorizonLauncher();
       const roots = prepareHorizonHomes();
       const [instance, buildsResult, accountResult] = await Promise.all([
@@ -4679,10 +5016,18 @@ function prewarmSelectedHorizonInstance(instanceIdOverride) {
         console.info(`[Horizon] Background warm-up skipped: ${accountRequirement.message}`);
         return;
       }
-      if (!(await isHorizonBuildPrepared(buildTag))) {
-        console.info(`[Horizon] Background warm-up skipped: ${buildTag} is not prepared yet.`);
+      const prepared = await isHorizonBuildPrepared(buildTag);
+      const preparation = await ensureHorizonBuildPrepared(
+        buildTag,
+        prepared,
+        { accounts: horizonCommandResult(accountResult) },
+        message => console.info(`[Horizon] ${message}`),
+      );
+      if (!preparation.ok) {
+        console.info(`[Horizon] Background warm-up skipped: ${preparation.error}`);
         return;
       }
+      if (launcherState.settings?.horizonPrewarmByInstance?.[instance.id] === false) return;
       if (horizonPrewarmShutdownRequested) return;
       await prewarmHorizonInstance(instance, executablePath, roots, startedAt);
     } catch (error) {
@@ -4696,8 +5041,31 @@ function prewarmSelectedHorizonInstance(instanceIdOverride) {
   return task;
 }
 
-async function stopHorizonPrewarmedProcesses() {
+async function prewarmEnabledHorizonInstances() {
+  if (process.platform !== 'win32' || horizonPrewarmShutdownRequested) return;
+  const instanceSettings = launcherState.settings?.horizonPrewarmByInstance || {};
+  const selectedInstanceId = String(launcherState.settings?.horizonInstanceId || '').trim();
+  const hasEnabledProfile = Object.values(instanceSettings).some(enabled => enabled === true)
+    || (selectedInstanceId && instanceSettings[selectedInstanceId] !== false);
+  if (!String(launcherState.settings?.horizonLauncherPath || '').trim() && !hasEnabledProfile) return;
+  const installation = await ensureHorizonLauncherInstalled();
+  if (!installation.ok) throw new Error(installation.error);
+  const instances = await getHorizonInstances();
+  for (const instance of instances) {
+    if (instance.java) continue;
+    if (launcherState.settings?.horizonPrewarmByInstance?.[instance.id] === false) continue;
+    const headroom = getPrewarmMemoryHeadroomGb();
+    if (!headroom.allowed) {
+      console.info(`[Horizon] Remaining profile warm-ups skipped: ${headroom.freeGb.toFixed(1)} GB free; ${headroom.requiredGb.toFixed(1)} GB required.`);
+      break;
+    }
+    await prewarmSelectedHorizonInstance(instance.id);
+  }
+}
+
+async function stopHorizonPrewarmedProcesses(instanceIdFilter = null) {
   for (const [instanceId, state] of [...horizonPrewarmedProcesses.entries()]) {
+    if (instanceIdFilter && instanceId !== String(instanceIdFilter)) continue;
     const { child, instance } = state;
     if (child.killed || child.exitCode !== null) continue;
     try {
@@ -4732,6 +5100,7 @@ async function stopHorizonPrewarmedProcesses() {
     } catch (error) {
       console.warn(`[Horizon] Could not close prewarmed profile ${instance.name}:`, error.message);
     } finally {
+      await restoreHorizonPrewarmAudio(state);
       try {
         await state.windowController?.close();
       } catch (error) {
@@ -4742,7 +5111,7 @@ async function stopHorizonPrewarmedProcesses() {
   }
 }
 
-ipcMain.handle('horizon:ensure-installed', async () => {
+async function ensureHorizonLauncherInstalled() {
   try {
     prepareHorizonHomes();
     try {
@@ -4814,7 +5183,9 @@ ipcMain.handle('horizon:ensure-installed', async () => {
     sendHorizonSetupProgress({ phase: 'error', message, error: true });
     return { ok: false, error: message };
   }
-});
+}
+
+ipcMain.handle('horizon:ensure-installed', ensureHorizonLauncherInstalled);
 
 async function getHorizonInstances() {
   const result = await runHorizonCli(['instance', 'list']);
@@ -5075,6 +5446,7 @@ ipcMain.handle('horizon:create-instance', async (_event, payload) => {
       horizonInstanceId: created.id,
     });
     scheduleStateWrite();
+    void prewarmSelectedHorizonInstance(created.id);
     return { ok: true, instance: publicHorizonInstance(created) };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -5126,6 +5498,46 @@ ipcMain.handle('horizon:set-instance', async (_event, payload) => {
   }
 });
 
+ipcMain.handle('horizon:set-prewarm', async (_event, payload = {}) => {
+  try {
+    const instance = await resolveHorizonInstance(payload?.instanceId);
+    const enabled = payload?.enabled === true;
+    const settings = normalizeSettings(launcherState.settings);
+    settings.horizonPrewarmByInstance = {
+      ...settings.horizonPrewarmByInstance,
+      [instance.id]: enabled,
+    };
+    launcherState.settings = settings;
+    scheduleStateWrite();
+    if (enabled) {
+      const headroom = getPrewarmMemoryHeadroomGb();
+      if (!headroom.allowed) {
+        return {
+          ok: true,
+          skipped: true,
+          state: launcherState,
+          error: `Prewarm needs about ${headroom.requiredGb.toFixed(1)} GB free RAM; ${headroom.freeGb.toFixed(1)} GB is free.`,
+        };
+      }
+      await prewarmSelectedHorizonInstance(instance.id);
+    } else {
+      await stopHorizonPrewarmedProcesses(instance.id);
+    }
+    return { ok: true, state: launcherState };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error), state: launcherState };
+  }
+});
+
+ipcMain.handle('horizon:prewarm-enabled', async () => {
+  try {
+    await prewarmEnabledHorizonInstances();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
 ipcMain.handle('horizon:launch', async (_event, payload) => {
   try {
     const instanceId = payload?.instanceId || launcherState.settings?.horizonInstanceId;
@@ -5137,9 +5549,17 @@ ipcMain.handle('horizon:launch', async (_event, payload) => {
       const readiness = await warmState.readiness;
       if (readiness.ok && !warmState.child.killed && warmState.child.exitCode === null) {
         const activationStartedAt = Date.now();
+        await restoreHorizonPrewarmResources(warmState);
         const restored = await warmState.windowController.control(warmState.child.pid, 'restore');
         if (!restored.windows) throw new Error('The prewarmed Horizon window could not be restored.');
+        blurLauncherWindowForGame();
+        try {
+          os.setPriority(warmState.child.pid, os.constants.priority.PRIORITY_NORMAL);
+        } catch (error) {
+          console.warn(`[Horizon] Could not restore normal process priority for ${warmState.instance.name}:`, error.message);
+        }
         await warmState.windowController.control(warmState.child.pid, 'hide-terminal', { waitForWindow: false });
+        await restoreHorizonPrewarmAudio(warmState);
         horizonPrewarmedProcesses.delete(instanceKey);
         warmState.prewarming = false;
         warmState.activated = true;
@@ -5186,34 +5606,8 @@ ipcMain.handle('horizon:launch', async (_event, payload) => {
         .then(result => ({ accounts: horizonCommandResult(result) }))
         .catch(error => ({ error })),
     ]);
-    if (!prepared) {
-      sendPreparingStatus(`Preparing Minecraft resources with Horizon build ${horizonBuild}…`);
-      try {
-        await runHorizonCli(buildHorizonPrepareArgs(horizonBuild), { timeoutMs: 10 * 60 * 1000 });
-        if (!(await isHorizonBuildPrepared(horizonBuild))) {
-          throw new Error('Horizon preparation returned successfully but did not produce complete Minecraft resources.');
-        }
-      } catch (localPrepareError) {
-        if (accountResult.error) {
-          return {
-            ok: false,
-            code: 'HORIZON_SIGN_IN_REQUIRED',
-            error: 'Horizon could not prepare Minecraft from a local installation. Sign in to an account that owns Minecraft, then try again.',
-          };
-        }
-        const accountRequirement = getHorizonAccountRequirement(accountResult.accounts);
-        if (accountRequirement) return { ok: false, ...accountRequirement };
-        sendPreparingStatus('Downloading Minecraft resources from Mojang…');
-        try {
-          await runHorizonCli(buildHorizonPrepareArgs(horizonBuild, { download: true }), { timeoutMs: 10 * 60 * 1000 });
-        } catch (downloadError) {
-          throw new Error(`Horizon could not prepare Minecraft. Local preparation failed: ${localPrepareError.message} Mojang download failed: ${downloadError.message}`);
-        }
-        if (!(await isHorizonBuildPrepared(horizonBuild))) {
-          throw new Error('Horizon preparation completed but its Minecraft resources are still incomplete. Check Horizon’s preparation output and try again.');
-        }
-      }
-    }
+    const preparation = await ensureHorizonBuildPrepared(horizonBuild, prepared, accountResult, sendPreparingStatus);
+    if (!preparation.ok) return preparation;
     if (accountResult.error) {
       return {
         ok: false,
@@ -5248,6 +5642,19 @@ ipcMain.handle('horizon:launch', async (_event, payload) => {
           console.warn('[Horizon] Could not stop the terminal window controller:', closeError.message);
         });
       }
+    }
+    if (windowController) {
+      void windowController.control(child.pid, 'restore', {
+        timeoutMs: 30_000,
+        waitForWindow: true,
+      }).then(restored => {
+        if (restored.windows) blurLauncherWindowForGame();
+        else console.warn(`[Horizon] Could not find a game window to bring forward for ${instance.name}.`);
+      }).catch(error => {
+        console.warn(`[Horizon] Could not bring the game window forward for ${instance.name}:`, error.message);
+      });
+    } else {
+      activateMinecraftWindow(child.pid, instance.name);
     }
     state.activated = true;
     sendHorizonProcessState({
@@ -6209,6 +6616,14 @@ ipcMain.handle('launcher:get-renderer-options', async (_event, { mcVersion, load
 
 ipcMain.handle('launcher:get-versions', async () => getVersionManifest());
 
+ipcMain.handle('launcher:get-fabric-loader-versions', async (_event, mcVersion) => {
+  try {
+    return { ok: true, versions: await getFabricLoaderVersions(mcVersion) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
 ipcMain.handle('launcher:custom-skin-loader:resolve', async (_event, payload) => {
   try {
     const profile = payload?.profileId
@@ -6582,6 +6997,7 @@ ipcMain.handle('launcher:create-profile', async (_event, payload) => {
   ensureLauncherGameFolders(getMinecraftRootFor(profile.id));
   applyProfileSyncToNewProfile(profile.id);
   scheduleStateWrite();
+  if (profile.prewarmEnabled) requestJavaProfilePrewarm(profile.id);
   return launcherState;
 });
 
@@ -6617,6 +7033,7 @@ ipcMain.handle('launcher:duplicate-profile', async (_event, payload) => {
     launcherState.activeProfileId = duplicate.id;
     applyProfileSyncToNewProfile(duplicate.id);
     scheduleStateWrite();
+    if (duplicate.prewarmEnabled) requestJavaProfilePrewarm(duplicate.id);
     return { ok: true, state: launcherState, profile: duplicate };
   } catch (error) {
     if (duplicateRoot) {
@@ -7416,15 +7833,22 @@ ipcMain.handle('launcher:import-local-content', async (_event, profileId) => {
 ipcMain.handle('launcher:update-profile', async (_event, payload) => {
   const idx = launcherState.profiles.findIndex(p => p.id === payload?.id);
   if (idx === -1) return { state: launcherState, rendererChanged: false, newRendererMode: null };
+  if (payload?.fabricLoaderVersion !== undefined
+    && String(payload.fabricLoaderVersion || '').trim()
+    && !normalizeFabricLoaderVersion(payload.fabricLoaderVersion)) {
+    return { ok: false, error: 'Select a valid Fabric Loader version.', state: launcherState };
+  }
 
   const previous = launcherState.profiles[idx];
   if (previous.optimizationManaged
     && (String(payload?.mcVersion || previous.mcVersion) !== previous.mcVersion
       || String(payload?.loader || previous.loader).toLowerCase() !== previous.loader
+      || (payload?.fabricLoaderVersion !== undefined
+        && normalizeFabricLoaderVersion(payload.fabricLoaderVersion) !== previous.fabricLoaderVersion)
       || String(payload?.rendererMode || previous.rendererMode) !== previous.rendererMode)) {
     return {
       ok: false,
-      error: 'The Minecraft version and loader of an isolated optimization profile are locked to its verified mod set. Duplicate the profile to customize it.',
+      error: 'The Minecraft version and loader version of an isolated optimization profile are locked to its verified mod set. Duplicate the profile to customize it.',
       state: launcherState,
     };
   }
@@ -7456,6 +7880,16 @@ ipcMain.handle('launcher:delete-profile', async (_event, payload) => {
     return { ok: false, error: 'At least one profile must exist', state: launcherState };
   }
   const profileId = typeof payload === 'string' ? payload : payload?.profileId;
+  const pendingPrewarm = javaPrewarmTasks.get(String(profileId || ''));
+  if (pendingPrewarm) await pendingPrewarm;
+  const activeProcess = runningProcesses.get(profileId);
+  if (activeProcess && !activeProcess.prewarming) {
+    return { ok: false, error: 'Stop Minecraft with this profile before deleting it.', state: launcherState };
+  }
+  if (activeProcess?.prewarming) {
+    const stopResult = await stopJavaPrewarmedProfile(profileId);
+    if (!stopResult.ok) return { ok: false, error: stopResult.error, state: launcherState };
+  }
   const deleteFiles = typeof payload === 'string' ? true : payload?.deleteFiles === true;
   const profileRoot = getMinecraftRootFor(profileId);
   launcherState.profiles = launcherState.profiles.filter(p => p.id !== profileId);
@@ -11665,7 +12099,9 @@ async function getBenchmarkContext(profile, sceneId, activeProcess) {
     .update(JSON.stringify(launchArguments))
     .digest('hex');
   const loaderVersion = activeProcess?.loaderVersion
-    || (profile.loader === 'vanilla' ? profile.mcVersion : getLoaderVersionId(profile, profile.mcVersion, profile.loader))
+    || (profile.loader === 'vanilla'
+      ? profile.mcVersion
+      : getLoaderVersionId(profile, profile.mcVersion, profile.loader, profile.loader === 'fabric' ? profile.fabricLoaderVersion : ''))
     || 'unknown';
   if (loaderVersion === 'unknown') throw new Error('The selected loader version could not be identified for benchmark comparison.');
   const jvmConfigurationSha256 = crypto.createHash('sha256').update(JSON.stringify({
@@ -12030,13 +12466,18 @@ ipcMain.handle('launcher:run-benchmark', async (_event, payload) => {
 // ---------------------------------------------------------------------------
 // IPC: launch
 // ---------------------------------------------------------------------------
-ipcMain.handle('launcher:launch', async (_event, payload) => {
+async function launchJavaProfile(payload) {
+  const prewarming = payload?.prewarming === true;
   const requestedProfileId = payload?.profileId || null;
   const requestedAccountId = payload?.accountId || null;
   let launchProfileId = requestedProfileId;
   let baldMenuBridge = null;
   let baldMenuConfigPath = null;
   let libSession = null;
+  let javaPrewarmWindowController = null;
+  let releaseJavaPrewarmCover = () => {};
+  let javaPrewarmChild = null;
+  let javaPrewarmReady = false;
   try {
     const account = launcherState.accounts.find(item => item.id === requestedAccountId) || getActiveAccount();
     if (!account) throw new Error('No account selected');
@@ -12044,6 +12485,68 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
     const sourceProfile = launcherState.profiles.find(item => item.id === requestedProfileId) || getActiveProfile();
     let profile = sourceProfile;
     if (!profile) throw new Error('No active profile');
+    if (prewarming) {
+      if (horizonPrewarmShutdownRequested) return { ok: false, error: 'Launcher is shutting down.' };
+      if (profile.prewarmEnabled === false) return { ok: false, skipped: true, error: 'Prewarm is disabled for this profile.' };
+      if (process.platform !== 'win32') return { ok: false, skipped: true, error: 'Background game prewarm is supported on Windows only.' };
+      const headroom = getPrewarmMemoryHeadroomGb(profile.memoryMax);
+      if (!headroom.allowed) {
+        return {
+          ok: false,
+          skipped: true,
+          error: `Prewarm needs about ${headroom.requiredGb.toFixed(1)} GB free RAM; ${headroom.freeGb.toFixed(1)} GB is free.`,
+        };
+      }
+      if (runningProcesses.has(profile.id)) return { ok: true, skipped: true, profileId: profile.id };
+    } else {
+      const warmState = javaPrewarmedProcesses.get(profile.id);
+      if (warmState?.prewarming && !warmState.child.killed && warmState.child.exitCode === null) {
+        try {
+          await warmState.windowController.control(warmState.child.pid, 'restore-process-limits', {
+            timeoutMs: 8_000,
+            waitForWindow: false,
+          });
+        } catch (error) {
+          console.warn(`[Prewarm] Could not restore normal CPU use for ${profile.name}:`, error.message);
+        }
+        const restored = await warmState.windowController.control(warmState.child.pid, 'restore-process', {
+          timeoutMs: 8_000,
+          waitForWindow: false,
+        });
+        if (!restored.windows) throw new Error('The prewarmed Minecraft window could not be restored.');
+        blurLauncherWindowForGame();
+        warmState.prewarming = false;
+        warmState.activated = true;
+        const runningRecord = runningProcesses.get(profile.id);
+        if (runningRecord) runningRecord.prewarming = false;
+        warmState.session.running = true;
+        warmState.session.pid = warmState.child.pid || null;
+        profile.lastUsedAt = Date.now();
+        scheduleStateWrite();
+        startProfilePlaytimeTracking(profile, warmState.session);
+        try {
+          os.setPriority(warmState.child.pid, os.constants.priority.PRIORITY_NORMAL);
+        } catch (error) {
+          console.warn(`[Prewarm] Could not restore normal process priority for ${profile.name}:`, error.message);
+        }
+        emitProcessState(true, profile, warmState.child.pid);
+        emitStatus(`Running · ${profile.name} · ${warmState.accountName}`);
+        warmState.releaseWindowCover?.();
+        warmState.releaseWindowCover = null;
+        await warmState.windowController.close().catch(error => {
+          console.warn(`[Prewarm] Could not stop Java window controller for ${profile.name}:`, error.message);
+        });
+        return {
+          ok: true,
+          profileId: profile.id,
+          profileName: profile.name,
+          version: warmState.versionNumber,
+          accountName: warmState.accountName,
+          pid: warmState.child.pid || null,
+          prewarmed: true,
+        };
+      }
+    }
     const settings = normalizeSettings({ ...launcherState.settings, ...profile, ...(payload?.settings || {}) });
     if (isOptimizationOptedIn(settings) && !profile.optimizationManaged && payload?.skipAutoOptimization !== true) {
       const sourceModDirectory = path.join(getMinecraftRootFor(sourceProfile.id), 'mods');
@@ -12089,8 +12592,10 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       await prepareManagedWorlds(profile, optimizationSource);
     }
     if (runningProcesses.has(profile.id)) throw new Error(`${profile.name} is already running`);
-    profile.lastUsedAt = Date.now();
-    scheduleStateWrite();
+    if (!prewarming) {
+      profile.lastUsedAt = Date.now();
+      scheduleStateWrite();
+    }
 
     const memoryMax = settings.memoryMaxAuto
       ? recommendMinecraftMemoryGb(os.totalmem(), os.freemem())
@@ -12160,11 +12665,11 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
     const loaderLibraryPaths = getLoaderLibraryPaths(profile.loader, minecraftRoot, sharedCacheRoot);
     fs.mkdirSync(loaderLibraryPaths.libraryRoot, { recursive: true });
     launcherState.sessions = launcherState.sessions.filter(session => session.profileId !== profile.id);
-    const session = { profileId: profile.id, profileName: profile.name, pid: null, running: true, stopRequested: false, logs: [] };
+    const session = { profileId: profile.id, profileName: profile.name, pid: null, running: !prewarming, stopRequested: false, logs: [] };
     launcherState.sessions.push(session);
     scheduleStateWrite();
-    emitLog(profile.name, 'normal', `Starting ${profile.mcVersion} with ${profile.loader}`, profile.id);
-    emitStatus(`Preparing ${profile.mcVersion} (${profile.loader}, ${profile.rendererMode}) for ${account.name}...`);
+    emitLog(profile.name, 'normal', `${prewarming ? 'Prewarming' : 'Starting'} ${profile.mcVersion} with ${profile.loader}`, profile.id);
+    if (!prewarming) emitStatus(`Preparing ${profile.mcVersion} (${profile.loader}, ${profile.rendererMode}) for ${account.name}...`);
     emitLog(profile.name, 'normal', 'Authenticating account...', profile.id);
     const authorization = await getLaunchAuthorization(account);
     if (profile.rendererMode !== 'vanilla' && !['fabric', 'quilt'].includes(profile.loader)) {
@@ -12173,8 +12678,8 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
     emitLog(profile.name, 'normal', 'Checking Minecraft and loader metadata...', profile.id);
     const versionNumber = await installLoader(profile);
     emitLog(profile.name, 'normal', `Loader profile ready: ${versionNumber}`, profile.id);
-    emitStatus(`Preparing ${profile.mcVersion} (${profile.loader}, ${profile.rendererMode}) · resolving game files...`);
-    emitLog(profile.name, 'info', `RAM maximum: ${memoryMax} GB (initial heap: 1 GB)`, profile.id);
+    if (!prewarming) emitStatus(`Preparing ${profile.mcVersion} (${profile.loader}, ${profile.rendererMode}) · resolving game files...`);
+    emitLog(profile.name, 'info', `RAM maximum: ${memoryMax} GB (initial heap: ${prewarming ? '512 MB' : '1 GB'})`, profile.id);
 
     const profileLauncher = new MCLC.Client();
     profileLauncher.on('debug', message => emitLog(profile.name, classifyLogLine(message), message, profile.id));
@@ -12243,12 +12748,23 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
     } else {
       emitLog(profile.name, 'warn', '[Bald Agent] Not enabled for this profile; Minecraft will launch without it.', profile.id);
     }
+    if (prewarming) {
+      const currentProfile = launcherState.profiles.find(item => item.id === profile.id);
+      if (!currentProfile || currentProfile.prewarmEnabled === false || horizonPrewarmShutdownRequested) {
+        session.running = false;
+        scheduleStateWrite();
+        return { ok: false, skipped: true, error: 'Prewarm was disabled before Minecraft started.' };
+      }
+      javaPrewarmWindowController = createHorizonWindowController();
+      await javaPrewarmWindowController.ready;
+      releaseJavaPrewarmCover = acquireHorizonPrewarmCover();
+    }
     const child = await profileLauncher.launch({
       root: minecraftRoot,
       version: versionNumber === profile.mcVersion
         ? { number: profile.mcVersion, type: 'release' }
         : { number: profile.mcVersion, type: 'custom', custom: versionNumber },
-      memory: { min: '1G', max: `${Math.min(32, Math.max(1, memoryMax))}G` },
+      memory: { min: prewarming ? '512M' : '1G', max: `${Math.min(32, Math.max(1, memoryMax))}G` },
       javaPath: javaExecutable,
       customArgs: [...jvmArguments, ...loaderJvmArguments, ...baldMenuJvmArguments, ...(libSession ? libSession.args : [])],
       authorization,
@@ -12256,12 +12772,27 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
         gameDirectory: minecraftRoot,
         assetRoot: path.join(sharedCacheRoot, 'assets'),
         libraryRoot: loaderLibraryPaths.libraryRoot,
-        maxSockets: 8,
+        maxSockets: Math.min(16, Math.max(8, os.cpus().length)),
+        assetConcurrency: Math.min(24, Math.max(8, os.cpus().length)),
+        assetValidationCachePath: path.join(app.getPath('userData'), 'minecraft-asset-validation-cache.json'),
         natives: path.join(minecraftRoot, 'natives'),
       },
     });
+    javaPrewarmChild = child || null;
 
     if (child) {
+      const prewarmState = prewarming ? {
+        child,
+        profile,
+        session,
+        windowController: javaPrewarmWindowController,
+        releaseWindowCover: releaseJavaPrewarmCover,
+        prewarming: true,
+        activated: false,
+        accountName: account.name,
+        versionNumber,
+      } : null;
+      if (prewarmState) javaPrewarmedProcesses.set(profile.id, prewarmState);
       runningProcesses.set(profile.id, {
         child,
         pid: child.pid,
@@ -12274,19 +12805,47 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
         versionNumber,
         baldMenuBridge,
         baldMenuConfigPath,
+        prewarming,
       });
-      session.pid = child.pid || null;
-      session.running = true;
-      startProfilePlaytimeTracking(profile, session);
+      session.pid = prewarming ? null : child.pid || null;
+      session.running = !prewarming;
+      if (prewarming) {
+        try {
+          os.setPriority(child.pid, os.constants.priority.PRIORITY_BELOW_NORMAL);
+        } catch (error) {
+          console.warn(`[Prewarm] Could not lower process priority for ${profile.name}:`, error.message);
+        }
+      } else {
+        startProfilePlaytimeTracking(profile, session);
+      }
       scheduleStateWrite();
       emitLog(profile.name, 'info', `Java ${getRequiredJavaVersion(profile.mcVersion)}: ${javaExecutable}`, profile.id);
       emitLog(profile.name, 'info', `JVM arguments: ${jvmArguments.join(' ') || 'Java defaults'}`, profile.id);
-      emitProcessState(true, profile, child.pid);
-      emitStatus(`Running · ${profile.name} · ${account.name}`);
+      if (!prewarming) {
+        emitProcessState(true, profile, child.pid);
+        emitStatus(`Running · ${profile.name} · ${account.name}`);
+        activateMinecraftWindow(child.pid, profile.name);
+      }
       child.stdout?.on('data', data => String(data).split(/\r?\n/).forEach(line => emitLog(profile.name, 'normal', line, profile.id)));
       child.stderr?.on('data', data => String(data).split(/\r?\n/).forEach(line => emitLog(profile.name, 'warn', line, profile.id)));
       child.on('exit', (code, signal) => {
-        stopProfilePlaytimeTracking(profile.id);
+        const prewarmState = javaPrewarmedProcesses.get(profile.id);
+        const backgroundPrewarmExit = Boolean(prewarmState && !prewarmState.activated);
+        if (!backgroundPrewarmExit) stopProfilePlaytimeTracking(profile.id);
+        if (prewarmState?.child === child) {
+          javaPrewarmedProcesses.delete(profile.id);
+          prewarmState.releaseWindowCover?.();
+          void prewarmState.windowController?.close().catch(error => {
+            console.warn(`[Prewarm] Could not stop Java window controller for ${profile.name}:`, error.message);
+          });
+          if (prewarmState.activated && profile.prewarmEnabled !== false && !horizonPrewarmShutdownRequested) {
+            setTimeout(() => {
+              if (!horizonPrewarmShutdownRequested && profile.prewarmEnabled !== false) {
+                requestJavaProfilePrewarm(profile.id);
+              }
+            }, 500);
+          }
+        }
         if (baldMenuBridge) {
           baldMenuBridge.close().catch(error => console.error('[Bald Menu] Could not close the local bridge:', error));
           baldMenuBridge = null;
@@ -12316,17 +12875,41 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
           }
         }
         scheduleStateWrite();
-        emitProcessState(false, profile, child.pid, {
-          exitCode: code,
-          exitSignal: signal || null,
-          launchFailed,
-          optimizationManaged: profile.optimizationManaged,
-          optimizationSourceProfileId: profile.optimizationSourceProfileId,
-        });
+        if (!backgroundPrewarmExit) {
+          emitProcessState(false, profile, child.pid, {
+            exitCode: code,
+            exitSignal: signal || null,
+            launchFailed,
+            optimizationManaged: profile.optimizationManaged,
+            optimizationSourceProfileId: profile.optimizationSourceProfileId,
+          });
+        }
         const exitSummary = code === null ? `signal ${signal || 'unknown'}` : `code ${code}`;
         emitLog(profile.name, launchFailed ? 'err' : 'info', `Minecraft exited with ${exitSummary}`, profile.id);
-        emitStatus(`Minecraft exited with ${exitSummary}`);
+        if (!backgroundPrewarmExit) emitStatus(`Minecraft exited with ${exitSummary}`);
       });
+      if (prewarming) {
+        const hidden = await javaPrewarmWindowController.control(child.pid, 'hide-process', {
+          timeoutMs: 30_000,
+          waitForWindow: true,
+        });
+        if (!hidden.windows) throw new Error('Minecraft did not create a window to keep prewarmed.');
+        if (child.exitCode !== null) throw new Error('Minecraft exited before its prewarm completed.');
+        try {
+          const limited = await javaPrewarmWindowController.control(child.pid, 'limit-process-tree', {
+            timeoutMs: 8_000,
+            waitForWindow: false,
+          });
+          if (!limited.windows) console.warn(`[Prewarm] Could not apply the CPU limit to Minecraft for ${profile.name}.`);
+        } catch (error) {
+          console.warn(`[Prewarm] Could not cap background CPU use for ${profile.name}:`, error.message);
+        }
+        javaPrewarmReady = true;
+        console.info(`[Prewarm] Java profile ${profile.name} is ready in the background.`);
+        emitStatus(`Prewarm complete: Java profile ${profile.name} is ready.`);
+        releaseJavaPrewarmCover();
+        releaseJavaPrewarmCover = () => {};
+      }
     }
 
     if (!child) {
@@ -12356,10 +12939,80 @@ ipcMain.handle('launcher:launch', async (_event, payload) => {
       scheduleStateWrite();
     }
     const failedProfile = launcherState.profiles.find(item => item.id === launchProfileId) || getActiveProfile();
+    if (prewarming) {
+      const messageIsAuthFailure = error?.code === 'MINECRAFT_SESSION_REFRESH_FAILED'
+        || /^(?:No account selected|Microsoft account .* is not linked|Could not refresh the Minecraft session)/i.test(message);
+      console.warn(`[Prewarm] ${messageIsAuthFailure ? 'Paused' : 'Skipped'} Java profile ${failedProfile?.name || launchProfileId || 'unknown'}: ${message}`);
+      return {
+        ok: false,
+        skipped: true,
+        code: messageIsAuthFailure ? 'PREWARM_AUTH_FAILED' : 'PREWARM_FAILED',
+        profileId: launchProfileId,
+        error: message,
+      };
+    }
     if (failedProfile) emitLog(failedProfile.name, 'err', `Launch failed: ${message}`, failedProfile.id);
     emitStatus(`Launch failed · ${message}`);
     return { ok: false, canceled: error?.code === 'WORLD_SETUP_CANCELED', profileId: launchProfileId, error: message };
+  } finally {
+    if (prewarming && !javaPrewarmReady) {
+      if (javaPrewarmedProcesses.get(String(requestedProfileId || ''))?.child === javaPrewarmChild) {
+        javaPrewarmedProcesses.delete(String(requestedProfileId || ''));
+      }
+      if (javaPrewarmChild && javaPrewarmChild.exitCode === null && !javaPrewarmChild.killed) {
+        javaPrewarmChild.kill();
+      }
+      if (launchProfileId) {
+        runningProcesses.delete(launchProfileId);
+        const session = getSession(launchProfileId);
+        if (session) {
+          session.running = false;
+          session.pid = null;
+          session.stopRequested = true;
+          scheduleStateWrite();
+        }
+      }
+      releaseJavaPrewarmCover();
+      await javaPrewarmWindowController?.close().catch(error => {
+        console.warn('[Prewarm] Could not stop Java window controller after an incomplete warm-up:', error.message);
+      });
+    }
   }
+}
+
+ipcMain.handle('launcher:launch', async (_event, payload) => {
+  const profileId = String(payload?.profileId || '');
+  if (payload?.prewarming === true) {
+    const existing = javaPrewarmTasks.get(profileId);
+    if (existing) return existing;
+    const task = launchJavaProfile(payload);
+    javaPrewarmTasks.set(profileId, task);
+    try {
+      return await task;
+    } finally {
+      if (javaPrewarmTasks.get(profileId) === task) javaPrewarmTasks.delete(profileId);
+    }
+  }
+  const pendingPrewarm = javaPrewarmTasks.get(profileId);
+  if (pendingPrewarm) {
+    const warmState = javaPrewarmedProcesses.get(profileId);
+    if (warmState?.prewarming && Number.isSafeInteger(warmState.child.pid)) {
+      try {
+        os.setPriority(warmState.child.pid, os.constants.priority.PRIORITY_NORMAL);
+      } catch (error) {
+        console.warn(`[Prewarm] Could not prioritize the requested Java profile ${profileId}:`, error.message);
+      }
+    }
+    await pendingPrewarm;
+  }
+  return launchJavaProfile(payload);
+});
+
+ipcMain.handle('launcher:stop-prewarm', async (_event, payload = {}) => {
+  const profileId = String(payload?.profileId || '');
+  const pending = javaPrewarmTasks.get(profileId);
+  if (pending) await pending;
+  return stopJavaPrewarmedProfile(profileId);
 });
 
 ipcMain.handle('launcher:stop', async (_event, payload) => {
@@ -12445,7 +13098,6 @@ app.whenReady().then(async () => {
   restoreRunningSessions();
   reconcileProfileFolders();
   watchProfileFolders();
-  void prewarmSelectedHorizonInstance();
   createWindow();
   if (app.isPackaged) {
     const installDirectory = path.dirname(app.getPath('exe'));
@@ -12509,7 +13161,8 @@ app.whenReady().then(async () => {
   });
   watchLauncherFile();
   const profile = getActiveProfile();
-  if (profile && profile.rendererMode !== 'vanilla' && (!['fabric', 'quilt'].includes(profile.loader) || !getLoaderVersionId(profile, profile.mcVersion, profile.loader))) {
+  if (profile && profile.rendererMode !== 'vanilla' && (!['fabric', 'quilt'].includes(profile.loader)
+    || !getLoaderVersionId(profile, profile.mcVersion, profile.loader, profile.loader === 'fabric' ? profile.fabricLoaderVersion : ''))) {
     mainWindow.webContents.once('did-finish-load', () => emitStatus(`Warning: ${profile.rendererMode} is selected but ${profile.loader} is not installed yet`));
   }
   app.on('activate', () => {
@@ -12538,7 +13191,9 @@ app.on('before-quit', event => {
   const shouldStopPlayit = Boolean(playitState.pid) && !keepPlayitRunning;
   const shouldStopHorizonPrewarm = [...horizonPrewarmedProcesses.values()]
     .some(state => !state.child.killed && state.child.exitCode === null);
-  if (!shouldStopPlayit && !shouldStopHorizonPrewarm) return;
+  const shouldStopJavaPrewarm = [...javaPrewarmedProcesses.values()]
+    .some(state => state.prewarming && !state.child.killed && state.child.exitCode === null);
+  if (!shouldStopPlayit && !shouldStopHorizonPrewarm && !shouldStopJavaPrewarm) return;
   event.preventDefault();
   if (managedShutdownPending) return;
   managedShutdownPending = true;
@@ -12557,6 +13212,7 @@ app.on('before-quit', event => {
       }
     }
     if (shouldStopHorizonPrewarm) await stopHorizonPrewarmedProcesses();
+    if (shouldStopJavaPrewarm) await stopJavaPrewarmedProfiles();
     managedShutdownPending = false;
     quittingAfterManagedShutdown = true;
     app.quit();

@@ -26,7 +26,7 @@ class ModuleRegistryTest {
     }
 
     @Test
-    void registersAtLeastFiftyUniqueModules() {
+    void registersAtLeastFiftyOneUniqueModules() {
         Bl.init();
 
         Set<String> names = new HashSet<>();
@@ -34,7 +34,8 @@ class ModuleRegistryTest {
             assertTrue(names.add(module.name), "Duplicate module name: " + module.name);
         }
         assertEquals(Bl.modules().size(), names.size());
-        assertTrue(names.size() >= 52, "Expected at least 52 registered modules");
+        assertTrue(names.size() >= 51, "Expected at least 51 registered modules");
+        assertTrue(names.stream().noneMatch("Parkour"::equals), "Parkour must not be registered");
         assertTrue(names.containsAll(Set.of("SpeedMine", "BlockESP", "ESP", "Tracers", "Nametags", "ItemESP", "AutoTotem",
                 "AutoArmor", "AutoFish", "AutoLoot", "AutoFarm", "TreeFeller", "AutoReplant",
                 "AutoMine", "AirJump", "NoSlow", "Spider", "AimAssist", "AutoWeapon", "AutoShield", "BowAim")));

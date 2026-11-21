@@ -305,9 +305,11 @@ test('profiles include search and sort filters and only expose profile import', 
 
 test('profile recently-used sorting tracks Start clicks rather than profile selection', () => {
   const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
-  const startHandler = main.slice(main.indexOf("ipcMain.handle('launcher:launch'"), main.indexOf("ipcMain.handle('launcher:stop'"));
+  const startHandler = main.slice(main.indexOf('async function launchJavaProfile(payload)'), main.indexOf("ipcMain.handle('launcher:launch'"));
   const activeHandler = main.slice(main.indexOf("ipcMain.handle('launcher:set-active-profile'"), main.indexOf('// ---------------------------------------------------------------------------\n// IPC: content'));
   assert.match(startHandler, /profile\.lastUsedAt = Date\.now\(\)/);
+  assert.match(startHandler, /if \(!prewarming\) \{\s*profile\.lastUsedAt = Date\.now\(\)/);
+  assert.match(startHandler, /warmState\.session\.running = true;[\s\S]*?profile\.lastUsedAt = Date\.now\(\);/);
   assert.doesNotMatch(startHandler, /profile\.updatedAt =/);
   assert.doesNotMatch(activeHandler, /lastUsedAt/);
   assert.match(html.slice(html.indexOf('async function launchClick'), html.indexOf('function handleLaunchButtonClick')), /profile\.lastUsedAt = Date\.now\(\)/);
@@ -318,6 +320,8 @@ test('profiles track persistent playtime only while Minecraft is running', () =>
   assert.match(main, /playtimeMs: Math\.max\(0, Number\(profile\?\.playtimeMs\) \|\| 0\)/);
   assert.match(main, /lastPlayedAt: Number\.isFinite\(Number\(profile\?\.lastPlayedAt\)\)/);
   assert.match(main, /startProfilePlaytimeTracking\(profile, session\)/);
+  assert.match(main, /function startProfilePlaytimeTracking\(profile, session, startedAt = Date\.now\(\)\) \{\s*if \(!profile \|\| !session \|\| session\.running !== true\) return;/);
+  assert.match(main, /profile\.lastPlayedAt = startedAt;/);
   assert.match(main, /stopProfilePlaytimeTracking\(profile\.id\)/);
   assert.match(main, /recordProfilePlaytime\(profile, session\)/);
   assert.match(main, /process\.kill\(Number\(session\.pid\), 0\);[\s\S]*?startProfilePlaytimeTracking\(profile, session, Date\.now\(\)\)/);
@@ -329,8 +333,8 @@ test('profiles track persistent playtime only while Minecraft is running', () =>
 test('profile launch uses the selected Microsoft account instead of silently falling back', () => {
   const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
   const html = fs.readFileSync(path.join(__dirname, '..', 'bald_launcher_v7.html'), 'utf8');
-  const launch = main.slice(main.indexOf("ipcMain.handle('launcher:launch'"), main.indexOf("ipcMain.handle('launcher:stop'"));
-  assert.match(launch, /payload\?\.accountId/);
+  const launch = main.slice(main.indexOf('async function launchJavaProfile(payload)'), main.indexOf("ipcMain.handle('launcher:launch'"));
+  assert.match(launch, /requestedAccountId = payload\?\.accountId/);
   assert.match(launch, /launcherState\.accounts\.find\(item => item\.id === requestedAccountId\)/);
   assert.match(launch, /getLaunchAuthorization\(account\)/);
   assert.match(main, /refreshMicrosoftAuthorization\(account\.auth/);
