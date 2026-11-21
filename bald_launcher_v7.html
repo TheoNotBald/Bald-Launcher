@@ -1388,11 +1388,11 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
             <div class="pd-settings-row"><span class="setting-label">Profile name</span><input class="modal-input" id="pdRename" style="max-width:180px;" /></div>
             <div class="pd-settings-row"><span class="setting-label">Minecraft version</span><select class="modal-select" id="pdVersionSel" style="max-width:180px;" onchange="onPdConfigChange()"></select></div>
             <div class="pd-settings-row"><span class="setting-label">Mod loader</span><select class="modal-select" id="pdLoaderSel" style="max-width:180px;" onchange="onPdConfigChange()"></select></div>
-            <div class="pd-settings-row" id="pdFabricLoaderVersionRow" hidden style="display:none;">
-              <span class="setting-label">Fabric Loader version</span>
+            <div class="pd-settings-row" id="pdLoaderVersionRow" hidden style="display:none;">
+              <span class="setting-label" id="pdLoaderVersionLabel">Loader version</span>
               <div style="display:flex;flex-direction:column;gap:4px;max-width:280px;width:100%;">
-                <select class="modal-select" id="pdFabricLoaderVersion" aria-label="Fabric Loader version" disabled></select>
-                <span id="pdFabricLoaderVersionStatus" role="status" style="font-size:10px;color:var(--text-secondary);"></span>
+                <select class="modal-select" id="pdLoaderVersion" aria-label="Mod loader version" disabled></select>
+                <span id="pdLoaderVersionStatus" role="status" style="font-size:10px;color:var(--text-secondary);"></span>
               </div>
             </div>
             <div class="pd-settings-row column"><label class="setting-label" for="pdPrewarmEnabled">Prewarm this profile <input id="pdPrewarmEnabled" type="checkbox" onchange="setJavaProfilePrewarm(this.checked)" /></label><span style="font-size:11px;color:var(--text-secondary);">Keep Minecraft running invisibly so Play can restore it faster. Prewarm is capped at 50% CPU and background priority until you click Play; RAM follows this profile’s allocation.</span></div>
@@ -4174,57 +4174,66 @@ async function installFromBrowseFromButton(button){
 }
 
 // ---------------- Profile settings tab ----------------
-let pdFabricLoaderRequestId = 0;
-let pdFabricLoaderVersionsPromise = Promise.resolve();
-let pdFabricLoaderVersionLocked = false;
+let pdLoaderVersionRequestId = 0;
+let pdLoaderVersionsPromise = Promise.resolve();
+let pdLoaderVersionLocked = false;
+let pdLoaderSelectionLoader = '';
 
-function refreshPdFabricLoaderVersions(mcVersion, loader, preferredVersion) {
-  const row = document.getElementById('pdFabricLoaderVersionRow');
-  const select = document.getElementById('pdFabricLoaderVersion');
-  const status = document.getElementById('pdFabricLoaderVersionStatus');
-  const requestId = ++pdFabricLoaderRequestId;
-  const isFabric = loader === 'fabric';
-  row.hidden = !isFabric;
-  row.style.display = isFabric ? '' : 'none';
-  if (!isFabric) {
-    select.disabled = pdFabricLoaderVersionLocked;
+function refreshPdLoaderVersions(mcVersion, loader, preferredVersion) {
+  const row = document.getElementById('pdLoaderVersionRow');
+  const select = document.getElementById('pdLoaderVersion');
+  const label = document.getElementById('pdLoaderVersionLabel');
+  const status = document.getElementById('pdLoaderVersionStatus');
+  const requestId = ++pdLoaderVersionRequestId;
+  const supportsVersions = loader !== 'vanilla';
+  const loaderName = { fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge', neoforge: 'NeoForge' }[loader] || 'Loader';
+  row.hidden = !supportsVersions;
+  row.style.display = supportsVersions ? '' : 'none';
+  label.textContent = `${loaderName} version`;
+  select.setAttribute('aria-label', `${loaderName} version`);
+  if (!supportsVersions) {
+    select.disabled = pdLoaderVersionLocked;
     status.textContent = '';
-    pdFabricLoaderVersionsPromise = Promise.resolve();
-    return pdFabricLoaderVersionsPromise;
+    pdLoaderVersionsPromise = Promise.resolve();
+    return pdLoaderVersionsPromise;
   }
 
-  const selectedVersion = preferredVersion ?? select.value;
+  const selectedVersion = preferredVersion ?? (pdLoaderSelectionLoader === loader ? select.value : '');
+  pdLoaderSelectionLoader = loader;
   select.disabled = true;
   status.style.color = 'var(--text-secondary)';
-  status.textContent = 'Loading Fabric Loader versions...';
+  status.textContent = `Loading ${loaderName} versions...`;
   const request = (async () => {
     try {
-      const result = await launcherBridge?.getFabricLoaderVersions?.(mcVersion);
-      if (requestId !== pdFabricLoaderRequestId) return;
+      const result = await launcherBridge?.getLoaderVersions?.(mcVersion, loader);
+      if (requestId !== pdLoaderVersionRequestId) return;
       if (!result?.ok || !Array.isArray(result.versions)) {
-        throw new Error(result?.error || 'Could not load Fabric Loader versions.');
+        throw new Error(result?.error || `Could not load ${loaderName} versions.`);
       }
       const versions = result.versions;
+      const latestStable = versions.find(item => item.stable)?.version || versions[0]?.version || '';
       select.replaceChildren();
       const latestOption = document.createElement('option');
       latestOption.value = '';
-      latestOption.textContent = versions.length ? `Latest stable (${versions[0]})` : 'Latest stable (selected at launch)';
+      latestOption.textContent = latestStable ? `Latest stable (${latestStable})` : 'Latest version (selected at launch)';
       select.appendChild(latestOption);
-      for (const version of versions) {
+      for (const item of versions) {
         const option = document.createElement('option');
-        option.value = version;
-        option.textContent = version;
+        option.value = item.version;
+        option.textContent = item.stable ? item.version : `${item.version} (preview)`;
         select.appendChild(option);
       }
-      select.value = versions.includes(selectedVersion) ? selectedVersion : '';
-      status.textContent = versions.length ? `${versions.length} compatible versions available` : 'No versions listed; latest will be selected at launch.';
-      select.disabled = pdFabricLoaderVersionLocked;
+      select.value = versions.some(item => item.version === selectedVersion) ? selectedVersion : '';
+      status.textContent = versions.length
+        ? `${versions.length} compatible versions available (${versions.filter(item => item.stable).length} stable)`
+        : 'No versions listed; latest will be selected at launch.';
+      select.disabled = pdLoaderVersionLocked;
     } catch (error) {
-      if (requestId !== pdFabricLoaderRequestId) return;
+      if (requestId !== pdLoaderVersionRequestId) return;
       select.replaceChildren();
       const latestOption = document.createElement('option');
       latestOption.value = '';
-      latestOption.textContent = 'Latest stable (selected at launch)';
+      latestOption.textContent = 'Latest compatible (selected at launch)';
       select.appendChild(latestOption);
       if (selectedVersion) {
         const savedOption = document.createElement('option');
@@ -4233,12 +4242,12 @@ function refreshPdFabricLoaderVersions(mcVersion, loader, preferredVersion) {
         select.appendChild(savedOption);
       }
       select.value = selectedVersion || '';
-      select.disabled = pdFabricLoaderVersionLocked;
+      select.disabled = pdLoaderVersionLocked;
       status.style.color = '#d88989';
       status.textContent = error?.message || String(error);
     }
   })();
-  pdFabricLoaderVersionsPromise = request;
+  pdLoaderVersionsPromise = request;
   return request;
 }
 
@@ -4249,14 +4258,14 @@ function populatePdSettingsForm(p){
   document.getElementById('pdMemoryMax').value = p.memoryMax || 6;
   document.getElementById('pdJvmProfile').value = p.jvmProfile || 'default';
   document.getElementById('pdCustomJvmArgs').value = p.customJvmArgs || '';
-  pdFabricLoaderVersionLocked = p.optimizationManaged === true;
-  const fabricVersionSelect = document.getElementById('pdFabricLoaderVersion');
-  fabricVersionSelect.replaceChildren();
-  const currentFabricVersionOption = document.createElement('option');
-  currentFabricVersionOption.value = p.fabricLoaderVersion || '';
-  currentFabricVersionOption.textContent = p.fabricLoaderVersion || 'Latest stable';
-  fabricVersionSelect.appendChild(currentFabricVersionOption);
-  fabricVersionSelect.value = p.fabricLoaderVersion || '';
+  pdLoaderVersionLocked = p.optimizationManaged === true;
+  const loaderVersionSelect = document.getElementById('pdLoaderVersion');
+  loaderVersionSelect.replaceChildren();
+  const currentLoaderVersionOption = document.createElement('option');
+  currentLoaderVersionOption.value = p.loaderVersion || '';
+  currentLoaderVersionOption.textContent = p.loaderVersion || 'Latest stable';
+  loaderVersionSelect.appendChild(currentLoaderVersionOption);
+  loaderVersionSelect.value = p.loaderVersion || '';
   populateVersionLoaderSelects('pdVersionSel','pdLoaderSel', p.mcVersion, p.loader);
   document.getElementById('pdVersionSel').disabled = p.optimizationManaged === true;
   document.getElementById('pdLoaderSel').disabled = p.optimizationManaged === true;
@@ -4266,7 +4275,7 @@ function populatePdSettingsForm(p){
     rendererOptions.style.opacity = p.optimizationManaged ? '0.55' : '';
     rendererOptions.setAttribute('aria-disabled', p.optimizationManaged ? 'true' : 'false');
   }
-  onPdConfigChange(p.rendererMode, p.fabricLoaderVersion || '');
+  onPdConfigChange(p.rendererMode, p.loaderVersion || '');
   refreshCustomSkinLoaderStatus(p.id);
 }
 async function refreshCustomSkinLoaderStatus(profileId){
@@ -4330,29 +4339,29 @@ async function disableCustomSkinLoaderSupport(profileId){
   refreshCustomSkinLoaderStatus(profileId);
 }
 let pdSelectedRenderer = null;
-async function onPdConfigChange(forceRenderer, preferredFabricLoaderVersion){
+async function onPdConfigChange(forceRenderer, preferredLoaderVersion){
   const version = document.getElementById('pdVersionSel').value;
   const loader = document.getElementById('pdLoaderSel').value;
-  const fabricLoaderVersionsRequest = refreshPdFabricLoaderVersions(
+  const loaderVersionsRequest = refreshPdLoaderVersions(
     version,
     loader,
-    preferredFabricLoaderVersion ?? document.getElementById('pdFabricLoaderVersion').value,
+    preferredLoaderVersion ?? document.getElementById('pdLoaderVersion').value,
   );
   document.getElementById('pdRendererOptions').innerHTML = '<div style="color:#444;font-size:11px;">Checking availability...</div>';
   const opts = await renderersFor(version, loader);
   pdSelectedRenderer = (forceRenderer && opts.some(o=>o.id===forceRenderer)) ? forceRenderer : opts[0].id;
   renderRendererOptions('pdRendererOptions', opts, pdSelectedRenderer, id => { pdSelectedRenderer = id; onPdConfigChange(id); });
-  await fabricLoaderVersionsRequest;
+  await loaderVersionsRequest;
 }
 async function savePdSettings(){
   const p = getProfile(currentProfileId);
-  await pdFabricLoaderVersionsPromise;
+  await pdLoaderVersionsPromise;
   const payload = {
     id: p.id,
     name: document.getElementById('pdRename').value.trim() || p.name,
     mcVersion: document.getElementById('pdVersionSel').value,
     loader: document.getElementById('pdLoaderSel').value,
-    fabricLoaderVersion: document.getElementById('pdFabricLoaderVersion').value,
+    loaderVersion: document.getElementById('pdLoaderVersion').value,
     rendererMode: pdSelectedRenderer,
     prewarmEnabled: document.getElementById('pdPrewarmEnabled').checked,
     javaPath: document.getElementById('pdJavaPath').value.trim(),

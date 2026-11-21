@@ -1,8 +1,8 @@
 'use strict';
 
-function selectForgeVersion(metadata, minecraftVersion) {
+function getForgeVersions(metadata, minecraftVersion) {
   const requestedVersion = String(minecraftVersion || '').trim();
-  if (!requestedVersion || !metadata || typeof metadata !== 'object') return null;
+  if (!requestedVersion || !metadata || typeof metadata !== 'object') return [];
 
   const candidates = Array.isArray(metadata[requestedVersion])
     ? metadata[requestedVersion]
@@ -11,8 +11,12 @@ function selectForgeVersion(metadata, minecraftVersion) {
       : [];
   return candidates
     .filter(version => typeof version === 'string' && version.startsWith(`${requestedVersion}-`))
-    .filter(version => !/(?:alpha|beta|pre|snapshot|rc)/i.test(version))
-    .sort((left, right) => right.localeCompare(left, undefined, { numeric: true, sensitivity: 'base' }))[0] || null;
+    .sort((left, right) => right.localeCompare(left, undefined, { numeric: true, sensitivity: 'base' }));
 }
 
-module.exports = { selectForgeVersion };
+function selectForgeVersion(metadata, minecraftVersion) {
+  return getForgeVersions(metadata, minecraftVersion)
+    .find(version => !/(?:alpha|beta|pre|snapshot|rc)/i.test(version)) || null;
+}
+
+module.exports = { getForgeVersions, selectForgeVersion };

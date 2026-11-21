@@ -24,7 +24,7 @@ contextBridge.exposeInMainWorld('launcherAPI', {
 
   // profiles
   getRendererOptions: (mcVersion, loader) => ipcRenderer.invoke('launcher:get-renderer-options', { mcVersion, loader }),
-  getFabricLoaderVersions: mcVersion => ipcRenderer.invoke('launcher:get-fabric-loader-versions', mcVersion),
+  getLoaderVersions: (mcVersion, loader) => ipcRenderer.invoke('launcher:get-loader-versions', { mcVersion, loader }),
   getVersions: () => ipcRenderer.invoke('launcher:get-versions'),
   resolveCustomSkinLoader: profileId => ipcRenderer.invoke('launcher:custom-skin-loader:resolve', { profileId }),
   diagnoseCustomSkinLoader: profileId => ipcRenderer.invoke('launcher:custom-skin-loader:diagnose', { profileId }),

@@ -89,7 +89,7 @@ const {
 const { refreshMicrosoftAuthorization } = require('./src/shared/launch-authorization');
 const { runProfileImportDownloads } = require('./src/shared/profile-import');
 const { recordProfilePlaytime } = require('./src/shared/profile-playtime');
-const { selectForgeVersion } = require('./src/shared/forge-version');
+const { getForgeVersions } = require('./src/shared/forge-version');
 const {
   buildBaldMenuConfig,
   createBaldMenuBridge,
@@ -2758,7 +2758,9 @@ function normalizeProfile(profile) {
       : null,
     mcVersion,
     loader,
-    fabricLoaderVersion: loader === 'fabric' ? normalizeFabricLoaderVersion(profile?.fabricLoaderVersion) : '',
+    loaderVersion: loader !== 'vanilla'
+      ? normalizeLoaderVersion(profile?.loaderVersion ?? profile?.fabricLoaderVersion)
+      : '',
     rendererMode,
     prewarmEnabled: profile?.prewarmEnabled !== false,
     icon: String(profile?.icon || name.slice(0, 1).toUpperCase()).slice(0, 2),
@@ -3535,7 +3537,7 @@ function getActiveProfile() {
 }
 
 function getLoaderCachePath(profile, mcVersion, loader, loaderVersion = '') {
-  const versionSuffix = loader === 'fabric' && loaderVersion ? `-${loaderVersion}` : '';
+  const versionSuffix = loaderVersion ? `-${loaderVersion}` : '';
   return path.join(getMinecraftRootFor(profile.id), 'versions', `.bald-${loader}-${mcVersion}${versionSuffix}.json`);
 }
 
@@ -4135,41 +4137,80 @@ async function ensureFabricApi(profile) {
   return true;
 }
 
-function normalizeFabricLoaderVersion(version) {
+function normalizeLoaderVersion(version) {
   const normalized = String(version || '').trim();
-  return /^[0-9][a-zA-Z0-9.+_-]{0,39}$/.test(normalized) ? normalized : '';
+  return /^[0-9][a-zA-Z0-9.+_-]{0,79}$/.test(normalized) ? normalized : '';
 }
 
-function normalizeFabricLoaderVersions(items) {
-  const versions = (Array.isArray(items) ? items : [])
-    .map(item => normalizeFabricLoaderVersion(item?.loader?.version))
-    .filter((version, index, list) => version && list.indexOf(version) === index);
-  const stableVersions = (Array.isArray(items) ? items : [])
-    .filter(item => item?.loader?.stable === true)
-    .map(item => normalizeFabricLoaderVersion(item?.loader?.version))
-    .filter((version, index, list) => version && list.indexOf(version) === index);
-  return stableVersions.length ? stableVersions : versions;
+function normalizeLoaderVersionList(items) {
+  const seen = new Set();
+  return (Array.isArray(items) ? items : []).flatMap(item => {
+    const version = normalizeLoaderVersion(typeof item === 'string' ? item : item?.version);
+    if (!version || seen.has(version)) return [];
+    seen.add(version);
+    return [{ version, stable: typeof item === 'object' && item?.stable === true }];
+  });
 }
 
-async function getFabricLoaderVersions(mcVersion) {
+function normalizeMetaLoaderVersions(items) {
+  return normalizeLoaderVersionList((Array.isArray(items) ? items : []).map(item => ({
+    version: item?.loader?.version,
+    stable: item?.loader?.stable,
+  })));
+}
+
+function normalizeNeoForgeVersions(metadata, mcVersion) {
+  const minecraftLine = String(mcVersion).split('.').slice(1).join('.');
+  const prefix = `${minecraftLine}.`;
+  const versions = [...String(metadata || '').matchAll(/<version>([^<]+)<\/version>/g)]
+    .map(match => normalizeLoaderVersion(match[1]))
+    .filter((version, index, list) => version && version.startsWith(prefix) && list.indexOf(version) === index)
+    .sort((left, right) => right.localeCompare(left, undefined, { numeric: true, sensitivity: 'base' }));
+  return versions.map(version => ({ version, stable: !/(?:alpha|beta|pre|snapshot|rc)/i.test(version) }));
+}
+
+async function getLoaderVersions(mcVersion, loader) {
   const version = String(mcVersion || '').trim();
-  if (!/^\d+\.\d+(?:\.\d+)?$/.test(version)) throw new Error('A valid Minecraft version is required to list Fabric Loader versions.');
-  const cachePath = path.join(app.getPath('userData'), 'cache', `fabric-loader-versions-${version}.json`);
+  const normalizedLoader = String(loader || '').toLowerCase();
+  if (!/^\d+\.\d+(?:\.\d+)?$/.test(version)) throw new Error('A valid Minecraft version is required to list loader versions.');
+  if (!['fabric', 'forge', 'neoforge', 'quilt'].includes(normalizedLoader)) {
+    throw new Error('A supported mod loader is required to list versions.');
+  }
+  const cachePath = path.join(app.getPath('userData'), 'cache', `loader-versions-${normalizedLoader}-${version}.json`);
   try {
     const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-    const cachedVersions = Array.isArray(cached.versions)
-      ? cached.versions.map(normalizeFabricLoaderVersion).filter((item, index, list) => item && list.indexOf(item) === index)
-      : [];
+    const cachedVersions = normalizeLoaderVersionList(cached.versions);
     if (Date.now() - cached.fetchedAt < VERSION_CACHE_TTL_MS && cachedVersions.length) {
       return cachedVersions;
     }
   } catch (_error) {}
-  const response = await axios.get(`https://meta.fabricmc.net/v2/versions/loader/${encodeURIComponent(version)}`, {
-    timeout: 15000,
-    headers: { 'User-Agent': 'BaldLauncher/0.1.0 (contact: none)' },
-  });
-  const versions = normalizeFabricLoaderVersions(response.data);
-  if (!versions.length) throw new Error(`No Fabric Loader versions are available for Minecraft ${version}.`);
+  let versions;
+  if (normalizedLoader === 'fabric' || normalizedLoader === 'quilt') {
+    const base = normalizedLoader === 'fabric'
+      ? 'https://meta.fabricmc.net/v2/versions/loader'
+      : 'https://meta.quiltmc.org/v3/versions/loader';
+    const response = await axios.get(`${base}/${encodeURIComponent(version)}`, {
+      timeout: 15000,
+      headers: { 'User-Agent': 'BaldLauncher/0.1.0 (contact: none)' },
+    });
+    versions = normalizeMetaLoaderVersions(response.data);
+  } else if (normalizedLoader === 'forge') {
+    const response = await axios.get('https://files.minecraftforge.net/net/minecraftforge/forge/maven-metadata.json', {
+      timeout: 15000,
+      headers: { 'User-Agent': 'BaldLauncher/0.1.0 (contact: none)' },
+    });
+    versions = getForgeVersions(response.data, version).map(item => ({
+      version: normalizeLoaderVersion(item),
+      stable: !/(?:alpha|beta|pre|snapshot|rc)/i.test(item),
+    })).filter(item => item.version);
+  } else {
+    const response = await axios.get('https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml', {
+      timeout: 15000,
+      headers: { 'User-Agent': 'BaldLauncher/0.1.0 (contact: none)' },
+    });
+    versions = normalizeNeoForgeVersions(response.data, version);
+  }
+  if (!versions.length) throw new Error(`No ${normalizedLoader} versions are available for Minecraft ${version}.`);
   fs.mkdirSync(path.dirname(cachePath), { recursive: true });
   fs.writeFileSync(cachePath, JSON.stringify({ fetchedAt: Date.now(), versions }));
   return versions;
@@ -4213,17 +4254,29 @@ function runInstaller(javaPath, installerPath, args, cwd) {
 
 function findInstalledVersionId(rootPath, mcVersion, loader, before, loaderVersion = '') {
   const versionsPath = path.join(rootPath, 'versions');
-  if (loader === 'fabric' && loaderVersion) {
-    const expectedId = `fabric-loader-${loaderVersion}-${mcVersion}`;
-    return fs.readdirSync(versionsPath, { withFileTypes: true })
-      .some(entry => entry.isDirectory() && entry.name.toLowerCase() === expectedId.toLowerCase())
-      ? expectedId
-      : null;
+  if (loaderVersion) {
+    const forgeBuild = loaderVersion.startsWith(`${mcVersion}-`)
+      ? loaderVersion.slice(mcVersion.length + 1)
+      : loaderVersion;
+    const expectedIds = loader === 'fabric'
+      ? [`fabric-loader-${loaderVersion}-${mcVersion}`]
+      : loader === 'quilt'
+        ? [`quilt-loader-${loaderVersion}-${mcVersion}`]
+        : loader === 'forge'
+          ? [`${mcVersion}-forge-${forgeBuild}`]
+          : loader === 'neoforge'
+            ? [`neoforge-${loaderVersion}`, `${mcVersion}-neoforge-${loaderVersion}`]
+            : [];
+    const entries = fs.readdirSync(versionsPath, { withFileTypes: true });
+    const expected = new Set(expectedIds.map(id => id.toLowerCase()));
+    return entries.find(entry => entry.isDirectory() && expected.has(entry.name.toLowerCase()))?.name || null;
   }
   const matchesLoader = name => loader === 'neoforge'
     ? name.toLowerCase().startsWith('neoforge-') || name.toLowerCase().startsWith(`${mcVersion}-neoforge-`)
     : loader === 'fabric'
       ? name.toLowerCase().startsWith(`fabric-loader-`) && name.toLowerCase().endsWith(`-${mcVersion}`)
+      : loader === 'quilt'
+        ? name.toLowerCase().startsWith('quilt-loader-') && name.toLowerCase().endsWith(`-${mcVersion}`)
       : name.toLowerCase().startsWith(`${mcVersion}-${loader}-`);
   const candidates = fs.readdirSync(versionsPath, { withFileTypes: true })
     .filter(entry => entry.isDirectory() && matchesLoader(entry.name))
@@ -4238,8 +4291,8 @@ function findInstalledVersionId(rootPath, mcVersion, loader, before, loaderVersi
 async function installLoader(profile) {
   const { mcVersion, loader } = profile;
   if (loader === 'vanilla') return mcVersion;
-  const requestedFabricLoaderVersion = loader === 'fabric' ? normalizeFabricLoaderVersion(profile.fabricLoaderVersion) : '';
-  const cachedVersionId = getLoaderVersionId(profile, mcVersion, loader, requestedFabricLoaderVersion);
+  const requestedLoaderVersion = normalizeLoaderVersion(profile.loaderVersion);
+  const cachedVersionId = getLoaderVersionId(profile, mcVersion, loader, requestedLoaderVersion);
   if (cachedVersionId) return cachedVersionId;
 
   const rootPath = getMinecraftRootFor(profile.id);
@@ -4252,12 +4305,12 @@ async function installLoader(profile) {
   let installerArgs;
 
   if (loader === 'fabric' || loader === 'quilt') {
-    if (loader === 'fabric' && requestedFabricLoaderVersion) {
-      const availableVersions = await getFabricLoaderVersions(mcVersion);
-      if (!availableVersions.includes(requestedFabricLoaderVersion)) {
-        throw new Error(`Fabric Loader ${requestedFabricLoaderVersion} is not available for Minecraft ${mcVersion}.`);
+    if (requestedLoaderVersion) {
+      const availableVersions = await getLoaderVersions(mcVersion, loader);
+      if (!availableVersions.some(item => item.version === requestedLoaderVersion)) {
+        throw new Error(`${loader} ${requestedLoaderVersion} is not available for Minecraft ${mcVersion}.`);
       }
-      loaderVersion = requestedFabricLoaderVersion;
+      loaderVersion = requestedLoaderVersion;
     } else {
       loaderVersion = await getLoaderManifest(mcVersion, loader);
     }
@@ -4267,24 +4320,26 @@ async function installLoader(profile) {
     installerArgs = loader === 'fabric'
       ? ['client', '-dir', rootPath, '-mcversion', mcVersion, '-loader', loaderVersion, '-noprofile']
       : ['install', 'client', mcVersion, loaderVersion, '--dir', rootPath];
-  } else {
-    const metadataUrl = loader === 'forge'
-      ? 'https://files.minecraftforge.net/net/minecraftforge/forge/maven-metadata.json'
-      : 'https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml';
-    const metadata = (await axios.get(metadataUrl, { timeout: 15000 })).data;
+  } else if (loader === 'forge' || loader === 'neoforge') {
+    const availableVersions = await getLoaderVersions(mcVersion, loader);
+    if (requestedLoaderVersion) {
+      if (!availableVersions.some(item => item.version === requestedLoaderVersion)) {
+        throw new Error(`${loader} ${requestedLoaderVersion} is not available for Minecraft ${mcVersion}.`);
+      }
+      loaderVersion = requestedLoaderVersion;
+    } else {
+      loaderVersion = availableVersions.find(item => item.stable)?.version || availableVersions[0]?.version;
+    }
+    if (!loaderVersion) throw new Error(`No ${loader} version is available for Minecraft ${mcVersion}`);
     if (loader === 'forge') {
-      loaderVersion = selectForgeVersion(metadata, mcVersion);
-      if (!loaderVersion) throw new Error(`No Forge version is available for Minecraft ${mcVersion}`);
       installerUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${loaderVersion}/forge-${loaderVersion}-installer.jar`;
       installerArgs = ['--installClient', rootPath];
     } else {
-      const versions = [...String(metadata).matchAll(/<version>([^<]+)<\/version>/g)].map(match => match[1]);
-      const neoMinecraftLine = mcVersion.split('.').slice(1).join('.');
-      loaderVersion = versions.reverse().find(version => version.startsWith(`${neoMinecraftLine}.`));
-      if (!loaderVersion) throw new Error(`No NeoForge version is available for Minecraft ${mcVersion}`);
       installerUrl = `https://maven.neoforged.net/releases/net/neoforged/neoforge/${loaderVersion}/neoforge-${loaderVersion}-installer.jar`;
       installerArgs = ['--install-client', rootPath];
     }
+  } else {
+    throw new Error(`Unsupported mod loader: ${loader}`);
   }
 
   const installerPath = path.join(rootPath, LOADER_INSTALLER_DIR, `${loader}-${loaderVersion}.jar`);
@@ -4300,10 +4355,10 @@ async function installLoader(profile) {
     mcVersion,
     loader === 'neoforge' ? 'neoforge' : loader,
     before,
-    requestedFabricLoaderVersion,
+    requestedLoaderVersion,
   );
   if (!versionId) throw new Error(`${loader} installer completed but no launch profile was created`);
-  fs.writeFileSync(getLoaderCachePath(profile, mcVersion, loader, requestedFabricLoaderVersion), JSON.stringify({ loaderVersion, versionId }, null, 2));
+  fs.writeFileSync(getLoaderCachePath(profile, mcVersion, loader, requestedLoaderVersion), JSON.stringify({ loaderVersion, versionId }, null, 2));
   return versionId;
 }
 
@@ -6616,9 +6671,9 @@ ipcMain.handle('launcher:get-renderer-options', async (_event, { mcVersion, load
 
 ipcMain.handle('launcher:get-versions', async () => getVersionManifest());
 
-ipcMain.handle('launcher:get-fabric-loader-versions', async (_event, mcVersion) => {
+ipcMain.handle('launcher:get-loader-versions', async (_event, payload) => {
   try {
-    return { ok: true, versions: await getFabricLoaderVersions(mcVersion) };
+    return { ok: true, versions: await getLoaderVersions(payload?.mcVersion, payload?.loader) };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -7059,11 +7114,19 @@ async function resolveModrinthPackFile(entry, profile) {
 
 async function getMrpackDependencies(profile) {
   const dependencies = { minecraft: profile.mcVersion };
-  if (profile.loader === 'fabric' || profile.loader === 'quilt') {
+  const dependencyKey = {
+    fabric: 'fabric-loader',
+    quilt: 'quilt-loader',
+    forge: 'forge',
+    neoforge: 'neoforge',
+  }[profile.loader];
+  if (dependencyKey) {
     try {
-      const loaderResponse = await axios.get(`https://meta.${profile.loader}mc.net/v2/versions/loader/${encodeURIComponent(profile.mcVersion)}`, { timeout: 10000 });
-      const loaderVersion = loaderResponse.data?.[0]?.loader?.version;
-      if (loaderVersion) dependencies[`${profile.loader}-loader`] = loaderVersion;
+      const versions = await getLoaderVersions(profile.mcVersion, profile.loader);
+      const loaderVersion = profile.loaderVersion
+        || versions.find(item => item.stable)?.version
+        || versions[0]?.version;
+      if (loaderVersion) dependencies[dependencyKey] = loaderVersion;
     } catch (_error) {
       emitStatus(`Could not resolve ${profile.loader} loader metadata; exporting Minecraft dependency only.`);
     }
@@ -7833,18 +7896,18 @@ ipcMain.handle('launcher:import-local-content', async (_event, profileId) => {
 ipcMain.handle('launcher:update-profile', async (_event, payload) => {
   const idx = launcherState.profiles.findIndex(p => p.id === payload?.id);
   if (idx === -1) return { state: launcherState, rendererChanged: false, newRendererMode: null };
-  if (payload?.fabricLoaderVersion !== undefined
-    && String(payload.fabricLoaderVersion || '').trim()
-    && !normalizeFabricLoaderVersion(payload.fabricLoaderVersion)) {
-    return { ok: false, error: 'Select a valid Fabric Loader version.', state: launcherState };
+  if (payload?.loaderVersion !== undefined
+    && String(payload.loaderVersion || '').trim()
+    && !normalizeLoaderVersion(payload.loaderVersion)) {
+    return { ok: false, error: 'Select a valid mod loader version.', state: launcherState };
   }
 
   const previous = launcherState.profiles[idx];
   if (previous.optimizationManaged
     && (String(payload?.mcVersion || previous.mcVersion) !== previous.mcVersion
       || String(payload?.loader || previous.loader).toLowerCase() !== previous.loader
-      || (payload?.fabricLoaderVersion !== undefined
-        && normalizeFabricLoaderVersion(payload.fabricLoaderVersion) !== previous.fabricLoaderVersion)
+      || (payload?.loaderVersion !== undefined
+        && normalizeLoaderVersion(payload.loaderVersion) !== previous.loaderVersion)
       || String(payload?.rendererMode || previous.rendererMode) !== previous.rendererMode)) {
     return {
       ok: false,
@@ -12101,7 +12164,7 @@ async function getBenchmarkContext(profile, sceneId, activeProcess) {
   const loaderVersion = activeProcess?.loaderVersion
     || (profile.loader === 'vanilla'
       ? profile.mcVersion
-      : getLoaderVersionId(profile, profile.mcVersion, profile.loader, profile.loader === 'fabric' ? profile.fabricLoaderVersion : ''))
+      : getLoaderVersionId(profile, profile.mcVersion, profile.loader, profile.loaderVersion))
     || 'unknown';
   if (loaderVersion === 'unknown') throw new Error('The selected loader version could not be identified for benchmark comparison.');
   const jvmConfigurationSha256 = crypto.createHash('sha256').update(JSON.stringify({
@@ -13162,7 +13225,7 @@ app.whenReady().then(async () => {
   watchLauncherFile();
   const profile = getActiveProfile();
   if (profile && profile.rendererMode !== 'vanilla' && (!['fabric', 'quilt'].includes(profile.loader)
-    || !getLoaderVersionId(profile, profile.mcVersion, profile.loader, profile.loader === 'fabric' ? profile.fabricLoaderVersion : ''))) {
+    || !getLoaderVersionId(profile, profile.mcVersion, profile.loader, profile.loaderVersion))) {
     mainWindow.webContents.once('did-finish-load', () => emitStatus(`Warning: ${profile.rendererMode} is selected but ${profile.loader} is not installed yet`));
   }
   app.on('activate', () => {
