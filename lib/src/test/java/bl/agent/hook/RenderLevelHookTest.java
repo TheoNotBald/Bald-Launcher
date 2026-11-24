@@ -34,8 +34,16 @@ class RenderLevelHookTest {
 
         var first = method.instructions.getFirst();
         assertEquals(Opcodes.ALOAD, first.getOpcode());
-        assertEquals(Opcodes.INVOKESTATIC, first.getNext().getOpcode());
-        var overlay = (org.objectweb.asm.tree.MethodInsnNode) first.getNext();
+        // Renderer, tick counter, camera, position matrix and projection matrix.
+        var argument = first.getNext();
+        for (int index = 0; index < 4; index++) {
+            assertEquals(Opcodes.ALOAD, argument.getOpcode());
+            argument = argument.getNext();
+        }
+        assertEquals(Opcodes.INVOKESTATIC, argument.getOpcode());
+        var overlay = (org.objectweb.asm.tree.MethodInsnNode) argument;
+        assertEquals("(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)V",
+                overlay.desc);
         assertEquals("bl/Bl", overlay.owner);
         assertEquals("renderLevel", overlay.name);
     }

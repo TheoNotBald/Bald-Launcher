@@ -22,11 +22,15 @@ files:
   - LICENSE.md
   - build/icon.ico
   - build/bald-launcher-mark.svg
+  - build/bald-launcher-mark.png
+  - build/export-icons/**/*
   - node_modules/**/*
   - patches/**/*
   - src/**/*
   - package.json
 extraResources:
+  - from: build/icon.ico
+    to: icon.ico
   - from: build/app-update.yml
     to: app-update.yml
   - from: lib/build/libs/agent-vanilla.jar

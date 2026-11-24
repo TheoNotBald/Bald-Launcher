@@ -155,6 +155,24 @@ public final class ClickGui {
         }
     }
 
+    /** Routes every drawing call to the overlay display list instead of the game's framebuffer. */
+    public void setRecording(boolean value) {
+        if (ui != null) {
+            ui.recording(value);
+        }
+    }
+
+    public int[] screenSize(Object screen) {
+        if (screen == null || widthField == null || heightField == null) {
+            return new int[] { 0, 0 };
+        }
+        try {
+            return new int[] { widthField.getInt(screen), heightField.getInt(screen) };
+        } catch (Exception error) {
+            return new int[] { 0, 0 };
+        }
+    }
+
     public void render(Object screen, Object graphics, int mouseX, int mouseY, float delta) {
         if (menu == null || graphics == null || uiFailureReported) {
             return;
@@ -1276,6 +1294,19 @@ public final class ClickGui {
         String descriptor = Type.getMethodDescriptor(render);
         var method = writer.visitMethod(Opcodes.ACC_PUBLIC, render.getName(), descriptor, null, null);
         method.visitCode();
+        // If the overlay can host the GUI, it is drawn there (and the vanilla
+        // background pass is skipped); otherwise fall back to the framebuffer.
+        var framebuffer = new org.objectweb.asm.Label();
+        method.visitVarInsn(Opcodes.ALOAD, 0);
+        method.visitVarInsn(Opcodes.ALOAD, 1);
+        method.visitVarInsn(Opcodes.ILOAD, 2);
+        method.visitVarInsn(Opcodes.ILOAD, 3);
+        method.visitVarInsn(Opcodes.FLOAD, 4);
+        method.visitMethodInsn(Opcodes.INVOKESTATIC, "bl/Bl", "renderMenuOverlay",
+                "(Ljava/lang/Object;Ljava/lang/Object;IIF)Z", false);
+        method.visitJumpInsn(Opcodes.IFEQ, framebuffer);
+        method.visitInsn(Opcodes.RETURN);
+        method.visitLabel(framebuffer);
         method.visitVarInsn(Opcodes.ALOAD, 0);
         method.visitVarInsn(Opcodes.ALOAD, 1);
         method.visitVarInsn(Opcodes.ILOAD, 2);

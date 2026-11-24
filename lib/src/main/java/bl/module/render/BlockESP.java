@@ -5,16 +5,17 @@ import java.util.List;
 
 import bl.Bl;
 import bl.event.events.RenderLevelEvent;
-import bl.mc.GizmoDraw;
 import bl.mc.Reflect;
 import bl.mc.Types;
 import bl.module.Category;
 import bl.module.Module;
 import bl.module.Setting;
+import bl.render.EspPalette;
+import bl.render.EspScene;
 
 public final class BlockESP extends Module {
 
-    private record Highlight(Object position, int color) {
+    private record Highlight(int x, int y, int z, int color) {
     }
 
     private final Setting radius = setting(Setting.integer("Scan radius", 12, 4, 24));
@@ -30,18 +31,26 @@ public final class BlockESP extends Module {
 
     private List<Highlight> highlights = List.of();
     private int ticksUntilScan;
+    private Object world;
 
     public BlockESP() {
         super("BlockESP", Category.RENDER, true);
         Bl.bus().subscribe(this, RenderLevelEvent.class, event -> {
             if (enabled && isAvailable()) {
-                GizmoDraw.inScope(event.levelRenderer, this::draw);
+                draw();
             }
         });
     }
 
     @Override
     protected void onTick() {
+        Object currentWorld = Reflect.world();
+        if (currentWorld != world) {
+            // Dimension change or world unload: drop every cached highlight.
+            highlights = List.of();
+            ticksUntilScan = 0;
+            world = currentWorld;
+        }
         if (ticksUntilScan-- > 0) {
             return;
         }
@@ -53,18 +62,20 @@ public final class BlockESP extends Module {
     protected void onDisable() {
         highlights = List.of();
         ticksUntilScan = 0;
+        world = null;
     }
 
     @Override
     protected void onUnavailable() {
         highlights = List.of();
         ticksUntilScan = 0;
+        world = null;
     }
 
     private void scan() {
         Object player = Reflect.player();
-        Object world = Reflect.world();
-        if (player == null || world == null) {
+        Object level = Reflect.world();
+        if (player == null || level == null) {
             highlights = List.of();
             return;
         }
@@ -82,13 +93,13 @@ public final class BlockESP extends Module {
                 }
                 for (int y = -vertical; y <= vertical; y++) {
                     Object pos = blockPosition(centerX + x, centerY + y, centerZ + z);
-                    Object state = Reflect.call(world, "getBlockState", pos);
+                    Object state = Reflect.call(level, "getBlockState", pos);
                     if (state == null) {
                         throw new IllegalStateException("Could not read scanned block state");
                     }
                     int color = colorFor(state);
                     if (color != 0) {
-                        found.add(new Highlight(pos, color));
+                        found.add(new Highlight(centerX + x, centerY + y, centerZ + z, color));
                     }
                 }
             }
@@ -98,22 +109,22 @@ public final class BlockESP extends Module {
 
     private int colorFor(Object state) {
         if (diamonds.getBool() && hasTag(state, "DIAMOND_ORES")) {
-            return 0xFF55FFFF;
+            return EspPalette.ORE_DIAMOND;
         }
         if (emeralds.getBool() && hasTag(state, "EMERALD_ORES")) {
-            return 0xFF55FF55;
+            return EspPalette.ORE_EMERALD;
         }
         if (gold.getBool() && hasTag(state, "GOLD_ORES")) {
-            return 0xFFFFD700;
+            return EspPalette.ORE_GOLD;
         }
         if (iron.getBool() && hasTag(state, "IRON_ORES")) {
-            return 0xFFD8D8D8;
+            return EspPalette.ORE_IRON;
         }
         if (redstone.getBool() && hasTag(state, "REDSTONE_ORES")) {
-            return 0xFFFF4444;
+            return EspPalette.ORE_REDSTONE;
         }
         if (lapis.getBool() && hasTag(state, "LAPIS_ORES")) {
-            return 0xFF5577FF;
+            return EspPalette.ORE_LAPIS;
         }
         return 0;
     }
@@ -140,9 +151,16 @@ public final class BlockESP extends Module {
         }
     }
 
-    private void draw(Object levelRenderer) {
+    private void draw() {
+        EspScene scene = EspScene.get();
+        if (scene.blocked()) {
+            return;
+        }
+        boolean walls = throughWalls.getBool();
         for (Highlight highlight : highlights) {
-            GizmoDraw.box(highlight.position(), highlight.color(), 1.5f, throughWalls.getBool());
+            scene.blockBox(highlight.x(), highlight.y(), highlight.z(),
+                    highlight.x() + 1.0f, highlight.y() + 1.0f, highlight.z() + 1.0f,
+                    highlight.color(), walls);
         }
     }
 }

@@ -27,6 +27,7 @@ public final class Agent {
 
     public static void premain(String args, Instrumentation instrumentation) {
         System.out.println("[Bald Agent] premain loaded");
+        GlfwProvisioner.provision();
         try {
             Patcher patcher = new Patcher();
             patcher.register(Descriptors.CLASS_MINECRAFT, new TickHook());

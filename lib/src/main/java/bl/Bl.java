@@ -77,7 +77,11 @@ import bl.module.world.AutoMine;
 import bl.module.world.AutoReplant;
 import bl.module.world.SpeedMine;
 import bl.module.world.TreeFeller;
+import bl.mc.Reflect;
 import bl.mc.Types;
+import bl.render.EspOverlay;
+import bl.render.EspScene;
+import bl.render.GuiRecord;
 import bl.rotation.RotationManager;
 import bl.ui.ClickGui;
 
@@ -158,10 +162,43 @@ public final class Bl {
         reportFailure("Agent", throwable);
     }
 
+    private static final java.util.Map<String, Integer> traceBudget =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     public static void reportFailure(String source, Throwable throwable) {
         System.err.println("[Bald Agent] " + source + " failed: " + throwable);
         if (debug) {
             throwable.printStackTrace(System.err);
+            return;
+        }
+        // Enough of a trace to locate a fault without flooding the log when a
+        // per-frame path fails every frame.
+        int printed = traceBudget.merge(source, 1, Integer::sum);
+        if (printed <= 3) {
+            throwable.printStackTrace(System.err);
+        }
+    }
+
+    /**
+     * Identifies the jar actually loaded into the game, so a launch that picked
+     * up an older agent can be told apart from a code fault.
+     */
+    public static String buildStamp() {
+        try (java.io.InputStream source = Bl.class.getProtectionDomain()
+                .getCodeSource().getLocation().openStream()) {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = source.read(buffer)) > 0) {
+                digest.update(buffer, 0, read);
+            }
+            StringBuilder hex = new StringBuilder();
+            for (byte value : digest.digest()) {
+                hex.append(String.format("%02x", value));
+            }
+            return hex.substring(0, 12);
+        } catch (Throwable unavailable) {
+            return "unknown";
         }
     }
 
@@ -212,7 +249,7 @@ public final class Bl {
             if (instance == null) {
                 init();
                 System.out.println("[Bald Agent] Initialized " + instance.modules.size()
-                        + " modules in the game classloader");
+                        + " modules in the game classloader from build " + buildStamp());
             }
             instance.minecraft = bl.mc.Reflect.instance();
             if (!instance.configurationLoaded) {
@@ -259,6 +296,9 @@ public final class Bl {
     }
 
     public static void setScreen(Object screen) {
+        if (instance == null) {
+            return;
+        }
         try {
             instance.bus.post(new SetScreenEvent(screen));
         } catch (Throwable t) {
@@ -423,18 +463,29 @@ public final class Bl {
         }
     }
 
-    public static void renderLevel(Object renderer) {
+    public static void renderLevel(Object renderer, Object tickCounter, Object camera,
+            Object positionMatrix, Object projectionMatrix) {
         if (instance == null || renderer == null) {
             return;
+        }
+        try {
+            EspScene.get().begin(renderer, tickCounter, camera, positionMatrix, projectionMatrix);
+        } catch (Throwable t) {
+            fault(t);
         }
         try {
             instance.bus.post(new RenderLevelEvent(renderer));
         } catch (Throwable t) {
             fault(t);
+        } finally {
+            EspScene.get().end();
         }
     }
 
     public static void renderScreen(Object renderer) {
+        if (instance == null) {
+            return;
+        }
         try {
             instance.bus.post(new Render2DEvent(renderer));
         } catch (Throwable t) {
@@ -483,6 +534,10 @@ public final class Bl {
             if (instance.gui.isOpen()) {
                 return;
             }
+            if (keyCode == OVERLAY_TOGGLE_KEY) {
+                toggleOverlay();
+                return;
+            }
             for (Module module : instance.modules) {
                 if (module.keybind != 0 && module.keybind == keyCode) {
                     module.toggle();
@@ -491,6 +546,26 @@ public final class Bl {
             }
         } catch (Throwable t) {
             fault(t);
+        }
+    }
+
+    /** GLFW key code for F6, the single ESP overlay toggle. */
+    private static final int OVERLAY_TOGGLE_KEY = 295;
+
+    private static void toggleOverlay() {
+        try {
+            EspScene.get().toggleOverlay();
+            String status = EspScene.get().overlayStatus();
+            System.out.println("[Bald Agent] ESP " + status);
+            Object minecraft = Reflect.instance();
+            Object hud = minecraft == null ? null : Reflect.getField(minecraft, "inGameHud");
+            Class<?> text = Types.find("net/minecraft/text/Text");
+            Object component = text == null ? null : Reflect.call(text, "literal", "ESP " + status);
+            if (hud != null && component != null) {
+                Reflect.invoke(hud, "setOverlayMessage", component, false);
+            }
+        } catch (Throwable t) {
+            reportFailure("ESP overlay toggle", t);
         }
     }
 
@@ -553,6 +628,42 @@ public final class Bl {
         }
         Module module = instance.modules.get(index);
         return (module.enabled ? "[ON]  " : "[OFF] ") + module.name;
+    }
+
+    /**
+     * Draws the ClickGui into the click-through overlay window when that window
+     * exists, so no part of the GUI reaches Minecraft's framebuffer (and thus no
+     * window capture). Returns false to let the caller draw it normally.
+     */
+    public static boolean renderMenuOverlay(Object screen, Object graphics,
+            int mouseX, int mouseY, float delta) {
+        if (instance == null) {
+            return false;
+        }
+        EspOverlay overlay = EspOverlay.get();
+        if (!overlay.isActive() || !overlay.passthroughSupported()) {
+            return false;
+        }
+        int[] size = instance.gui.screenSize(screen);
+        if (size[0] <= 0 || size[1] <= 0) {
+            return false;
+        }
+        GuiRecord record = GuiRecord.get();
+        record.begin(size[0], size[1]);
+        try {
+            instance.gui.setRecording(true);
+            try {
+                instance.gui.render(screen, graphics, mouseX, mouseY, delta);
+            } finally {
+                instance.gui.setRecording(false);
+            }
+            overlay.submitGui(record.end());
+            return true;
+        } catch (Throwable t) {
+            record.end();
+            fault(t);
+            return false;
+        }
     }
 
     public static void renderMenu(Object screen, Object graphics, int mouseX, int mouseY, float delta) {
@@ -815,6 +926,7 @@ public final class Bl {
     }
 
     public static void closeMenu() {
+        EspOverlay.get().submitGui(null);
         if (instance != null) {
             instance.gui.close();
         }

@@ -4,8 +4,10 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import bl.Bl;
@@ -79,6 +81,48 @@ public final class Reflect {
             Bl.fault(error);
             return null;
         }
+    }
+
+    /**
+     * Calls the first instance method whose return type matches and whose name
+     * is the mapped alias of {@code hint}. The generated mapping table has no
+     * intermediary row for a few inherited members (Entity#getBoundingBox is
+     * one), so callers that only need the value fall back to the signature the
+     * running game actually declares.
+     */
+    public static Object callReturning(Object target, String returnType, String hint, Object... args) {
+        if (target == null || returnType == null) {
+            return null;
+        }
+        for (Class<?> current : typeHierarchy(target.getClass())) {
+            Method selected = null;
+            int selectedCost = Integer.MAX_VALUE;
+            for (Method method : current.getDeclaredMethods()) {
+                if (Modifier.isStatic(method.getModifiers()) || method.isSynthetic() || method.isBridge()
+                        || method.getParameterCount() != args.length
+                        || !Types.matches(method.getReturnType(), returnType)) {
+                    continue;
+                }
+                boolean named = hint != null
+                        && RuntimeMappings.memberNames(current.getName(), hint, false)
+                                .contains(method.getName());
+                int cost = named ? 0 : 1;
+                if (cost < selectedCost) {
+                    selected = method;
+                    selectedCost = cost;
+                }
+            }
+            if (selected != null) {
+                try {
+                    selected.setAccessible(true);
+                    return selected.invoke(target, args);
+                } catch (ReflectiveOperationException error) {
+                    Bl.fault(error);
+                    return null;
+                }
+            }
+        }
+        return null;
     }
 
     public static Object call(Object target, String name, Object... args) {
@@ -204,7 +248,7 @@ public final class Reflect {
     }
 
     private static Optional<Method> findMethod(Class<?> type, String name, boolean staticTarget, Object[] args) {
-        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+        for (Class<?> current : typeHierarchy(type)) {
             for (String candidateName : RuntimeMappings.memberNames(current.getName(), name, false)) {
                 Method selected = null;
                 int selectedCost = Integer.MAX_VALUE;
@@ -252,7 +296,7 @@ public final class Reflect {
     }
 
     private static Optional<Field> findField(Class<?> type, String name) {
-        for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+        for (Class<?> current : typeHierarchy(type)) {
             for (String candidateName : RuntimeMappings.memberNames(current.getName(), name, true)) {
                 try {
                     Field field = current.getDeclaredField(candidateName);
@@ -267,7 +311,7 @@ public final class Reflect {
     }
 
     private static Optional<Field> findFieldByType(TypedFieldKey key) {
-        for (Class<?> current = key.owner(); current != null; current = current.getSuperclass()) {
+        for (Class<?> current : typeHierarchy(key.owner())) {
             for (Field field : current.getDeclaredFields()) {
                 if (Types.matches(field.getType(), key.typeName())) {
                     field.setAccessible(true);
@@ -276,6 +320,33 @@ public final class Reflect {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * The declared members of a runtime class are not enough: several game
+     * methods (Level#getBlockState, for example) are only declared on an
+     * interface such as BlockGetter, so the lookup has to walk the whole type
+     * graph instead of just the superclass chain.
+     */
+    private static List<Class<?>> typeHierarchy(Class<?> type) {
+        Set<Class<?>> ordered = new LinkedHashSet<>();
+        List<Class<?>> pending = new ArrayList<>();
+        for (Class<?> current = type; current != null && current != Object.class;
+                current = current.getSuperclass()) {
+            pending.add(current);
+        }
+        for (int index = 0; index < pending.size(); index++) {
+            Class<?> current = pending.get(index);
+            if (!ordered.add(current)) {
+                continue;
+            }
+            for (Class<?> implemented : current.getInterfaces()) {
+                if (!ordered.contains(implemented)) {
+                    pending.add(implemented);
+                }
+            }
+        }
+        return new ArrayList<>(ordered);
     }
 
     private static int compatibilityCost(Class<?>[] parameters, Object[] args) {

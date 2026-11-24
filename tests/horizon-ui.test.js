@@ -2,9 +2,11 @@
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
+const AdmZip = require('adm-zip');
 
 const workspace = path.join(__dirname, '..');
 const html = fs.readFileSync(path.join(workspace, 'bald_launcher_v7.html'), 'utf8').replace(/\r\n/g, '\n');
@@ -35,8 +37,11 @@ test('Horizon and Java reuse the shared profile list and profile detail structur
   assert.match(html, /id="panel-profile"/);
   assert.match(html, /class="pd-tabs"/);
   assert.match(html, /id="pdtab-content"[^>]*>Content/);
-  assert.match(html, /id="pdtab-settings"[^>]*>Settings/);
   assert.match(html, /id="pdtab-logs"[^>]*>Logs/);
+  assert.match(html, /openProfileSettingsModal\(\)/);
+  assert.match(html, /id="profileSettingsModal"/);
+  assert.match(html, /id="exportFormatModal"/);
+  assert.match(html, /id="exportFolderModal"/);
   assert.match(html, /id="javaProfileContent"/);
   assert.match(html, /id="horizonProfileContent"/);
   assert.match(html, /id="javaProfileSettings"/);
@@ -57,10 +62,12 @@ test('Horizon and Java reuse the shared profile list and profile detail structur
   assert.match(html, /if \(horizonModeActive\) \{\s*await runHorizonBrowseSearch\(\);/);
 });
 
-test('Java and Horizon profile prewarming is enabled by default and starts for each enabled profile', () => {
-  assert.match(main, /prewarmEnabled: profile\?\.prewarmEnabled !== false/);
+test('Java and Horizon profile prewarming requires explicit opt-in', () => {
+  assert.match(main, /prewarmEnabled: profile\?\.prewarmOptIn === true && profile\?\.prewarmEnabled === true/);
+  assert.match(main, /prewarmOptIn: profile\?\.prewarmOptIn === true/);
   assert.match(main, /horizonPrewarmByInstance[\s\S]*?\[instance\.id\]: enabled/);
-  assert.match(html, /const preferredProfileId = currentProfileId \|\| state\.activeProfileId;[\s\S]*?for \(const profile of orderedProfiles\)[\s\S]*?profile\.prewarmEnabled === false[\s\S]*?prewarming: true/);
+  assert.match(main, /typeof payload\?\.prewarmEnabled === 'boolean' \? \{ prewarmOptIn: true \} : \{\}/);
+  assert.match(html, /const preferredProfileId = currentProfileId \|\| state\.activeProfileId;[\s\S]*?for \(const profile of orderedProfiles\)[\s\S]*?profile\.prewarmEnabled !== true[\s\S]*?prewarming: true/);
   assert.match(html, /prewarmEnabledHorizonInstances\?\.\(\)/);
   const horizonPrewarmCall = html.indexOf('const horizonResult = await launcherBridge?.prewarmEnabledHorizonInstances?.()');
   assert.ok(
@@ -69,13 +76,68 @@ test('Java and Horizon profile prewarming is enabled by default and starts for e
     'Horizon warm-ups must start before Java warm-ups, without requiring a mode switch',
   );
   assert.match(main, /function prewarmSelectedHorizonInstance\(instanceIdOverride\)/);
-  assert.match(main, /if \(launcherState\.settings\?\.horizonPrewarmByInstance\?\.\[instanceId\] === false\)/);
+  assert.match(main, /if \(launcherState\.settings\?\.horizonPrewarmByInstance\?\.\[instanceId\] !== true\)/);
   const enabledPrewarm = main.slice(
     main.indexOf('async function prewarmEnabledHorizonInstances()'),
     main.indexOf('async function stopHorizonPrewarmedProcesses()', main.indexOf('async function prewarmEnabledHorizonInstances()')),
   );
   assert.match(enabledPrewarm, /ensureHorizonLauncherInstalled\(\)/);
+  assert.match(enabledPrewarm, /Object\.values\(instanceSettings\)\.some\(enabled => enabled === true\)/);
   assert.ok(enabledPrewarm.indexOf('ensureHorizonLauncherInstalled()') < enabledPrewarm.indexOf('await getHorizonInstances()'));
+});
+
+test('profile inventory refreshes do not poll or synchronously load mod jars', () => {
+  assert.doesNotMatch(html, /refreshProfileContent\(currentProfileId, true\);\s*\}\s*\},\s*10000\)/);
+  assert.match(main, /async function readInstalledModInventory\(modsFolder\)/);
+  assert.match(main, /new AdmZip\(await fs\.promises\.readFile\(filePath\)\)/);
+  assert.match(main, /installedModMetadataCache\.get\(cacheKey\)/);
+});
+
+test('profile mod inventory caches unchanged jar metadata and refreshes changed jars', async () => {
+  const start = main.indexOf('async function readInstalledModInventory(');
+  const end = main.indexOf('\nfunction normalizeSettings(', start);
+  assert.ok(start >= 0 && end > start, 'Could not find mod inventory implementation');
+  let archiveLoads = 0;
+  class TrackingAdmZip {
+    constructor(buffer) {
+      archiveLoads++;
+      this.archive = new AdmZip(buffer);
+    }
+
+    getEntry(name) {
+      return this.archive.getEntry(name);
+    }
+  }
+  const readInventory = vm.runInNewContext(
+    `${main.slice(start, end)}\nreadInstalledModInventory`,
+    {
+      fs,
+      path,
+      AdmZip: TrackingAdmZip,
+      installedModMetadataCache: new Map(),
+      console: { warn() {} },
+    },
+  );
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'bald-mod-inventory-'));
+  const modsFolder = path.join(root, 'mods');
+  const jarPath = path.join(modsFolder, 'sample.jar');
+  fs.mkdirSync(modsFolder);
+  const writeJar = name => {
+    const archive = new AdmZip();
+    archive.addFile('fabric.mod.json', Buffer.from(JSON.stringify({ id: 'sample', name, version: '1' })));
+    archive.writeZip(jarPath);
+  };
+  try {
+    writeJar('Sample mod');
+    assert.equal((await readInventory(modsFolder)).mods[0].name, 'Sample mod');
+    await readInventory(modsFolder);
+    assert.equal(archiveLoads, 1);
+    writeJar('Changed sample mod name');
+    assert.equal((await readInventory(modsFolder)).mods[0].name, 'Changed sample mod name');
+    assert.equal(archiveLoads, 2);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('Horizon cards use the shared grid with profile metadata and no Java loader chips', () => {
@@ -292,7 +354,7 @@ test('Horizon stays hidden during warm-up and starts warming again after Play ex
   assert.match(main, /mainWindow\.setAlwaysOnTop\(false\)/);
   assert.doesNotMatch(main, /horizonPrewarmCoverWasAlwaysOnTop/);
   assert.match(main, /releaseWindowCover\(\);\s*state\.ready = true/);
-  assert.match(main, /state\.activated && !horizonPrewarmShutdownRequested[\s\S]*?prewarmSelectedHorizonInstance\(instance\.id\)/);
+  assert.match(main, /state\.activated[\s\S]*?horizonPrewarmByInstance\?\.\[instance\.id\] === true[\s\S]*?prewarmSelectedHorizonInstance\(instance\.id\)/);
   assert.match(main, /warmState\.activated = true/);
   assert.match(main, /state\.activated = true;/);
   assert.match(main, /windowsHide: true/);
@@ -490,10 +552,8 @@ test('Java profile tabs clear stale Horizon status text', () => {
   const setPdTab = extractFunction('function setPdTab(tab){', '\nconst PROFILE_SYNC_CATEGORIES =');
   const ids = [
     'pdtab-content',
-    'pdtab-settings',
     'pdtab-logs',
     'pd-content-view',
-    'pd-settings-view',
     'pd-logs-view',
     'javaProfileContent',
     'horizonProfileContent',
@@ -526,10 +586,8 @@ test('profile log tabs show only the active mode logs', () => {
   const setPdTab = extractFunction('function setPdTab(tab){', '\nconst PROFILE_SYNC_CATEGORIES =');
   const ids = [
     'pdtab-content',
-    'pdtab-settings',
     'pdtab-logs',
     'pd-content-view',
-    'pd-settings-view',
     'pd-logs-view',
     'javaProfileContent',
     'horizonProfileContent',
@@ -563,6 +621,108 @@ test('profile log tabs show only the active mode logs', () => {
   assert.equal(elements.get('javaProfileLogs').style.display, 'none');
   assert.equal(elements.get('horizonProfileLogs').hidden, false);
   assert.equal(elements.get('horizonProfileLogs').style.display, 'flex');
+});
+
+test('profile export UI supports real format selection and folder selection', () => {
+  assert.match(html, /profile-settings-modal \.pd-settings-row/);
+  assert.match(html, /profile-action-menu \.profile-menu-group-label/);
+  assert.doesNotMatch(html, /<div class="profile-menu-group-label">Launch<\/div>/);
+  assert.doesNotMatch(html, /runProfileAction\('modpack'\)/);
+  assert.doesNotMatch(html, /runProfileAction\('backup'\)/);
+  assert.doesNotMatch(html, /runProfileAction\('delete'\)/);
+  assert.match(html, /const rect = anchor\?\.\getBoundingClientRect/);
+  assert.match(html, /rect\.bottom \+ 6/);
+  assert.match(html, /Open mods folder/);
+  assert.doesNotMatch(html, /runProfileAction\('edit'\)/);
+  assert.doesNotMatch(html, /runProfileAction\('open'\)/);
+  assert.match(html, /Select all/);
+  assert.match(html, /Deselect all/);
+  assert.match(html, /exportFolderSelectionCount/);
+  assert.match(html, /getProfileExportInventory/);
+  assert.match(html, /onExportProgress/);
+  assert.match(html, /notification-progress-track/);
+  assert.match(html, /id="pdPrewarmEnabled" type="checkbox"/);
+  assert.match(html, /id="pdJavaPath"[^>]*aria-label="Java executable"/);
+  assert.match(html, /type="range" class="profile-memory-slider" id="pdMemoryMax"/);
+  assert.match(html, /<input type="number" id="pdMemoryMaxInput"[^>]*min="512"[^>]*max="32768"/);
+  assert.match(html, /id="ramSlider"[^>]*oninput="updateRam/);
+  assert.match(html, /<input type="number" id="ramInput"[^>]*min="512"[^>]*max="32768"/);
+  assert.match(html, /min="512" max="32768" value="6144" step="1" id="ramSlider"/);
+  assert.match(html, /id="pdMemoryMax"[^>]*min="512"[^>]*max="32768"[^>]*step="1"/);
+  assert.match(html, /function formatMemoryValue\(mb\)/);
+  assert.match(html, /class="profile-settings-brand-logo" src="build\/bald-launcher-mark\.png"/);
+  assert.match(html, /id="profileSettingsContent"><\/div>\s*<footer class="profile-settings-footer" id="javaProfileSettingsFooter">[\s\S]*?onclick="saveProfileSettings\(\)"[\s\S]*?Save changes/);
+  assert.match(html, /if \(javaFooter\) javaFooter\.hidden=true/);
+  assert.match(html, /if \(javaFooter\) javaFooter\.hidden=false/);
+  assert.doesNotMatch(html, /pdInstallationSaveRow|profile-settings-warning|Installation changes rewrite Minecraft files/);
+  assert.match(html, /async function saveProfileSettings\(\)[\s\S]*?installationChanged[\s\S]*?await savePdSettings\(\)/);
+  assert.doesNotMatch(html, /onclick="saveInstallationSettings|> Save installation<\/button>/);
+  assert.doesNotMatch(html, /onclick="savePdSettings\(\)"/);
+  assert.match(html, /<div class="server-memory-control">[\s\S]*?type="range" class="setting-slider"/);
+  assert.match(html, /aria-label="Server maximum RAM in gigabytes"/);
+  assert.match(html, /id="serverJavaPathSelect"/);
+  assert.match(html, /bald-launcher-mark\.png/);
+  assert.match(main, /ipcMain\.handle\('launcher:get-java-installations'/);
+  assert.match(main, /async function discoverJavaInstallations\(\)/);
+  assert.match(main, /launcher:get-profile-export-inventory/);
+  assert.match(main, /launcher:open-profile-mods-folder/);
+  assert.match(main, /launcher:export-progress/);
+  assert.match(main, /The exported Modrinth archive is incomplete/);
+  assert.match(main, /const realSourcePath = fs\.realpathSync\(sourcePath\)/);
+  assert.match(main, /await assertTreeHasNoSymlinks\(sourcePath/);
+  assert.doesNotMatch(main, /sourcePath\.startsWith\(path\.resolve\(root\)\)/);
+  assert.match(html, /The export did not return a completion result/);
+  assert.match(html, /exportProgressNotificationIds\.delete\(exportId\)/);
+  assert.match(html, /data-export-format="bald"/);
+  assert.match(html, /data-export-format="modrinth"/);
+  assert.match(html, /data-export-format="curseforge"/);
+  assert.match(html, /data-export-format="prism"/);
+  assert.match(html, /data-export-format="lunar"/);
+  assert.match(html, /data-export-format="dawn"/);
+  assert.match(html, /data-export-format="oneclient"/);
+  assert.match(html, /data-export-format="minecraft"/);
+  assert.match(html, /build\/export-icons\/modrinth\.png/);
+  assert.match(html, /build\/export-icons\/prism\.png/);
+  assert.match(html, /build\/export-icons\/oneclient\.png/);
+  assert.match(html, /function submitFormatExport\(\)[\s\S]*?launcherBridge\.exportModpack[\s\S]*?launcherBridge\.exportProfile/);
+  assert.match(main, /if \(format === 'bald'\)/);
+  assert.match(main, /else if \(format === 'curseforge'\)/);
+  assert.match(main, /else if \(format === 'prism'\)/);
+  assert.match(main, /else if \(format === 'lunar'\)/);
+  assert.match(main, /else if \(format === 'dawn'\)/);
+  assert.match(main, /else if \(format === 'oneclient'\)/);
+  assert.match(main, /else if \(format === 'minecraft'\)/);
+});
+
+test('RAM controls keep editable MB values and only snap slider drags near whole GBs', () => {
+  const memoryControls = extractFunction('function normalizeMemoryMb(', '\nfunction formatMemoryValue(');
+  const memoryFormatter = extractFunction('function formatMemoryValue(', '\nasync function loadProfileJavaInstallations(');
+  const elements = {
+    pdMemoryMax: { style: { setProperty() {} }, setAttribute(name, value) { this[name] = value; } },
+    pdMemoryMaxInput: { value: '' },
+    pdMemoryMaxValue: { textContent: '' },
+  };
+  const context = {
+    document: { getElementById: id => elements[id] },
+  };
+  vm.createContext(context);
+  vm.runInContext(`${memoryControls}\n${memoryFormatter}`, context);
+
+  context.updateProfileRamSlider(6100);
+  assert.equal(Number(elements.pdMemoryMax.value), 6100);
+  assert.equal(Number(elements.pdMemoryMaxInput.value), 6100);
+  context.updateProfileRamSlider(1000, true);
+  assert.equal(Number(elements.pdMemoryMax.value), 1024);
+  context.updateProfileRamInput('5001', true);
+  assert.equal(Number(elements.pdMemoryMax.value), 5001);
+  assert.equal(Number(elements.pdMemoryMaxInput.value), 5001);
+});
+
+test('profile avatars use the selected profile icon instead of launcher branding', () => {
+  assert.match(html, /if \(pdIcon\) pdIcon\.textContent = String\(p\.icon/);
+  assert.match(html, /getElementById\('profileSettingsIcon'\)\.textContent = String\(profile\.icon/);
+  assert.doesNotMatch(html, /pdIcon\) pdIcon\.innerHTML = .*bald-launcher-mark/);
+  assert.doesNotMatch(html, /getElementById\('profileSettingsIcon'\)\.innerHTML = .*bald-launcher-mark/);
 });
 
 test('Java profile browser retains its original scrolling layout', () => {

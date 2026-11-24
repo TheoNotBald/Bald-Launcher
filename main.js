@@ -88,6 +88,12 @@ const {
 } = require('./src/shared/horizon-integration');
 const { refreshMicrosoftAuthorization } = require('./src/shared/launch-authorization');
 const { runProfileImportDownloads } = require('./src/shared/profile-import');
+const {
+  ONECLIENT_MODPACK_PROJECT_ID,
+  createOneClientProfileMetadata,
+  sortCompatibleModrinthModpackVersions,
+  validateModrinthPackDependencies,
+} = require('./src/shared/modpack-runtime');
 const { recordProfilePlaytime } = require('./src/shared/profile-playtime');
 const { getForgeVersions } = require('./src/shared/forge-version');
 const {
@@ -145,6 +151,9 @@ app.commandLine.appendSwitch('disable-features', 'DIPS');
 if (process.platform === 'win32') app.setAppUserModelId('com.baldlauncher.app');
 
 const htmlPath = path.join(__dirname, 'bald_launcher_v7.html');
+const appIconPath = app.isPackaged
+  ? path.join(process.resourcesPath, 'icon.ico')
+  : path.join(__dirname, 'build', 'icon.ico');
 let hasSingleInstanceLock = true;
 try {
   hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -293,6 +302,7 @@ const modrinthVersionsCache = new Map();
 const curseForgeVersionsCache = new Map();
 const installedContentHashCache = new Map();
 const installedContentFingerprintCache = new Map();
+const installedModMetadataCache = new Map();
 const installedCurseForgeMatchCache = new Map();
 const VERSION_MANIFEST_URL = 'https://launchermeta.mojang.com/mc/game/version_manifest_v2.json';
 let versionManifestCache = null;
@@ -2623,6 +2633,16 @@ function emitStatus(message) {
   }
 }
 
+function emitExportProgress(exportId, percent, message) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('launcher:export-progress', {
+      exportId: String(exportId || ''),
+      percent: Math.max(0, Math.min(100, Number(percent) || 0)),
+      message: String(message || ''),
+    });
+  }
+}
+
 function emitProfileImportProgress(progress) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('launcher:profile-import-progress', progress);
@@ -2745,6 +2765,18 @@ function normalizeProfile(profile) {
   const customSkinLoader = profile?.customSkinLoader && typeof profile.customSkinLoader === 'object'
     ? profile.customSkinLoader
     : {};
+  const profileSettingKeys = [
+    'minecraftClientModEnabled',
+    'minecraftMenuEnabled',
+    'minecraftPerformanceButtonEnabled',
+    'minecraftInGameButtonEnabled',
+    'minecraftPerformanceHudEnabled',
+    'vanillaPerformancePresetEnabled',
+    'optimizationModsEnabled',
+  ];
+  const profileSettingOverrides = Object.fromEntries(profileSettingKeys
+    .filter(key => typeof profile?.[key] === 'boolean')
+    .map(key => [key, profile[key]]));
   return {
     id: profile?.id || `profile-${Date.now()}`,
     name,
@@ -2762,9 +2794,11 @@ function normalizeProfile(profile) {
       ? normalizeLoaderVersion(profile?.loaderVersion ?? profile?.fabricLoaderVersion)
       : '',
     rendererMode,
-    prewarmEnabled: profile?.prewarmEnabled !== false,
+    prewarmEnabled: profile?.prewarmOptIn === true && profile?.prewarmEnabled === true,
+    prewarmOptIn: profile?.prewarmOptIn === true,
     icon: String(profile?.icon || name.slice(0, 1).toUpperCase()).slice(0, 2),
     modpackIconUrl: String(profile?.modpackIconUrl || '').slice(0, 1000) || null,
+    ...profileSettingOverrides,
     javaPath: String(profile?.javaPath || '').trim(),
     memoryMax: Math.min(32, Math.max(1, Number(profile?.memoryMax) || DEFAULT_STATE.settings.memoryMax)),
     jvmProfile: ['default', 'zgc', 'custom'].includes(profile?.jvmProfile) ? profile.jvmProfile : 'default',
@@ -2786,9 +2820,11 @@ function normalizeProfile(profile) {
     // without needing a live Modrinth lookup every time the profile opens.
     mods: Array.isArray(profile?.mods) ? profile.mods.map(normalizeInstalledContent) : [],
     optimizationManaged: profile?.optimizationManaged === true,
-    optimizationKind: ['sodium', 'vanilla-fallback'].includes(profile?.optimizationKind) ? profile.optimizationKind : null,
+    optimizationKind: ['sodium', 'vanilla-fallback', 'oneclient'].includes(profile?.optimizationKind) ? profile.optimizationKind : null,
     optimizationSourceProfileId: String(profile?.optimizationSourceProfileId || '').slice(0, 120) || null,
     optimizationSourceProfileName: String(profile?.optimizationSourceProfileName || '').slice(0, 80) || null,
+    oneClientPackVersionId: String(profile?.oneClientPackVersionId || '').slice(0, 120) || null,
+    oneClientPackVersionNumber: String(profile?.oneClientPackVersionNumber || '').slice(0, 80) || null,
     optimizationWorldSetupComplete: profile?.optimizationWorldSetupComplete === true,
     optimizationVisualSettingsCopied: profile?.optimizationVisualSettingsCopied === true,
     optimizationSkippedMods: Array.isArray(profile?.optimizationSkippedMods)
@@ -3067,68 +3103,78 @@ function hasInstalledContentFile(profile, entry) {
     || fs.existsSync(getInstalledFilePath(profile, entry.type, entry.name, true));
 }
 
-function readInstalledModInventory(modsFolder) {
+async function readInstalledModInventory(modsFolder) {
   if (!fs.existsSync(modsFolder)) return { mods: [], issues: [] };
   const mods = [];
   const issues = [];
-  const files = fs.readdirSync(modsFolder, { withFileTypes: true })
+  const files = (await fs.promises.readdir(modsFolder, { withFileTypes: true }))
     .filter(item => item.isFile() && /\.jar(?:\.disabled)?$/i.test(item.name));
 
   for (const file of files) {
-    const modIds = new Set();
-    let displayName = path.basename(file.name).replace(/\.jar(?:\.disabled)?$/i, '');
-    let modVersion = '';
-    try {
-      const archive = new AdmZip(path.join(modsFolder, file.name));
-      const fabricEntry = archive.getEntry('fabric.mod.json');
-      if (fabricEntry) {
-        const text = fabricEntry.getData().toString('utf8');
-        try {
-          const metadata = JSON.parse(text);
-          if (metadata.id) modIds.add(String(metadata.id));
-          if (metadata.name) displayName = String(metadata.name);
-          if (metadata.version != null) modVersion = String(metadata.version);
-        } catch (error) {
-          const id = text.match(/^\s*"id"\s*:\s*"([^"]+)"/m)?.[1];
-          const name = text.match(/^\s*"name"\s*:\s*"([^"]+)"/m)?.[1];
-          if (!id) throw error;
-          modIds.add(id);
-          if (name) displayName = name;
-        }
-      }
-
-      const quiltEntry = archive.getEntry('quilt.mod.json');
-      if (quiltEntry) {
-        const metadata = JSON.parse(quiltEntry.getData().toString('utf8'));
-        const loader = metadata.quilt_loader || {};
-        if (loader.id) modIds.add(String(loader.id));
-        if (loader.metadata?.name && !fabricEntry) displayName = String(loader.metadata.name);
-        if (loader.version != null && !modVersion) modVersion = String(loader.version);
-      }
-
-      for (const metadataPath of ['META-INF/mods.toml', 'META-INF/neoforge.mods.toml']) {
-        const metadataEntry = archive.getEntry(metadataPath);
-        if (!metadataEntry) continue;
-        const text = metadataEntry.getData().toString('utf8');
-        for (const block of text.split(/(?=\[\[mods\]\])/i).filter(part => /^\s*\[\[mods\]\]/i.test(part))) {
-          const id = block.match(/^\s*modId\s*=\s*["']([^"']+)["']/im)?.[1];
-          if (id) modIds.add(id);
-          const version = block.match(/^\s*version\s*=\s*["']([^"']+)["']/im)?.[1];
-          if (version && !modVersion) modVersion = version;
-          if (displayName === path.basename(file.name).replace(/\.jar(?:\.disabled)?$/i, '')) {
-            const name = block.match(/^\s*displayName\s*=\s*["']([^"']+)["']/im)?.[1];
+    const filePath = path.join(modsFolder, file.name);
+    const stat = await fs.promises.stat(filePath);
+    const cacheKey = `${filePath}\0${stat.size}\0${stat.mtimeMs}\0${stat.ctimeMs}`;
+    let metadata = installedModMetadataCache.get(cacheKey);
+    if (!metadata) {
+      const modIds = new Set();
+      let displayName = path.basename(file.name).replace(/\.jar(?:\.disabled)?$/i, '');
+      let modVersion = '';
+      let issue = false;
+      try {
+        const archive = new AdmZip(await fs.promises.readFile(filePath));
+        const fabricEntry = archive.getEntry('fabric.mod.json');
+        if (fabricEntry) {
+          const text = fabricEntry.getData().toString('utf8');
+          try {
+            const metadata = JSON.parse(text);
+            if (metadata.id) modIds.add(String(metadata.id));
+            if (metadata.name) displayName = String(metadata.name);
+            if (metadata.version != null) modVersion = String(metadata.version);
+          } catch (error) {
+            const id = text.match(/^\s*"id"\s*:\s*"([^"]+)"/m)?.[1];
+            const name = text.match(/^\s*"name"\s*:\s*"([^"]+)"/m)?.[1];
+            if (!id) throw error;
+            modIds.add(id);
             if (name) displayName = name;
           }
         }
+
+        const quiltEntry = archive.getEntry('quilt.mod.json');
+        if (quiltEntry) {
+          const metadata = JSON.parse(quiltEntry.getData().toString('utf8'));
+          const loader = metadata.quilt_loader || {};
+          if (loader.id) modIds.add(String(loader.id));
+          if (loader.metadata?.name && !fabricEntry) displayName = String(loader.metadata.name);
+          if (loader.version != null && !modVersion) modVersion = String(loader.version);
+        }
+
+        for (const metadataPath of ['META-INF/mods.toml', 'META-INF/neoforge.mods.toml']) {
+          const metadataEntry = archive.getEntry(metadataPath);
+          if (!metadataEntry) continue;
+          const text = metadataEntry.getData().toString('utf8');
+          for (const block of text.split(/(?=\[\[mods\]\])/i).filter(part => /^\s*\[\[mods\]\]/i.test(part))) {
+            const id = block.match(/^\s*modId\s*=\s*["']([^"']+)["']/im)?.[1];
+            if (id) modIds.add(id);
+            const version = block.match(/^\s*version\s*=\s*["']([^"']+)["']/im)?.[1];
+            if (version && !modVersion) modVersion = version;
+            if (displayName === path.basename(file.name).replace(/\.jar(?:\.disabled)?$/i, '')) {
+              const name = block.match(/^\s*displayName\s*=\s*["']([^"']+)["']/im)?.[1];
+              if (name) displayName = name;
+            }
+          }
+        }
+      } catch (error) {
+        issue = true;
+        console.warn('[Content] Could not inspect installed mod archive.', {
+          fileName: file.name,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
-    } catch (error) {
-      issues.push(file.name);
-      console.warn('[Content] Could not inspect installed mod archive.', {
-        fileName: file.name,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      metadata = { name: displayName, modIds: [...modIds], modVersion, issue };
+      installedModMetadataCache.set(cacheKey, metadata);
     }
-    mods.push({ fileName: file.name, name: displayName, modIds: [...modIds], modVersion, enabled: !/\.disabled$/i.test(file.name) });
+    if (metadata.issue) issues.push(file.name);
+    mods.push({ fileName: file.name, name: metadata.name, modIds: metadata.modIds, modVersion: metadata.modVersion, enabled: !/\.disabled$/i.test(file.name) });
   }
 
   return { mods, issues };
@@ -3140,7 +3186,7 @@ function normalizeSettings(settings) {
     memoryMaxAuto: settings?.memoryMaxAuto === true,
     jvmProfile: ['default', 'zgc', 'custom'].includes(settings?.jvmProfile) ? settings.jvmProfile : 'default',
     customJvmArgs: String(settings?.customJvmArgs || ''),
-    optimizationModsEnabled: isOptimizationOptedIn(settings),
+    optimizationModsEnabled: false,
     vanillaPerformancePresetEnabled: settings?.vanillaPerformancePresetEnabled !== false,
     playitKeepRunningOnClose: settings?.playitKeepRunningOnClose === true,
     horizonLauncherPath: String(settings?.horizonLauncherPath || '').trim().slice(0, 2048),
@@ -3401,6 +3447,83 @@ async function installManagedJava(version) {
   }
 }
 
+async function discoverJavaInstallations() {
+  const candidates = new Map();
+  const addCandidate = (value, source = 'System') => {
+    if (!value) return;
+    let executable = String(value).trim();
+    if (!executable) return;
+    if (!/java(?:w)?\.exe$/i.test(executable) && !/(?:^|[\\/])java$/i.test(executable)) {
+      executable = path.join(executable, 'bin', process.platform === 'win32' ? 'java.exe' : 'java');
+    }
+    if (!fs.existsSync(executable)) return;
+    const major = parseJavaMajorVersion(executable);
+    if (!major) return;
+    candidates.set(path.normalize(executable), {
+      path: path.normalize(executable),
+      version: major,
+      label: `Java ${major} · ${path.basename(path.dirname(path.dirname(executable)))}`,
+      source,
+    });
+  };
+
+  if (process.env.JAVA_HOME) addCandidate(process.env.JAVA_HOME, 'JAVA_HOME');
+
+  if (process.platform === 'win32') {
+    const roots = [
+      process.env.ProgramFiles,
+      process.env['ProgramFiles(x86)'],
+      process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs'),
+      process.env.USERPROFILE && path.join(process.env.USERPROFILE, '.jdks'),
+      process.env.USERPROFILE && path.join(process.env.USERPROFILE, 'scoop', 'apps'),
+      'C:\\Program Files\\Java',
+      'C:\\Program Files\\Eclipse Adoptium',
+      'C:\\Program Files\\Microsoft',
+      'C:\\Program Files\\Zulu',
+      'C:\\Program Files\\BellSoft',
+      'C:\\Program Files\\Semeru',
+      'C:\\Program Files\\Amazon Corretto',
+    ];
+    for (const root of roots) {
+      if (!root || !fs.existsSync(root)) continue;
+      try {
+        const entries = fs.readdirSync(root, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          const nested = path.join(root, entry.name);
+          addCandidate(path.join(nested, 'bin', 'java.exe'), 'PC');
+          try {
+            for (const nestedEntry of fs.readdirSync(nested, { withFileTypes: true })) {
+              if (nestedEntry.isDirectory()) addCandidate(path.join(nested, nestedEntry.name), 'PC');
+            }
+          } catch (_error) {}
+        }
+      } catch (_error) {}
+    }
+  }
+
+  const managedRoot = path.join(app.getPath('userData'), 'runtimes');
+  if (fs.existsSync(managedRoot)) {
+    try {
+      for (const entry of fs.readdirSync(managedRoot, { withFileTypes: true })) {
+        if (entry.isDirectory() && /^jdk-/i.test(entry.name)) {
+          const executable = findJavaExecutable(path.join(managedRoot, entry.name));
+          if (executable) addCandidate(executable, 'Bald Launcher');
+        }
+      }
+    } catch (_error) {}
+  }
+
+  await new Promise(resolve => execFile(process.platform === 'win32' ? 'where.exe' : 'which', ['java'], (error, stdout) => {
+    if (!error) {
+      for (const line of String(stdout || '').split(/\r?\n/)) addCandidate(line.trim(), 'PATH');
+    }
+    resolve();
+  }));
+
+  return [...candidates.values()].sort((left, right) => right.version - left.version || left.path.localeCompare(right.path));
+}
+
 async function getJavaPath(minimumVersion = 21, installIfMissing = false) {
   const cachedPath = serverJavaPathCache.get(minimumVersion);
   if (cachedPath && fs.existsSync(cachedPath) && parseJavaMajorVersion(cachedPath) >= minimumVersion) return cachedPath;
@@ -3556,7 +3679,7 @@ function getLoaderVersionId(profile, mcVersion, loader, loaderVersion = '') {
   return null;
 }
 
-async function downloadToFile(url, filePath, label, signal = null) {
+async function downloadToFile(url, filePath, label, signal = null, onProgress = () => {}) {
   const temporaryPath = `${filePath}.${crypto.randomUUID()}.download`;
   emitStatus(`Download started: ${label}`);
 
@@ -3570,6 +3693,8 @@ async function downloadToFile(url, filePath, label, signal = null) {
   });
   const total = Number(response.headers['content-length']) || 0;
   let received = 0;
+  let lastStatusAt = 0;
+  let lastStatusPercent = -1;
   const hash = crypto.createHash('sha1');
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
 
@@ -3585,8 +3710,15 @@ async function downloadToFile(url, filePath, label, signal = null) {
       response.data.on('data', chunk => {
         received += chunk.length;
         hash.update(chunk);
-        const progress = total ? ` ${Math.round((received / total) * 100)}%` : '';
-        emitStatus(`Downloading ${label} · ${(received / 1048576).toFixed(1)} MB${total ? ` / ${(total / 1048576).toFixed(1)} MB` : ''}${progress}`);
+        onProgress({ loaded: received, total });
+        const now = Date.now();
+        const percent = total ? Math.floor((received / total) * 100) : -1;
+        if (now - lastStatusAt >= 250 || (percent >= 0 && percent >= lastStatusPercent + 5)) {
+          const progress = total ? ` ${Math.round((received / total) * 100)}%` : '';
+          emitStatus(`Downloading ${label} · ${(received / 1048576).toFixed(1)} MB${total ? ` / ${(total / 1048576).toFixed(1)} MB` : ''}${progress}`);
+          lastStatusAt = now;
+          lastStatusPercent = percent;
+        }
       });
       response.data.on('error', error => { cleanup(); reject(error); });
       output.on('error', error => { cleanup(); reject(error); });
@@ -4369,7 +4501,7 @@ function createWindow() {
     minWidth: 1280,
     minHeight: 720,
     frame: false,
-    icon: path.join(__dirname, 'build', 'icon.ico'),
+    icon: appIconPath,
     backgroundColor: '#0d0d0d',
     title: 'Bald Launcher',
     show: false,
@@ -4701,7 +4833,9 @@ function startHorizonClient(instance, executablePath, roots, { prewarming = fals
       running: false,
       ...(code === 0 || state.prewarming ? {} : { error: stderrTail.trim() || `Horizon exited with code ${code}.` }),
     });
-    if (state.activated && !horizonPrewarmShutdownRequested) {
+    if (state.activated
+      && launcherState.settings?.horizonPrewarmByInstance?.[instance.id] === true
+      && !horizonPrewarmShutdownRequested) {
       console.info(`[Horizon] Game closed for ${instance.name}; starting a fresh background warm-up.`);
       setTimeout(() => {
         if (!horizonPrewarmShutdownRequested) void prewarmSelectedHorizonInstance(instance.id);
@@ -5045,7 +5179,7 @@ async function ensureHorizonBuildPrepared(buildTag, prepared, accountResult, rep
 function prewarmSelectedHorizonInstance(instanceIdOverride) {
   if (process.platform !== 'win32' || horizonPrewarmShutdownRequested) return Promise.resolve();
   const instanceId = String(instanceIdOverride || launcherState.settings?.horizonInstanceId || '').trim();
-  if (launcherState.settings?.horizonPrewarmByInstance?.[instanceId] === false) return Promise.resolve();
+  if (launcherState.settings?.horizonPrewarmByInstance?.[instanceId] !== true) return Promise.resolve();
   if (!instanceId || !String(launcherState.settings?.horizonLauncherPath || '').trim()) return Promise.resolve();
   const existingTask = horizonPrewarmTasks.get(instanceId);
   if (existingTask) return existingTask;
@@ -5082,7 +5216,7 @@ function prewarmSelectedHorizonInstance(instanceIdOverride) {
         console.info(`[Horizon] Background warm-up skipped: ${preparation.error}`);
         return;
       }
-      if (launcherState.settings?.horizonPrewarmByInstance?.[instance.id] === false) return;
+      if (launcherState.settings?.horizonPrewarmByInstance?.[instance.id] !== true) return;
       if (horizonPrewarmShutdownRequested) return;
       await prewarmHorizonInstance(instance, executablePath, roots, startedAt);
     } catch (error) {
@@ -5099,16 +5233,14 @@ function prewarmSelectedHorizonInstance(instanceIdOverride) {
 async function prewarmEnabledHorizonInstances() {
   if (process.platform !== 'win32' || horizonPrewarmShutdownRequested) return;
   const instanceSettings = launcherState.settings?.horizonPrewarmByInstance || {};
-  const selectedInstanceId = String(launcherState.settings?.horizonInstanceId || '').trim();
-  const hasEnabledProfile = Object.values(instanceSettings).some(enabled => enabled === true)
-    || (selectedInstanceId && instanceSettings[selectedInstanceId] !== false);
-  if (!String(launcherState.settings?.horizonLauncherPath || '').trim() && !hasEnabledProfile) return;
+  const hasEnabledProfile = Object.values(instanceSettings).some(enabled => enabled === true);
+  if (!hasEnabledProfile) return;
   const installation = await ensureHorizonLauncherInstalled();
   if (!installation.ok) throw new Error(installation.error);
   const instances = await getHorizonInstances();
   for (const instance of instances) {
     if (instance.java) continue;
-    if (launcherState.settings?.horizonPrewarmByInstance?.[instance.id] === false) continue;
+    if (launcherState.settings?.horizonPrewarmByInstance?.[instance.id] !== true) continue;
     const headroom = getPrewarmMemoryHeadroomGb();
     if (!headroom.allowed) {
       console.info(`[Horizon] Remaining profile warm-ups skipped: ${headroom.freeGb.toFixed(1)} GB free; ${headroom.requiredGb.toFixed(1)} GB required.`);
@@ -6410,6 +6542,7 @@ ipcMain.handle('launcher:cosmetics:export-created', async (_event, payload = {})
     if (!fs.existsSync(requested)) return { ok: false, error: 'Cosmetic file no longer exists.' };
     const result = await dialog.showSaveDialog(mainWindow, { defaultPath: `${String(payload?.name || 'cosmetic').replace(/[<>:"/\\|?*]+/g, '_')}.png`, filters: [{ name: 'PNG image', extensions: ['png'] }] });
     if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+    emitExportProgress(exportId, 12, 'Building export archive');
     fs.copyFileSync(requested, result.filePath);
     return { ok: true, filePath: result.filePath };
   } catch (error) {
@@ -6670,6 +6803,14 @@ ipcMain.handle('launcher:get-renderer-options', async (_event, { mcVersion, load
 });
 
 ipcMain.handle('launcher:get-versions', async () => getVersionManifest());
+
+ipcMain.handle('launcher:get-java-installations', async () => {
+  try {
+    return { ok: true, installations: await discoverJavaInstallations() };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error), installations: [] };
+  }
+});
 
 ipcMain.handle('launcher:get-loader-versions', async (_event, payload) => {
   try {
@@ -7075,6 +7216,8 @@ ipcMain.handle('launcher:duplicate-profile', async (_event, payload) => {
       optimizationKind: null,
       optimizationSourceProfileId: null,
       optimizationSourceProfileName: null,
+      oneClientPackVersionId: null,
+      oneClientPackVersionNumber: null,
       optimizationWorldSetupComplete: false,
       optimizationSkippedMods: [],
       optimizationReady: false,
@@ -7135,7 +7278,9 @@ async function getMrpackDependencies(profile) {
 }
 
 ipcMain.handle('launcher:export-modpack', async (_event, payload) => {
+  const exportId = String(payload?.exportId || `export-${Date.now()}`);
   try {
+    emitExportProgress(exportId, 3, 'Preparing Modrinth export');
     const profile = launcherState.profiles.find(item => item.id === payload?.profileId);
     if (!profile) throw new Error('Profile not found');
     const options = { mods: true, configs: true, resourcepacks: true, shaders: true, worlds: false, screenshots: false, ...(payload?.options || {}) };
@@ -7143,12 +7288,46 @@ ipcMain.handle('launcher:export-modpack', async (_event, payload) => {
     const exportName = sanitizeFileName(payload?.name || profile.name) || 'Minecraft Pack';
     const version = String(payload?.version || '1.0.0').trim() || '1.0.0';
     const saveResult = await dialog.showSaveDialog({ title: 'Export Modpack', defaultPath: `${exportName}-${sanitizeFileName(version)}.mrpack`, filters: [{ name: 'Modrinth modpack', extensions: ['mrpack'] }] });
-    if (saveResult.canceled || !saveResult.filePath) return { ok: false, canceled: true };
+    if (saveResult.canceled || !saveResult.filePath) {
+      emitExportProgress(exportId, 100, 'Export canceled');
+      return { ok: false, canceled: true };
+    }
+    emitExportProgress(exportId, 8, 'Building Modrinth archive');
     emitStatus(`Preparing modpack ${exportName}...`);
     const zip = new AdmZip();
     const files = [];
     const warnings = [];
-    if (options.mods) {
+    const selectedPaths = Array.isArray(options.paths) ? options.paths : null;
+    const resolveSelectedPath = async relativePath => {
+      if (typeof relativePath !== 'string' || !relativePath || path.isAbsolute(relativePath)
+        || relativePath.split(/[\\/]+/).includes('..')) return null;
+      const resolvedRoot = fs.realpathSync(root);
+      const sourcePath = path.resolve(resolvedRoot, relativePath);
+      if (!isPathWithin(resolvedRoot, sourcePath) || !fs.existsSync(sourcePath)) return null;
+      const realSourcePath = fs.realpathSync(sourcePath);
+      if (!isPathWithin(resolvedRoot, realSourcePath)) {
+        throw new Error(`Selected export path escapes the profile folder: ${relativePath}`);
+      }
+      await assertTreeHasNoSymlinks(sourcePath, `Selected export path "${relativePath}"`);
+      return {
+        sourcePath: realSourcePath,
+        relativePath: path.relative(resolvedRoot, sourcePath).split(path.sep).join('/'),
+      };
+    };
+    const copySelectedModrinthPath = async relativePath => {
+      const selected = await resolveSelectedPath(relativePath);
+      if (!selected) return;
+      const destinationPath = path.posix.join('overrides', selected.relativePath);
+      const stat = fs.statSync(selected.sourcePath);
+      if (stat.isDirectory()) zip.addLocalFolder(selected.sourcePath, destinationPath);
+      else if (stat.isFile()) {
+        zip.addLocalFile(selected.sourcePath, path.posix.dirname(destinationPath), path.posix.basename(destinationPath));
+      }
+    };
+    if (selectedPaths) {
+      emitExportProgress(exportId, 18, `Including ${selectedPaths.length} selected folders`);
+      for (const relativePath of selectedPaths) await copySelectedModrinthPath(relativePath);
+    } else if (options.mods) {
       for (const entry of profile.mods.filter(item => item.type === 'mod' && item.enabled !== false)) {
         const installedPath = getProfileContentPath(profile, entry);
         if (!installedPath || !fs.existsSync(installedPath)) {
@@ -7175,23 +7354,29 @@ ipcMain.handle('launcher:export-modpack', async (_event, payload) => {
       if (!enabled) return;
       const folder = path.join(root, folderName);
       if (!fs.existsSync(folder)) return;
-      for (const file of fs.readdirSync(folder, { withFileTypes: true })) {
-        if (file.isFile()) zip.addLocalFile(path.join(folder, file.name), 'overrides', archiveFolder);
-      }
+      zip.addLocalFolder(folder, path.posix.join('overrides', archiveFolder));
     };
-    copyFolder('config', options.configs, 'config');
-    copyFolder('resourcepacks', options.resourcepacks, 'resourcepacks');
-    copyFolder('shaderpacks', options.shaders, 'shaderpacks');
-    copyFolder('screenshots', options.screenshots, 'screenshots');
-    copyFolder('saves', options.worlds, 'saves');
+    if (!selectedPaths) {
+      copyFolder('config', options.configs, 'config');
+      copyFolder('datapacks', options.datapacks, 'datapacks');
+      copyFolder('resourcepacks', options.resourcepacks, 'resourcepacks');
+      copyFolder('shaderpacks', options.shaders, 'shaderpacks');
+      copyFolder('screenshots', options.screenshots, 'screenshots');
+      copyFolder('saves', options.worlds, 'saves');
+    }
     const manifest = { formatVersion: 1, game: 'minecraft', versionId: profile.mcVersion, name: exportName, summary: String(payload?.description || '').slice(0, 2000), files, dependencies: await getMrpackDependencies(profile) };
     zip.addFile('modrinth.index.json', Buffer.from(JSON.stringify(manifest, null, 2), 'utf8'));
+    emitExportProgress(exportId, 86, 'Writing Modrinth archive');
     zip.writeZip(saveResult.filePath);
     const validation = new AdmZip(saveResult.filePath).getEntry('modrinth.index.json');
     if (!validation) throw new Error('The exported archive did not contain modrinth.index.json.');
+    const exportedSize = fs.statSync(saveResult.filePath).size;
+    if (exportedSize < 256) throw new Error('The exported Modrinth archive is incomplete.');
+    emitExportProgress(exportId, 100, 'Modrinth export complete');
     emitStatus(`Modpack exported: ${path.basename(saveResult.filePath)}`);
     return { ok: true, path: saveResult.filePath, warnings, manifest };
   } catch (error) {
+    emitExportProgress(exportId, 100, 'Export failed');
     return { ok: false, error: error instanceof Error ? error.message : 'Could not export the modpack.' };
   }
 });
@@ -7205,26 +7390,311 @@ ipcMain.handle('launcher:reveal-profile', async (_event, profileId) => {
   return { ok: true, path: root };
 });
 
-ipcMain.handle('launcher:export-profile', async (_event, profileId) => {
+ipcMain.handle('launcher:get-profile-export-inventory', async (_event, payload) => {
   try {
-    const profile = launcherState.profiles.find(item => item.id === profileId);
+    const profile = launcherState.profiles.find(item => item.id === payload?.profileId);
     if (!profile) throw new Error('Profile not found');
-    const result = await dialog.showSaveDialog({
-      title: 'Export Bald profile',
-      defaultPath: `${sanitizeFileName(profile.name)}.baldprofile`,
-      filters: [{ name: 'Bald profile', extensions: ['baldprofile'] }],
-    });
-    if (result.canceled || !result.filePath) return { ok: false, canceled: true };
-    const payload = {
-      format: 'baldprofile',
-      schemaVersion: BALD_PROFILE_SCHEMA_VERSION,
-      exportedAt: new Date().toISOString(),
-      profile: JSON.parse(JSON.stringify(profile)),
-      references: { profileRoot: 'profiles/<profile-id>', content: profile.mods.map(item => ({ id: item.id, name: item.name, source: item.source || null, fileName: item.fileName || null })) },
-    };
-    fs.writeFileSync(result.filePath, JSON.stringify(payload, null, 2), 'utf8');
-    return { ok: true, path: result.filePath };
+    const root = getMinecraftRootFor(profile.id);
+    ensureLauncherGameFolders(root);
+    const entries = [];
+    const preferredFolders = [
+      ['mods', 'Mods', 'Installed content and local jars'],
+      ['config', 'Config', 'Mod configuration files'],
+      ['datapacks', 'Data packs', 'Data packs and world rules'],
+      ['resourcepacks', 'Resource packs', 'Textures and visual packs'],
+      ['shaderpacks', 'Shader packs', 'Shader configuration packs'],
+      ['saves', 'Worlds', 'Saved worlds and local data'],
+      ['screenshots', 'Screenshots', 'Captured screenshots'],
+      ['logs', 'Logs', 'Minecraft and launcher log files'],
+      ['crash-reports', 'Crash reports', 'Crash reports for diagnostics'],
+      ['versions', 'Versions', 'Downloaded Minecraft and loader versions'],
+      ['libraries', 'Libraries', 'Java library dependencies'],
+      ['assets', 'Assets', 'Minecraft assets and resources'],
+      ['natives', 'Natives', 'Platform-native libraries'],
+    ];
+    for (const [relativePath, label, description] of preferredFolders) {
+      const absolutePath = path.join(root, relativePath);
+      if (!fs.existsSync(absolutePath)) continue;
+      const stat = fs.statSync(absolutePath);
+      entries.push({
+        id: relativePath,
+        relativePath,
+        label,
+        description,
+        kind: stat.isDirectory() ? 'folder' : 'file',
+        sizeBytes: stat.isDirectory() ? 0 : stat.size,
+      });
+    }
+    for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isDirectory() && !preferredFolders.some(([relativePath]) => relativePath === entry.name)) {
+        const absolutePath = path.join(root, entry.name);
+        entries.push({
+          id: entry.name,
+          relativePath: entry.name,
+          label: entry.name,
+          description: 'Additional profile folder',
+          kind: 'folder',
+          sizeBytes: 0,
+        });
+      } else if (entry.isFile()) {
+        const absolutePath = path.join(root, entry.name);
+        entries.push({
+          id: entry.name,
+          relativePath: entry.name,
+          label: entry.name,
+          description: 'Profile file',
+          kind: 'file',
+          sizeBytes: fs.statSync(absolutePath).size,
+        });
+      }
+    }
+    return { ok: true, entries };
   } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error), entries: [] };
+  }
+});
+
+ipcMain.handle('launcher:open-profile-mods-folder', async (_event, payload) => {
+  try {
+    const profile = launcherState.profiles.find(item => item.id === payload?.profileId);
+    if (!profile) throw new Error('Profile not found');
+    const modsPath = path.join(getMinecraftRootFor(profile.id), 'mods');
+    fs.mkdirSync(modsPath, { recursive: true });
+    if (process.platform === 'win32') execFile('explorer', [modsPath]);
+    else if (process.platform === 'darwin') execFile('open', [modsPath]);
+    else execFile('xdg-open', [modsPath]);
+    return { ok: true, path: modsPath };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+async function readBaldProfileExport(sourcePath) {
+  if (path.extname(sourcePath).toLowerCase() !== '.baldprofile') {
+    return JSON.parse(await fs.promises.readFile(sourcePath, 'utf8'));
+  }
+  try {
+    const archive = new AdmZip(sourcePath);
+    const profileEntry = archive.getEntry('baldprofile.json');
+    if (profileEntry) return JSON.parse(profileEntry.getData().toString('utf8'));
+  } catch (_error) {}
+  return JSON.parse(await fs.promises.readFile(sourcePath, 'utf8'));
+}
+
+function extractBaldProfileOverrides(sourcePath, root) {
+  if (path.extname(sourcePath).toLowerCase() !== '.baldprofile') return;
+  try {
+    const archive = new AdmZip(sourcePath);
+    for (const entry of archive.getEntries()) {
+      if (entry.isDirectory || !entry.entryName.startsWith('overrides/')) continue;
+      const relative = entry.entryName.slice('overrides/'.length).replace(/[\\\/]+/g, path.sep);
+      if (!relative || relative.split(path.sep).includes('..')) continue;
+      const destination = path.join(root, relative);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.writeFileSync(destination, entry.getData());
+    }
+  } catch (_error) {
+    // Plain JSON Bald profile exports do not contain archive overrides.
+  }
+}
+
+ipcMain.handle('launcher:export-profile', async (_event, profileId) => {
+  const payload = typeof profileId === 'string' ? { profileId, format: 'bald' } : (profileId || {});
+  const exportId = String(payload.exportId || `export-${Date.now()}`);
+  try {
+    emitExportProgress(exportId, 3, 'Preparing profile export');
+    const profile = launcherState.profiles.find(item => item.id === payload.profileId);
+    if (!profile) throw new Error('Profile not found');
+    const format = String(payload.format || 'bald').toLowerCase();
+    const options = {
+      mods: true,
+      configs: true,
+      datapacks: true,
+      resourcepacks: true,
+      shaders: true,
+      worlds: false,
+      screenshots: false,
+      ...(payload.options || {}),
+    };
+    const exportName = sanitizeFileName(payload.name || profile.name) || 'Bald Profile';
+    const version = String(payload.version || '1.0.0').trim() || '1.0.0';
+    const formatConfig = {
+      bald: { title: 'Export Bald profile', name: 'Bald profile', extension: 'baldprofile' },
+      curseforge: { title: 'Export CurseForge modpack', name: 'CurseForge modpack', extension: 'zip' },
+      prism: { title: 'Export Prism or MultiMC instance', name: 'Prism/MultiMC instance', extension: 'zip' },
+      lunar: { title: 'Export Lunar folder bundle', name: 'Lunar folder bundle', extension: 'zip' },
+      dawn: { title: 'Export Dawn folder bundle', name: 'Dawn folder bundle', extension: 'zip' },
+      oneclient: { title: 'Export OneClient folder bundle', name: 'OneClient folder bundle', extension: 'zip' },
+      minecraft: { title: 'Export Minecraft folders', name: 'Minecraft folder archive', extension: 'zip' },
+    }[format];
+    if (!formatConfig) throw new Error(`Unsupported export format: ${format}`);
+    const result = await dialog.showSaveDialog({
+      title: formatConfig.title,
+      defaultPath: `${exportName}-${sanitizeFileName(version)}.${formatConfig.extension}`,
+      filters: [{ name: formatConfig.name, extensions: formatConfig.extension === 'lunarprofile.zip' ? ['zip'] : [formatConfig.extension] }],
+    });
+    if (result.canceled || !result.filePath) {
+      emitExportProgress(exportId, 100, 'Export canceled');
+      return { ok: false, canceled: true };
+    }
+    const root = getMinecraftRootFor(profile.id);
+    const zip = new AdmZip();
+    const warnings = [];
+    const copyFolder = (folderName, enabled, archivePrefix) => {
+      if (!enabled) return;
+      const folder = path.join(root, folderName);
+      if (!fs.existsSync(folder)) return;
+      zip.addLocalFolder(folder, archivePrefix);
+    };
+    const resolveSelectedPath = async relativePath => {
+      if (typeof relativePath !== 'string' || !relativePath || path.isAbsolute(relativePath)
+        || relativePath.split(/[\\/]+/).includes('..')) return null;
+      const resolvedRoot = fs.realpathSync(root);
+      const sourcePath = path.resolve(resolvedRoot, relativePath);
+      if (!isPathWithin(resolvedRoot, sourcePath) || !fs.existsSync(sourcePath)) return null;
+      const realSourcePath = fs.realpathSync(sourcePath);
+      if (!isPathWithin(resolvedRoot, realSourcePath)) {
+        throw new Error(`Selected export path escapes the profile folder: ${relativePath}`);
+      }
+      await assertTreeHasNoSymlinks(sourcePath, `Selected export path "${relativePath}"`);
+      return {
+        sourcePath: realSourcePath,
+        relativePath: path.relative(resolvedRoot, sourcePath).split(path.sep).join('/'),
+      };
+    };
+    const copySelectedPath = async (relativePath, archivePrefix) => {
+      const selected = await resolveSelectedPath(relativePath);
+      if (!selected) return;
+      const destinationPath = path.posix.join(archivePrefix.replace(/\\/g, '/'), selected.relativePath);
+      const stat = fs.statSync(selected.sourcePath);
+      if (stat.isDirectory()) zip.addLocalFolder(selected.sourcePath, destinationPath);
+      else if (stat.isFile()) {
+        zip.addLocalFile(selected.sourcePath, path.posix.dirname(destinationPath), path.posix.basename(destinationPath));
+      }
+    };
+    if (format === 'bald') {
+      zip.addFile('baldprofile.json', Buffer.from(JSON.stringify({
+        format: 'baldprofile',
+        schemaVersion: BALD_PROFILE_SCHEMA_VERSION,
+        exportedAt: new Date().toISOString(),
+        profile: JSON.parse(JSON.stringify(profile)),
+        references: { profileRoot: 'profiles/<profile-id>', content: profile.mods.map(item => ({ id: item.id, name: item.name, source: item.source || null, fileName: item.fileName || null })) },
+        includedFolders: Object.keys(options).filter(key => options[key]),
+      }, null, 2), 'utf8'));
+      copyFolder('mods', options.mods, 'overrides/mods');
+      copyFolder('config', options.configs, 'overrides/config');
+      copyFolder('datapacks', options.datapacks, 'overrides/datapacks');
+      copyFolder('resourcepacks', options.resourcepacks, 'overrides/resourcepacks');
+      copyFolder('saves', options.worlds, 'overrides/saves');
+      copyFolder('screenshots', options.screenshots, 'overrides/screenshots');
+      copyFolder('shaderpacks', options.shaders, 'overrides/shaderpacks');
+    } else if (format === 'curseforge') {
+      zip.addFile('manifest.json', Buffer.from(JSON.stringify({
+        minecraft: { version: profile.mcVersion, modLoaders: [{ id: `${profile.loader}-${profile.loaderVersion || 'latest'}`, primary: true }] },
+        manifestType: 'minecraftModpack',
+        manifestVersion: 1,
+        name: exportName,
+        version,
+        author: 'Bald Launcher',
+        files: [],
+        overrides: 'overrides',
+      }, null, 2), 'utf8'));
+      copyFolder('mods', options.mods, 'overrides/mods');
+      copyFolder('config', options.configs, 'overrides/config');
+      copyFolder('datapacks', options.datapacks, 'overrides/datapacks');
+      copyFolder('resourcepacks', options.resourcepacks, 'overrides/resourcepacks');
+      copyFolder('saves', options.worlds, 'overrides/saves');
+      copyFolder('screenshots', options.screenshots, 'overrides/screenshots');
+      copyFolder('shaderpacks', options.shaders, 'overrides/shaderpacks');
+    } else if (format === 'prism') {
+      zip.addFile('instance.cfg', Buffer.from([
+        `InstanceType=OneSix`,
+        `name=${exportName}`,
+        `OverrideCommands=true`,
+        `UseCustomJava=false`,
+      ].join('\n'), 'utf8'));
+      const components = [{ uid: 'net.minecraft', version: profile.mcVersion }];
+      if (profile.loader && profile.loader !== 'vanilla') components.push({ uid: `org.${profile.loader}`, version: profile.loaderVersion || 'latest' });
+      zip.addFile('mmc-pack.json', Buffer.from(JSON.stringify({ formatVersion: 1, components }, null, 2), 'utf8'));
+      copyFolder('mods', options.mods, '.minecraft/mods');
+      copyFolder('config', options.configs, '.minecraft/config');
+      copyFolder('datapacks', options.datapacks, '.minecraft/datapacks');
+      copyFolder('resourcepacks', options.resourcepacks, '.minecraft/resourcepacks');
+      copyFolder('saves', options.worlds, '.minecraft/saves');
+      copyFolder('screenshots', options.screenshots, '.minecraft/screenshots');
+      copyFolder('shaderpacks', options.shaders, '.minecraft/shaderpacks');
+    } else if (format === 'lunar') {
+      zip.addFile('lunar-profile.json', Buffer.from(JSON.stringify({ name: exportName, minecraftVersion: profile.mcVersion, loader: profile.loader, loaderVersion: profile.loaderVersion || null }, null, 2), 'utf8'));
+      copyFolder('mods', options.mods, '.minecraft/mods');
+      copyFolder('config', options.configs, '.minecraft/config');
+      copyFolder('datapacks', options.datapacks, '.minecraft/datapacks');
+      copyFolder('resourcepacks', options.resourcepacks, '.minecraft/resourcepacks');
+      copyFolder('saves', options.worlds, '.minecraft/saves');
+      copyFolder('screenshots', options.screenshots, '.minecraft/screenshots');
+      copyFolder('shaderpacks', options.shaders, '.minecraft/shaderpacks');
+    } else if (format === 'dawn') {
+      zip.addFile('dawn-profile.json', Buffer.from(JSON.stringify({
+        name: exportName,
+        version,
+        minecraftVersion: profile.mcVersion,
+        loader: profile.loader,
+        loaderVersion: profile.loaderVersion || null,
+        source: 'bald-launcher',
+      }, null, 2), 'utf8'));
+      copyFolder('mods', options.mods, '.minecraft/mods');
+      copyFolder('config', options.configs, '.minecraft/config');
+      copyFolder('datapacks', options.datapacks, '.minecraft/datapacks');
+      copyFolder('resourcepacks', options.resourcepacks, '.minecraft/resourcepacks');
+      copyFolder('saves', options.worlds, '.minecraft/saves');
+      copyFolder('screenshots', options.screenshots, '.minecraft/screenshots');
+      copyFolder('shaderpacks', options.shaders, '.minecraft/shaderpacks');
+    } else if (format === 'oneclient') {
+      zip.addFile('oneclient-profile.json', Buffer.from(JSON.stringify({
+        name: exportName,
+        version,
+        minecraftVersion: profile.mcVersion,
+        loader: profile.loader,
+        loaderVersion: profile.loaderVersion || null,
+        source: 'bald-launcher',
+      }, null, 2), 'utf8'));
+      copyFolder('mods', options.mods, '.minecraft/mods');
+      copyFolder('config', options.configs, '.minecraft/config');
+      copyFolder('datapacks', options.datapacks, '.minecraft/datapacks');
+      copyFolder('resourcepacks', options.resourcepacks, '.minecraft/resourcepacks');
+      copyFolder('saves', options.worlds, '.minecraft/saves');
+      copyFolder('screenshots', options.screenshots, '.minecraft/screenshots');
+      copyFolder('shaderpacks', options.shaders, '.minecraft/shaderpacks');
+    } else if (format === 'minecraft') {
+      copyFolder('mods', options.mods, 'mods');
+      copyFolder('config', options.configs, 'config');
+      copyFolder('datapacks', options.datapacks, 'datapacks');
+      copyFolder('resourcepacks', options.resourcepacks, 'resourcepacks');
+      copyFolder('saves', options.worlds, 'saves');
+      copyFolder('screenshots', options.screenshots, 'screenshots');
+      copyFolder('shaderpacks', options.shaders, 'shaderpacks');
+    }
+    if (Array.isArray(options.paths)) {
+      emitExportProgress(exportId, 72, `Including ${options.paths.length} selected item${options.paths.length === 1 ? '' : 's'}`);
+      const archivePrefix = ['bald','curseforge'].includes(format)
+        ? 'overrides'
+        : ['prism','lunar','dawn','oneclient'].includes(format)
+          ? '.minecraft'
+          : '';
+      for (const relativePath of options.paths) {
+        await copySelectedPath(relativePath, archivePrefix);
+      }
+    }
+    emitExportProgress(exportId, 88, 'Writing export archive');
+    zip.writeZip(result.filePath);
+    const validation = new AdmZip(result.filePath);
+    if (!validation.getEntries().length) throw new Error('The exported archive was empty.');
+    if (fs.statSync(result.filePath).size < 256) throw new Error('The exported archive is incomplete.');
+    emitExportProgress(exportId, 100, 'Export complete');
+    emitStatus(`Profile exported: ${path.basename(result.filePath)}`);
+    return { ok: true, path: result.filePath, warnings };
+  } catch (error) {
+    emitExportProgress(exportId, 100, 'Export failed');
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 });
@@ -7456,7 +7926,8 @@ ipcMain.handle('launcher:import-profile', async () => {
     }
     emitStatus(`Importing profile · reading ${path.basename(sourcePath)}`);
     emitProfileImportProgress({ phase: 'read', message: 'Reading profile export', percent: 20 });
-    const imported = validateProfileExport(JSON.parse(await fs.promises.readFile(sourcePath, 'utf8')));
+    const exportedPayload = await readBaldProfileExport(sourcePath);
+    const imported = validateProfileExport(exportedPayload);
     const originalName = imported.name;
     imported.id = createProfileId();
     imported.name = `${originalName} Import`;
@@ -7464,6 +7935,7 @@ ipcMain.handle('launcher:import-profile', async () => {
     const root = getMinecraftRootFor(imported);
     if (fs.existsSync(root)) throw new Error('The imported profile destination already exists.');
     ensureLauncherGameFolders(root);
+    extractBaldProfileOverrides(sourcePath, root);
     launcherState.profiles.push(imported);
     launcherState.activeProfileId = imported.id;
     applyProfileSyncToNewProfile(imported.id);
@@ -7915,7 +8387,13 @@ ipcMain.handle('launcher:update-profile', async (_event, payload) => {
       state: launcherState,
     };
   }
-  const updated = normalizeProfile({ ...previous, ...payload, updatedAt: Date.now(), lastUsedAt: previous.lastUsedAt });
+  const updated = normalizeProfile({
+    ...previous,
+    ...payload,
+    ...(typeof payload?.prewarmEnabled === 'boolean' ? { prewarmOptIn: true } : {}),
+    updatedAt: Date.now(),
+    lastUsedAt: previous.lastUsedAt,
+  });
   const rendererChanged = updated.rendererMode !== previous.rendererMode;
 
   if (rendererChanged) {
@@ -9475,10 +9953,7 @@ async function getModrinthModpackVersions(projectId, mcVersion, loader) {
     timeout: 15000,
     headers: { 'User-Agent': 'BaldLauncher/0.1.0 (contact: none)' },
   });
-  return (Array.isArray(response.data) ? response.data : []).filter(version =>
-    version.game_versions?.includes(mcVersion) && version.loaders?.some(item => getModpackLoaderKey(loader) === String(item).toLowerCase())
-    && version.files?.some(file => file.primary !== false && /\.mrpack$/i.test(file.filename || ''))
-  );
+  return sortCompatibleModrinthModpackVersions(response.data, mcVersion, getModpackLoaderKey(loader));
 }
 
 async function getCurseForgeModpackFile(projectId, mcVersion, loader) {
@@ -9678,21 +10153,43 @@ ipcMain.handle('launcher:install-modpack-to-profile', async (_event, payload = {
   let archivePath = '';
   let stagingRoot = '';
   let createdProfile = false;
+  let profileRoot = '';
+  let profileRootCreated = false;
+  let profilePersisted = false;
+  if (profileImportInProgress) return { ok: false, error: 'A profile import or modpack install is already in progress.' };
+  profileImportInProgress = true;
   try {
     const source = payload.source === 'curseforge' ? 'curseforge' : 'modrinth';
     const projectId = String(payload.projectId || '');
     if (!projectId) throw new Error('A modpack project is required.');
     const mcVersion = String(payload.mcVersion || '1.21.1');
     const loader = getModpackLoaderKey(payload.loader || 'fabric');
-    const packIconUrl = await getModpackProjectIcon(source, projectId);
+    const oneClientInstall = payload.optimizationKind === 'oneclient';
+    if (oneClientInstall && (source !== 'modrinth'
+      || projectId !== ONECLIENT_MODPACK_PROJECT_ID
+      || loader !== 'fabric'
+      || payload.profileId)) {
+      throw new Error('OneClient must be installed as a separate Fabric profile from the official Modrinth pack.');
+    }
+    const sourceProfile = oneClientInstall
+      ? launcherState.profiles.find(item => item.id === String(payload.optimizationSourceProfileId || ''))
+      : null;
+    if (oneClientInstall && (!sourceProfile || String(sourceProfile.mcVersion) !== mcVersion)) {
+      throw new Error('The selected source profile is unavailable or uses a different Minecraft version.');
+    }
+    emitProfileImportProgress({ phase: 'prepare', message: `Finding a compatible ${oneClientInstall ? 'OneClient ' : ''}${loader} release for Minecraft ${mcVersion}…`, percent: 2 });
+    const packIconUrl = oneClientInstall ? null : await getModpackProjectIcon(source, projectId);
     let archiveUrl = '';
     let packName = String(payload.name || projectId);
+    let version = null;
+    let archiveFile = null;
     if (source === 'modrinth') {
       const versions = await getModrinthModpackVersions(projectId, mcVersion, loader);
-      const version = versions[0];
+      version = versions[0];
       if (!version) throw new Error(`No ${loader} modpack release supports Minecraft ${mcVersion}.`);
-      const file = version.files.find(item => item.primary !== false && /\.mrpack$/i.test(item.filename || '')) || version.files[0];
-      archiveUrl = file.url;
+      archiveFile = version.files.find(item => item.primary !== false && /\.mrpack$/i.test(item.filename || '')) || version.files[0];
+      archiveUrl = archiveFile?.url || '';
+      if (!archiveUrl) throw new Error('The selected Modrinth release does not provide a downloadable .mrpack file.');
       packName = version.name || packName;
     } else {
       const file = await getCurseForgeModpackFile(projectId, mcVersion, loader);
@@ -9700,17 +10197,37 @@ ipcMain.handle('launcher:install-modpack-to-profile', async (_event, payload = {
       archiveUrl = file.downloadUrl;
       packName = file.displayName || packName;
     }
+    if (oneClientInstall) {
+      const existingOneClient = launcherState.profiles.find(item => item.optimizationKind === 'oneclient'
+        && item.optimizationSourceProfileId === sourceProfile.id
+        && String(item.mcVersion) === mcVersion
+        && item.oneClientPackVersionId === version.id);
+      if (existingOneClient) {
+        if (existingOneClient.optimizationReady && fs.existsSync(getMinecraftRootFor(existingOneClient))) {
+          launcherState.activeProfileId = existingOneClient.id;
+          scheduleStateWrite();
+          emitProfileImportProgress({ phase: 'complete', message: 'Using the existing OneClient profile.', percent: 100 });
+          return { ok: true, profile: existingOneClient, installed: 0, addedMods: 0, reused: true, state: launcherState };
+        }
+        throw new Error(`An incomplete OneClient profile already exists: ${existingOneClient.name}. It was left untouched; delete it before retrying.`);
+      }
+      packName = `OneClient ${mcVersion} ${version.version_number || ''}`.trim();
+    }
     const existingProfile = payload.profileId
       ? launcherState.profiles.find(item => item.id === String(payload.profileId))
       : null;
+    if (oneClientInstall && existingProfile) throw new Error('OneClient must be installed into a new profile, not an existing profile.');
     if (payload.profileId && !existingProfile) throw new Error('Profile not found.');
     if (existingProfile && (String(existingProfile.mcVersion) !== mcVersion || String(existingProfile.loader) !== loader)) {
       throw new Error(`The modpack requires Minecraft ${mcVersion} with ${loader}; the selected profile uses ${existingProfile.mcVersion} with ${existingProfile.loader}.`);
     }
     const now = Date.now();
+    const oneClientMetadata = oneClientInstall
+      ? createOneClientProfileMetadata(sourceProfile, version)
+      : {};
     const profile = existingProfile || normalizeProfile({
       id: createProfileId(),
-      name: String(payload.name || packName),
+      name: oneClientInstall ? packName : String(payload.name || packName),
       mcVersion,
       loader,
       createdAt: now,
@@ -9718,38 +10235,147 @@ ipcMain.handle('launcher:install-modpack-to-profile', async (_event, payload = {
       lastUsedAt: now,
       mods: [],
       modpackIconUrl: packIconUrl,
+      ...oneClientMetadata,
     });
     createdProfile = !existingProfile;
     if (!existingProfile) profile.folderName = getProfileFolderName(profile.name, profile.id);
-    const root = getMinecraftRootFor(profile);
-    ensureLauncherGameFolders(root);
-    archivePath = path.join(root, `.bald-modpack-${crypto.randomUUID()}.zip`);
-    await downloadToFile(archiveUrl, archivePath, `${packName} modpack`);
+    profileRoot = getMinecraftRootFor(profile);
+    if (createdProfile && fs.existsSync(profileRoot)) throw new Error('The new profile folder already exists; no files were changed.');
+    if (createdProfile) {
+      fs.mkdirSync(path.dirname(profileRoot), { recursive: true });
+      fs.mkdirSync(profileRoot);
+      profileRootCreated = true;
+    } else {
+      fs.mkdirSync(profileRoot, { recursive: true });
+    }
+    ensureLauncherGameFolders(profileRoot);
+    archivePath = path.join(profileRoot, `.bald-modpack-${crypto.randomUUID()}.zip`);
+    const archiveHash = await downloadToFile(
+      archiveUrl,
+      archivePath,
+      `${packName} modpack`,
+      null,
+      oneClientInstall ? progress => emitProfileImportProgress({
+        phase: 'archive',
+        message: `Downloading OneClient pack · ${(progress.loaded / 1048576).toFixed(1)} MB${progress.total ? ` / ${(progress.total / 1048576).toFixed(1)} MB` : ''}`,
+        percent: progress.total ? Math.min(10, Math.floor(3 + (progress.loaded / progress.total) * 7)) : 3,
+      }) : undefined,
+    );
+    const expectedArchiveHash = String(archiveFile?.hashes?.sha1 || '').toLowerCase();
+    if (expectedArchiveHash && archiveHash.toLowerCase() !== expectedArchiveHash) {
+      throw new Error('The downloaded modpack archive failed SHA-1 verification.');
+    }
     const manifestName = source === 'modrinth' ? 'modrinth.index.json' : 'manifest.json';
     const manifest = JSON.parse((await readMrpackEntry(archivePath, manifestName)).toString('utf8'));
     if (source === 'modrinth' && (manifest.game !== 'minecraft' || Number(manifest.formatVersion) !== 1)) throw new Error('Unsupported Modrinth modpack format.');
     if (source === 'curseforge' && String(manifest.manifestType || '') !== 'minecraftModpack') throw new Error('Unsupported CurseForge modpack format.');
-    stagingRoot = path.join(root, `.bald-modpack-staging-${crypto.randomUUID()}`);
+    const dependencies = manifest.dependencies && typeof manifest.dependencies === 'object' ? manifest.dependencies : {};
+    if (source === 'modrinth') {
+      const packDependencies = validateModrinthPackDependencies(dependencies, mcVersion, loader, oneClientInstall);
+      if (oneClientInstall) {
+        profile.loaderVersion = normalizeLoaderVersion(packDependencies.loaderVersion);
+        if (!profile.loaderVersion) throw new Error('The OneClient archive contains an invalid Fabric loader version.');
+      }
+    }
+    stagingRoot = path.join(profileRoot, `.bald-modpack-staging-${crypto.randomUUID()}`);
     fs.mkdirSync(stagingRoot, { recursive: true });
     let installed = 0;
     const modpackMods = [];
     if (source === 'modrinth') {
-      for (const file of Array.isArray(manifest.files) ? manifest.files : []) {
-        if (file?.env?.client === 'unsupported') continue;
-        const relative = String(file?.path || '').replace(/\\/g, '/');
-        if (!relative || relative.startsWith('/') || relative.split('/').includes('..')) throw new Error(`Unsafe modpack path: ${relative}`);
-        const url = Array.isArray(file.downloads) ? file.downloads.find(item => /^https?:\/\//i.test(item)) : '';
-        if (!url) continue;
-        const destination = path.join(stagingRoot, relative);
-        await downloadToFile(url, destination, `${packName} · ${path.basename(relative)}`);
-        const expected = String(file.hashes?.sha1 || '').toLowerCase();
-        if (expected && crypto.createHash('sha1').update(fs.readFileSync(destination)).digest('hex') !== expected) throw new Error(`Hash verification failed for ${relative}.`);
-        if (/^mods\//i.test(relative) && /\.jar$/i.test(relative)) {
-          modpackMods.push({ fileName: path.basename(relative), relative, source: 'modrinth', versionId: '', iconUrl: packIconUrl });
+      const packFiles = (Array.isArray(manifest.files) ? manifest.files : []).filter(file => file?.env?.client !== 'unsupported');
+      if (oneClientInstall) {
+        if (!packFiles.some(file => /^mods\/.+\.jar$/i.test(String(file?.path || '')))) {
+          throw new Error('The OneClient archive does not contain any supported client mods.');
         }
-        installed += 1;
+        const archiveInfo = await inspectMrpackOverrides(archivePath, progress => emitProfileImportProgress({
+          phase: 'inspect',
+          message: 'Checking OneClient archive paths and extracted size…',
+          percent: Math.min(12, 10 + Math.floor((progress.percent || 0) * 0.02)),
+        }));
+        const knownDownloadBytes = packFiles.reduce((sum, file) => sum + Math.max(0, Number(file.fileSize) || 0), 0);
+        const unknownDownloadCount = packFiles.filter(file => !(Number(file.fileSize) > 0)).length;
+        const requiredBytes = Math.ceil((
+          (knownDownloadBytes + archiveInfo.uncompressedBytes) * 2
+          + unknownDownloadCount * 12 * 1024 * 1024
+        ) * 1.15);
+        if (fs.statfsSync) {
+          const stats = fs.statfsSync(profileRoot);
+          const freeBytes = stats.bsize * stats.bavail;
+          if (freeBytes < requiredBytes) {
+            throw new Error(`Not enough free disk space for OneClient. It needs approximately ${(requiredBytes / 1024 ** 3).toFixed(1)} GB; ${(freeBytes / 1024 ** 3).toFixed(1)} GB is available.`);
+          }
+        }
+        const results = await runProfileImportDownloads({
+          files: packFiles,
+          destinationRoot: stagingRoot,
+          concurrency: 4,
+          onProgress: progress => {
+            const percent = Math.min(88, Math.floor(12 + (progress.percent * 0.76)));
+            const fileLabel = progress.currentFile ? ` · ${path.basename(progress.currentFile)}` : '';
+            emitProfileImportProgress({
+              phase: 'download',
+              message: `Downloading OneClient ${progress.completed}/${progress.total} files${progress.active > 1 ? ` · ${progress.active} active` : ''}${fileLabel}`,
+              percent,
+              completed: progress.completed,
+              total: progress.total,
+              active: progress.active,
+            });
+          },
+          downloadFile: async (file, destination, onTransfer) => {
+            const relative = String(file?.path || '').replace(/\\/g, '/');
+            const url = Array.isArray(file?.downloads) ? file.downloads.find(item => /^https?:\/\//i.test(item)) : '';
+            if (!url) throw new Error('No download URL');
+            const actualHash = await downloadToFile(url, destination, `OneClient · ${path.basename(relative)}`, null, onTransfer);
+            const expectedHash = String(file.hashes?.sha1 || '').toLowerCase();
+            if (expectedHash && actualHash.toLowerCase() !== expectedHash) {
+              await fs.promises.rm(destination, { force: true });
+              throw new Error('SHA-1 verification failed');
+            }
+          },
+        });
+        const failedDownloads = results.filter(result => result.error);
+        if (failedDownloads.length) {
+          const firstFailure = failedDownloads[0];
+          throw new Error(`Could not download ${failedDownloads.length} OneClient file(s); ${firstFailure.relative}: ${firstFailure.error}`);
+        }
+        installed = results.length;
+        for (const result of results) {
+          if (/^mods\//i.test(result.relative) && /\.jar$/i.test(result.relative)) {
+            modpackMods.push({
+              fileName: path.basename(result.relative),
+              relative: result.relative,
+              source: 'modrinth',
+              versionId: '',
+              iconUrl: null,
+            });
+          }
+        }
+        if (!modpackMods.length) throw new Error('The OneClient pack did not install any client mods.');
+      } else {
+        for (const file of packFiles) {
+          const relative = String(file?.path || '').replace(/\\/g, '/');
+          if (!relative || relative.startsWith('/') || relative.split('/').includes('..')) throw new Error(`Unsafe modpack path: ${relative}`);
+          const url = Array.isArray(file.downloads) ? file.downloads.find(item => /^https?:\/\//i.test(item)) : '';
+          if (!url) continue;
+          const destination = path.join(stagingRoot, relative);
+          await downloadToFile(url, destination, `${packName} · ${path.basename(relative)}`);
+          const expected = String(file.hashes?.sha1 || '').toLowerCase();
+          if (expected && crypto.createHash('sha1').update(fs.readFileSync(destination)).digest('hex') !== expected) throw new Error(`Hash verification failed for ${relative}.`);
+          if (/^mods\//i.test(relative) && /\.jar$/i.test(relative)) {
+            modpackMods.push({ fileName: path.basename(relative), relative, source: 'modrinth', versionId: '', iconUrl: packIconUrl });
+          }
+          installed += 1;
+        }
       }
-      await extractMrpackOverrides(archivePath, stagingRoot);
+      await extractMrpackOverrides(archivePath, stagingRoot, progress => {
+        if (oneClientInstall) {
+          emitProfileImportProgress({
+            phase: 'extract',
+            message: `Extracting OneClient overrides · ${progress.completed}/${progress.total}`,
+            percent: Math.min(97, 88 + Math.floor((progress.percent || 0) * 0.09)),
+          });
+        }
+      });
     } else {
       const apiKey = getCurseForgeApiKey();
       for (const file of Array.isArray(manifest.files) ? manifest.files : []) {
@@ -9763,7 +10389,8 @@ ipcMain.handle('launcher:install-modpack-to-profile', async (_event, payload = {
       }
       await extractMrpackOverrides(archivePath, stagingRoot);
     }
-    for (const entry of fs.readdirSync(stagingRoot, { withFileTypes: true })) fs.cpSync(path.join(stagingRoot, entry.name), path.join(root, entry.name), { recursive: true, force: true });
+    emitProfileImportProgress({ phase: 'install', message: `Installing ${packName} into the separate profile…`, percent: 98 });
+    for (const entry of fs.readdirSync(stagingRoot, { withFileTypes: true })) fs.cpSync(path.join(stagingRoot, entry.name), path.join(profileRoot, entry.name), { recursive: true, force: true });
     const trackedPaths = new Set((profile.mods || []).map(item => String(item.fileName || '').toLowerCase()));
     const extractedEntries = [];
     const collectExtracted = directory => {
@@ -9807,19 +10434,44 @@ ipcMain.handle('launcher:install-modpack-to-profile', async (_event, payload = {
         modpackProjectId: projectId,
       }));
     profile.mods = [...(profile.mods || []), ...markerEntries];
-    profile.modpackIconUrl = packIconUrl || profile.modpackIconUrl || null;
+    profile.modpackIconUrl = oneClientInstall ? null : packIconUrl || profile.modpackIconUrl || null;
+    if (oneClientInstall) profile.optimizationReady = true;
     profile.updatedAt = now;
-    if (createdProfile) launcherState.profiles.push(profile);
+    if (createdProfile) {
+      launcherState.profiles.push(profile);
+      profilePersisted = true;
+    }
     launcherState.activeProfileId = profile.id;
     scheduleStateWrite();
+    emitProfileImportProgress({ phase: 'complete', message: `${packName} profile is ready.`, percent: 100 });
     emitStatus(`${createdProfile ? 'Profile created' : 'Mods added to profile'} from modpack · ${packName} · ${installed} files`);
     return { ok: true, profile, installed, addedMods: markerEntries.length, state: launcherState };
   } catch (error) {
-    emitStatus(`Modpack profile creation failed · ${error instanceof Error ? error.message : String(error)}`);
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    let message = error instanceof Error ? error.message : String(error);
+    if (createdProfile && profileRootCreated && !profilePersisted && profileRoot) {
+      try {
+        const rootStats = await fs.promises.lstat(profileRoot);
+        if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) {
+          throw new Error('The new profile directory is no longer a regular directory.');
+        }
+        await fs.promises.rm(profileRoot, { recursive: true, force: true });
+      } catch (cleanupError) {
+        if (cleanupError.code !== 'ENOENT') {
+          console.error('[Modpack] Could not clean up the failed profile directory.', cleanupError);
+          message += ' The partial profile folder could not be removed automatically.';
+        }
+      }
+    }
+    emitProfileImportProgress({ phase: 'error', message, percent: 0 });
+    emitStatus(`Modpack profile creation failed · ${message}`);
+    return { ok: false, error: message };
   } finally {
-    if (archivePath && fs.existsSync(archivePath)) fs.rmSync(archivePath, { force: true });
-    if (stagingRoot && fs.existsSync(stagingRoot)) fs.rmSync(stagingRoot, { recursive: true, force: true });
+    try {
+      if (archivePath && fs.existsSync(archivePath)) fs.rmSync(archivePath, { force: true });
+      if (stagingRoot && fs.existsSync(stagingRoot)) fs.rmSync(stagingRoot, { recursive: true, force: true });
+    } finally {
+      profileImportInProgress = false;
+    }
   }
 });
 
@@ -9986,7 +10638,7 @@ ipcMain.handle('launcher:get-installed-mods', async (_event, payload = {}) => {
       throw new Error('A server or profile is required to inspect installed mods');
     }
 
-    return { ok: true, ...readInstalledModInventory(modsFolder) };
+    return { ok: true, ...await readInstalledModInventory(modsFolder) };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
@@ -10152,7 +10804,7 @@ ipcMain.handle('launcher:sync-profile-content', async (_event, profileId) => {
     const oldEntries = Array.isArray(profile.mods) ? profile.mods.map(normalizeInstalledContent) : [];
     const candidates = [];
     const modsFolder = getContentFolder('mod', root);
-    const inventory = readInstalledModInventory(modsFolder);
+    const inventory = await readInstalledModInventory(modsFolder);
     const findPreviousEntry = file => oldEntries.find(entry => entry.fileName
       && contentIdentity(path.basename(entry.fileName).replace(/\.disabled$/i, '')) === contentIdentity(path.basename(file.fileName).replace(/\.disabled$/i, '')))
       || oldEntries.find(entry => entry.type === 'mod' && contentIdentity(entry.name) === contentIdentity(file.name));
@@ -10300,7 +10952,7 @@ ipcMain.handle('launcher:sync-server-content', async (_event, serverId) => {
       if (!fs.existsSync(folder)) continue;
       let files;
       if (type === 'mod') {
-        const inventory = readInstalledModInventory(folder);
+        const inventory = await readInstalledModInventory(folder);
         files = inventory.mods;
         syncIssues.push(...inventory.issues);
       } else {
@@ -11553,7 +12205,7 @@ ipcMain.handle('launcher:install-content', async (_event, payload) => {
       const extension = entry.type === 'plugin' || entry.type === 'mod' ? '.jar' : '.zip';
       const filePath = path.join(getServerContentFolder(server, entry.type, rootPath), `${sanitizeFileName(entry.name)}${extension}`);
       if (entry.type === 'mod') {
-        const inventory = readInstalledModInventory(path.join(rootPath, 'mods'));
+        const inventory = await readInstalledModInventory(path.join(rootPath, 'mods'));
         if (isInstalledModContent(inventory.mods, server.installedContent, entry) || fs.existsSync(filePath)) {
           throw new Error(`${entry.name} is already installed on this server.`);
         }
@@ -11876,7 +12528,11 @@ ipcMain.handle('launcher:get-diagnostics', async () => {
     logicalCores: os.cpus().length,
     memoryGB: Math.round(os.totalmem() / 1073741824),
     availableMemoryGB: Number((os.freemem() / 1073741824).toFixed(1)),
-    recommendedMemoryGB: recommendMinecraftMemoryGb(os.totalmem(), os.freemem(), profile?.optimizationKind === 'sodium'),
+    recommendedMemoryGB: recommendMinecraftMemoryGb(
+      os.totalmem(),
+      os.freemem(),
+      ['sodium', 'oneclient'].includes(profile?.optimizationKind),
+    ),
     platform: `${process.platform} ${process.arch}`,
     operatingSystem: `${os.type()} ${os.release()}`,
     javaPath,
@@ -12401,8 +13057,8 @@ ipcMain.handle('launcher:run-benchmark', async (_event, payload) => {
   if (!processRecord?.pid) return { ok: false, error: 'Launch Minecraft with this profile before running a benchmark.' };
   const role = payload?.role === 'optimized' ? 'optimized' : payload?.role === 'baseline' ? 'baseline' : '';
   if (!role) return { ok: false, error: 'Choose whether this is a baseline or optimized-profile run.' };
-  if (role === 'optimized' && !(profile.optimizationManaged && profile.optimizationKind === 'sodium')) {
-    return { ok: false, error: 'An optimized run must use an isolated, launcher-managed Sodium profile.' };
+  if (role === 'optimized' && !(profile.optimizationManaged && ['sodium', 'oneclient'].includes(profile.optimizationKind))) {
+    return { ok: false, error: 'An optimized run must use an isolated, launcher-managed OneClient or Sodium profile.' };
   }
   if (role === 'baseline' && profile.optimizationManaged) {
     return { ok: false, error: 'A baseline run must use the original, non-managed profile.' };
@@ -12550,7 +13206,7 @@ async function launchJavaProfile(payload) {
     if (!profile) throw new Error('No active profile');
     if (prewarming) {
       if (horizonPrewarmShutdownRequested) return { ok: false, error: 'Launcher is shutting down.' };
-      if (profile.prewarmEnabled === false) return { ok: false, skipped: true, error: 'Prewarm is disabled for this profile.' };
+      if (profile.prewarmEnabled !== true) return { ok: false, skipped: true, error: 'Prewarm is disabled for this profile.' };
       if (process.platform !== 'win32') return { ok: false, skipped: true, error: 'Background game prewarm is supported on Windows only.' };
       const headroom = getPrewarmMemoryHeadroomGb(profile.memoryMax);
       if (!headroom.allowed) {
@@ -12661,7 +13317,7 @@ async function launchJavaProfile(payload) {
     }
 
     const memoryMax = settings.memoryMaxAuto
-      ? recommendMinecraftMemoryGb(os.totalmem(), os.freemem())
+      ? recommendMinecraftMemoryGb(os.totalmem(), os.freemem(), ['sodium', 'oneclient'].includes(profile.optimizationKind))
       : Math.min(32, Math.max(1, Number(settings.memoryMax) || 6));
     const minecraftRoot = getMinecraftRootFor(profile.id);
     fs.mkdirSync(minecraftRoot, { recursive: true });
@@ -12813,7 +13469,7 @@ async function launchJavaProfile(payload) {
     }
     if (prewarming) {
       const currentProfile = launcherState.profiles.find(item => item.id === profile.id);
-      if (!currentProfile || currentProfile.prewarmEnabled === false || horizonPrewarmShutdownRequested) {
+      if (!currentProfile || currentProfile.prewarmEnabled !== true || horizonPrewarmShutdownRequested) {
         session.running = false;
         scheduleStateWrite();
         return { ok: false, skipped: true, error: 'Prewarm was disabled before Minecraft started.' };
@@ -12901,9 +13557,9 @@ async function launchJavaProfile(payload) {
           void prewarmState.windowController?.close().catch(error => {
             console.warn(`[Prewarm] Could not stop Java window controller for ${profile.name}:`, error.message);
           });
-          if (prewarmState.activated && profile.prewarmEnabled !== false && !horizonPrewarmShutdownRequested) {
+          if (prewarmState.activated && profile.prewarmEnabled === true && !horizonPrewarmShutdownRequested) {
             setTimeout(() => {
-              if (!horizonPrewarmShutdownRequested && profile.prewarmEnabled !== false) {
+              if (!horizonPrewarmShutdownRequested && profile.prewarmEnabled === true) {
                 requestJavaProfilePrewarm(profile.id);
               }
             }, 500);

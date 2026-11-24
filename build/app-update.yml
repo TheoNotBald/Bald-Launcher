@@ -1,0 +1,4 @@
+provider: github
+owner: TheoNotBald
+repo: Bald-Launcher
+updaterCacheDirName: bald-launcher-updater

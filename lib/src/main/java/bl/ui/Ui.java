@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 
 import bl.mc.RuntimeMappings;
+import bl.render.BitmapFont;
+import bl.render.GuiRecord;
 
 /**
  * Reflection bridge for the vanilla drawing surface.
@@ -30,6 +32,7 @@ final class Ui {
     private final Method enableScissor;
     private final Method disableScissor;
     private final Map<String, Integer> measured = new HashMap<>();
+    private boolean recording;
 
     Ui(Class<?> graphicsType, Field fontField, Object menu) throws ReflectiveOperationException {
         this.graphicsType = graphicsType;
@@ -54,6 +57,15 @@ final class Ui {
         fontField.get(menu);
     }
 
+    /**
+     * While recording, drawing calls become overlay display-list entries instead
+     * of touching Minecraft's framebuffer, so nothing of the GUI ends up in a
+     * captured game window.
+     */
+    void recording(boolean value) {
+        this.recording = value;
+    }
+
     void fill(Object graphics, int x1, int y1, int x2, int y2, int color) {
         int left = Math.min(x1, x2);
         int right = Math.max(x1, x2);
@@ -62,10 +74,18 @@ final class Ui {
         if (right <= left || bottom <= top) {
             return;
         }
+        if (recording) {
+            GuiRecord.get().fill(left, top, right, bottom, color, color);
+            return;
+        }
         invoke(fill, graphics, left, top, right, bottom, color);
     }
 
     void gradient(Object graphics, int x1, int y1, int x2, int y2, int topColor, int bottomColor) {
+        if (recording) {
+            GuiRecord.get().fill(x1, y1, x2, y2, topColor, bottomColor);
+            return;
+        }
         if (fillGradient != null) {
             invoke(fillGradient, graphics, Math.min(x1, x2), Math.min(y1, y2),
                     Math.max(x1, x2), Math.max(y1, y2), topColor, bottomColor);
@@ -82,6 +102,10 @@ final class Ui {
 
     void text(Object graphics, String value, int x, int y, int color) {
         if (value == null || value.isEmpty()) {
+            return;
+        }
+        if (recording) {
+            GuiRecord.get().text(value, x, y, color);
             return;
         }
         if (shadowText != null) {
@@ -102,6 +126,9 @@ final class Ui {
     int width(String value) {
         if (value == null || value.isEmpty()) {
             return 0;
+        }
+        if (recording) {
+            return Math.round(BitmapFont.width(value, 1.0f));
         }
         Integer cached = measured.get(value);
         if (cached != null) {
@@ -137,10 +164,14 @@ final class Ui {
     }
 
     boolean canScissor() {
-        return enableScissor != null && disableScissor != null;
+        return recording || (enableScissor != null && disableScissor != null);
     }
 
     void scissor(Object graphics, int x1, int y1, int x2, int y2) {
+        if (recording) {
+            GuiRecord.get().pushClip(x1, y1, x2, y2);
+            return;
+        }
         if (!canScissor()) {
             return;
         }
@@ -149,6 +180,10 @@ final class Ui {
     }
 
     void unscissor(Object graphics) {
+        if (recording) {
+            GuiRecord.get().popClip();
+            return;
+        }
         if (canScissor()) {
             invoke(disableScissor, graphics);
         }

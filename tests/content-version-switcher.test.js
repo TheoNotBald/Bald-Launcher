@@ -374,8 +374,11 @@ test('cosmetic studio exposes a persistent color control for the 3D preview back
 
 test('Windows launcher window and executable use the shipped branded icon', () => {
   const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  const builder = fs.readFileSync(path.join(__dirname, '..', 'electron-builder.yml'), 'utf8');
   assert.match(main, /app\.setAppUserModelId\('com\.baldlauncher\.app'\)/);
-  assert.match(main, /icon:\s*path\.join\(__dirname,\s*'build',\s*'icon\.ico'\)/);
+  assert.match(main, /const appIconPath = app\.isPackaged\s*\?\s*path\.join\(process\.resourcesPath,\s*'icon\.ico'\)\s*:\s*path\.join\(__dirname,\s*'build',\s*'icon\.ico'\)/);
+  assert.match(main, /icon:\s*appIconPath/);
+  assert.match(builder, /- from: build\/icon\.ico\s*\n\s+to: icon\.ico/);
 
   const icon = fs.readFileSync(path.join(__dirname, '..', 'build', 'icon.ico'));
   assert.equal(icon.readUInt16LE(0), 0, 'ICO reserved field');
@@ -426,7 +429,7 @@ test('launcher uses its dark draggable titlebar instead of the Windows white tit
   assert.match(main, /ipcMain\.handle\('launcher:window-control'/);
   assert.match(preload, /controlWindow:\s*action\s*=>\s*ipcRenderer\.invoke\('launcher:window-control',\s*action\)/);
   assert.match(html, /\.titlebar\{[^}]*-webkit-app-region:drag/);
-  assert.match(html, /class="titlebar-logo" src="build\/bald-launcher-mark\.svg"/);
+  assert.match(html, /class="titlebar-logo" src="build\/bald-launcher-mark\.png"/);
   assert.match(builder, /- build\/bald-launcher-mark\.svg/);
   assert.match(html, /class="window-controls"/);
   assert.match(html, /data-window-control="minimize"/);

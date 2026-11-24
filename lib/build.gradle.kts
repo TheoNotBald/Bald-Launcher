@@ -53,6 +53,14 @@ repositories {
     maven("https://libraries.minecraft.net/")
 }
 
+// The ESP overlay compiles against the LWJGL and JOML builds that the game
+// itself ships. Versions are read from the version JSON for mc_version, so
+// nothing here is pinned independently of the game.
+val renderLibraryGroups = listOf("org.lwjgl:lwjgl", "org.lwjgl:lwjgl-glfw", "org.lwjgl:lwjgl-opengl", "org.joml:joml")
+val renderLibraryJars: List<File> = renderLibraryGroups.indices.map { index ->
+    buildDirRef.file("render-libs/lib-$index.jar").get().asFile
+}
+
 dependencies {
     implementation("org.ow2.asm:asm:9.7.1")
     implementation("org.ow2.asm:asm-commons:9.7.1")
@@ -62,6 +70,7 @@ dependencies {
     compileOnly("net.fabricmc:fabric-loader:0.19.5")
     compileOnly("net.fabricmc.fabric-api:fabric-api:0.141.6+1.21.11")
     compileOnly("com.mojang:brigadier:1.3.10")
+    compileOnly(files(renderLibraryJars))
 
     compileOnly(files(clientNamedJar, clientJar, mixinCompileJar))
     annotationProcessor(files(clientNamedJar))
@@ -212,6 +221,29 @@ val downloadClient = tasks.register("downloadClient") {
         val clientUrl = (downloads?.get("client") as? Map<*, *>)?.get("url") as? String
         requireNotNull(clientUrl) { "No client download for $mcVersion" }
         fetch(clientUrl, clientJar.get().asFile)
+    }
+}
+
+val downloadRenderLibraries = tasks.register("downloadRenderLibraries") {
+    outputs.files(renderLibraryJars)
+    doLast {
+        val manifestText = URI("https://launchermeta.mojang.com/mc/game/version_manifest_v2.json").toURL().readText()
+        val manifest = groovy.json.JsonSlurper().parseText(manifestText) as Map<*, *>
+        val versions = manifest["versions"] as? List<*> ?: error("Mojang manifest has no versions list")
+        val version = versions.filterIsInstance<Map<*, *>>().firstOrNull { it["id"] == mcVersion }
+            ?: error("Version $mcVersion not present in manifest")
+        val versionUrl = version["url"] as? String ?: error("No metadata url for $mcVersion")
+        val versionMetadata = groovy.json.JsonSlurper().parseText(URI(versionUrl).toURL().readText()) as Map<*, *>
+        val libraries = (versionMetadata["libraries"] as? List<*>).orEmpty().filterIsInstance<Map<*, *>>()
+        for ((index, group) in renderLibraryGroups.withIndex()) {
+            val entry = libraries.firstOrNull { library ->
+                val name = library["name"] as? String ?: return@firstOrNull false
+                name.substringBeforeLast(':') == group
+            } ?: error("Game $mcVersion does not ship $group")
+            val artifact = (entry["downloads"] as? Map<*, *>)?.get("artifact") as? Map<*, *>
+            val url = artifact?.get("url") as? String ?: error("No artifact for $group")
+            fetch(url, renderLibraryJars[index])
+        }
     }
 }
 
@@ -632,7 +664,7 @@ val verifyRemap = tasks.register("verifyRemap") {
 }
 
 tasks.named("compileJava") {
-    dependsOn(remapClientToNamed, genDescriptors)
+    dependsOn(remapClientToNamed, genDescriptors, downloadRenderLibraries)
 }
 
 tasks.named("build") {

@@ -196,12 +196,27 @@ test('profile selector lists every loader version, marks previews, and resets on
       value: '',
       textContent: '',
       style: {},
+      dataset: {},
       children: [],
       replaceChildren() { this.children = []; },
       appendChild(option) { this.children.push(option); },
       setAttribute() {},
+      querySelector(selector) { return selector === '#pdLoaderVersion' ? {} : null; },
     });
   }
+  const row = elements.get('pdLoaderVersionRow');
+  const settings = {
+    hidden: false,
+    dataset: {},
+    querySelectorAll: () => [row],
+    querySelector: () => ({ innerHTML: '' }),
+  };
+  const settingsButtons = ['general', 'installation', 'java', 'files'].map(category => ({
+    dataset: { profileSettingsCategory: category },
+    classList: { toggle() {} },
+  }));
+  elements.set('javaProfileSettings', settings);
+  elements.set('javaProfileSettingsNav', { querySelectorAll: () => settingsButtons });
   const versionsByLoader = {
     fabric: [{ version: '0.20.1', stable: true }, { version: '0.21.0-alpha', stable: false }],
     forge: [{ version: '1.21.1-52.1.0', stable: true }, { version: '1.21.1-53.0.0-rc1', stable: false }],
@@ -215,14 +230,24 @@ test('profile selector lists every loader version, marks previews, and resets on
       getLoaderVersions: async (_mcVersion, loader) => ({ ok: true, versions: versionsByLoader[loader] || [] }),
     },
   };
-  vm.runInNewContext(`${html.slice(start, end)}\nthis.refreshPdLoaderVersions = refreshPdLoaderVersions;`, context);
+  const categoryStart = html.indexOf('function setProfileSettingsCategory(');
+  const categoryEnd = html.indexOf('\nfunction openExportFormatModal', categoryStart);
+  assert.ok(categoryStart >= 0 && categoryEnd > categoryStart, 'profile settings category selector should exist');
+  vm.runInNewContext(`${html.slice(start, end)}\n${html.slice(categoryStart, categoryEnd)}
+    this.refreshPdLoaderVersions = refreshPdLoaderVersions;
+    this.setProfileSettingsCategory = setProfileSettingsCategory;`, context);
+  context.setProfileSettingsCategory('general');
   await context.refreshPdLoaderVersions('1.21.1', 'fabric', '0.20.1');
-  const row = elements.get('pdLoaderVersionRow');
   const select = elements.get('pdLoaderVersion');
-  assert.equal(row.hidden, false);
+  assert.equal(row.hidden, true, 'late loader metadata must not expose the Installation row on General');
   assert.equal(select.value, '0.20.1');
   assert.deepEqual(select.children.map(option => option.value), ['', '0.20.1', '0.21.0-alpha']);
   assert.equal(select.children[2].textContent, '0.21.0-alpha (preview)');
+
+  context.setProfileSettingsCategory('installation');
+  assert.equal(row.hidden, false);
+  await context.refreshPdLoaderVersions('1.21.1', 'fabric', '0.20.1');
+  assert.equal(row.hidden, false, 'the selector remains visible on Installation after refresh');
 
   await context.refreshPdLoaderVersions('1.21.1', 'forge');
   assert.equal(elements.get('pdLoaderVersionLabel').textContent, 'Forge version');

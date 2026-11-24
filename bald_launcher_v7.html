@@ -203,6 +203,10 @@ body.horizon-mode #newProfileModal [data-horizon-profile-field]{display:block;}
 .notification-item strong{display:block;margin-bottom:3px;color:var(--ui-text);}
 .notification-dismiss{flex:none;padding:0 3px;border:0;background:transparent;color:var(--ui-text-secondary);font:20px/1 var(--font-sans);cursor:pointer;}
 .notification-dismiss:hover{color:var(--ui-text);}
+.notification-progress{margin-top:8px;}
+.notification-progress-track{height:5px;border-radius:999px;background:#293136;overflow:hidden;}
+.notification-progress-track span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#78e35a,#54b2a7);transition:width .18s ease;}
+.notification-progress-meta{margin-top:5px;color:var(--ui-text-secondary);font-size:9px;}
 .bald-toast-stack{position:fixed;right:20px;bottom:20px;z-index:240;display:grid;gap:10px;width:min(390px,calc(100vw - 32px));pointer-events:none;}
 .bald-toast{display:flex;align-items:flex-start;gap:11px;padding:13px 14px;border:1px solid rgba(143,200,199,.32);border-radius:12px;background:rgba(18,23,24,.96);color:#e5eeee;box-shadow:0 14px 38px rgba(0,0,0,.38);font:12px/1.5 var(--font-sans);pointer-events:auto;touch-action:pan-y;animation:bald-toast-enter .22s ease-out both;transition:transform .24s ease,opacity .24s ease;}
 .bald-toast.error{border-color:rgba(244,94,101,.55);box-shadow:0 14px 38px rgba(0,0,0,.4),inset 3px 0 #f45e65;}
@@ -446,6 +450,189 @@ body.horizon-mode #newProfileModal [data-horizon-profile-field]{display:block;}
 .pd-tab{padding:7px 13px;font-size:var(--text-base);color:var(--text-secondary);cursor:pointer;border-bottom:2px solid transparent;transition:color .12s;}
 .pd-tab.active{color:var(--accent-purple);border-color:var(--accent-purple);}
 .pd-tab:hover:not(.active){color:#999;}
+
+.profile-icon-button{width:36px;height:36px;padding:0;border:1px solid var(--ui-border-strong);border-radius:9px;background:var(--ui-surface);color:var(--ui-text-secondary);display:grid;place-items:center;cursor:pointer;transition:.12s ease;}
+.profile-icon-button:hover{background:var(--ui-surface-hover);border-color:var(--ui-primary);color:var(--ui-text);}
+.profile-icon-button i{font-size:17px;}
+.profile-action-menu{position:fixed;z-index:30000!important;width:220px;padding:7px;border:1px solid var(--ui-border-strong);border-radius:11px;background:var(--ui-surface);box-shadow:var(--ui-shadow-large);}
+.profile-action-menu button{width:100%;min-height:38px;padding:8px 10px;border:0;border-radius:7px;background:transparent;color:var(--ui-text-secondary);display:flex;align-items:center;gap:9px;text-align:left;font:500 12px var(--font-sans);cursor:pointer;}
+.profile-action-menu button:hover{background:var(--ui-surface-hover);color:var(--ui-text);}
+.profile-action-menu button i{width:17px;color:var(--ui-primary);font-size:16px;}
+.profile-action-menu button.danger{color:#ff9c9c;}
+.profile-action-menu button.danger i{color:#ff7272;}
+.profile-settings-modal{z-index:22000!important;}
+.profile-settings-shell{width:min(1040px,calc(100vw - 40px));height:min(720px,calc(100vh - 48px));padding:0!important;overflow:hidden!important;display:grid;grid-template-columns:220px minmax(0,1fr);}
+.profile-settings-sidebar{border-right:1px solid var(--ui-border);background:linear-gradient(180deg,var(--ui-bg-secondary),var(--ui-bg));padding:18px 12px;overflow:auto;}
+.profile-settings-titlebar{height:64px;padding:0 18px;border-bottom:1px solid var(--ui-border);display:flex;align-items:center;justify-content:space-between;}
+.profile-settings-profile{min-width:0;display:flex;align-items:center;gap:10px;}
+.profile-settings-profile-icon{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#263c4f,#1a2532);display:grid;place-items:center;color:#a9d9d8;font-weight:800;}
+.profile-settings-profile-name{font-size:13px;font-weight:700;color:var(--ui-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.profile-settings-profile-sub{font-size:10px;color:var(--ui-text-muted);margin-top:2px;}
+.profile-settings-nav{display:flex;flex-direction:column;gap:4px;margin-top:8px;}
+.profile-settings-nav button{height:40px;padding:0 11px;border:0;border-radius:8px;background:transparent;color:var(--ui-text-secondary);display:flex;align-items:center;gap:10px;font:600 12px var(--font-sans);cursor:pointer;text-align:left;}
+.profile-settings-nav button i{width:18px;font-size:17px;}
+.profile-settings-nav button:hover{background:var(--ui-surface-hover);color:var(--ui-text);}
+.profile-settings-nav button.active{background:linear-gradient(90deg,rgba(120,227,90,.16),rgba(120,227,90,.04));color:var(--ui-primary);box-shadow:inset 2px 0 var(--ui-primary);}
+.profile-settings-nav-label{margin:18px 10px 6px;color:var(--ui-text-muted);font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;}
+.profile-settings-main{min-width:0;display:flex;flex-direction:column;overflow:hidden;}
+.profile-settings-scroll{flex:1;min-height:0;padding:20px 22px 28px;overflow:auto;}
+.profile-settings-section{display:none;max-width:760px;}
+.profile-settings-section.active{display:block;animation:profileSettingsIn .16s ease-out;}
+@keyframes profileSettingsIn{from{opacity:.2;transform:translateY(4px)}to{opacity:1;transform:none}}
+.profile-settings-heading{margin:0 0 6px;color:var(--ui-text);font-size:16px;font-weight:750;letter-spacing:-.01em;}
+.profile-settings-description{margin:0 0 16px;color:var(--ui-text-muted);font-size:11px;line-height:1.55;}
+.settings-card{margin-bottom:12px;padding:14px;border:1px solid var(--ui-border);border-radius:12px;background:var(--ui-surface);box-shadow:var(--ui-shadow-small);}
+.settings-card-title{margin-bottom:10px;color:var(--ui-text);font-size:12px;font-weight:700;}
+.settings-card-help{margin:5px 0 10px;color:var(--ui-text-muted);font-size:10px;line-height:1.45;}
+.profile-settings-field{display:grid;grid-template-columns:150px minmax(0,1fr);align-items:center;gap:14px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.035);}
+.profile-settings-field:last-child{border-bottom:0;}
+.profile-settings-field.column{grid-template-columns:1fr;}
+.profile-settings-field label,.profile-settings-label{color:var(--ui-text-secondary);font-size:11px;font-weight:650;}
+.profile-settings-field input,.profile-settings-field select{min-width:0;}
+.profile-settings-field .modal-input,.profile-settings-field .modal-select{max-width:none!important;}
+.bald-toggle{position:relative;width:42px;height:24px;display:inline-flex;align-items:center;flex-shrink:0;}
+.bald-toggle input{position:absolute;opacity:0;pointer-events:none;}
+.bald-toggle-track{position:absolute;inset:0;border:1px solid var(--ui-border-strong);border-radius:999px;background:#2d3440;transition:.16s ease;}
+.bald-toggle-track::after{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;border-radius:50%;background:#9aa3ad;box-shadow:0 2px 5px rgba(0,0,0,.28);transition:.16s ease;}
+.bald-toggle input:checked+.bald-toggle-track{border-color:#54a842;background:#2d6b24;}
+.bald-toggle input:checked+.bald-toggle-track::after{transform:translateX(18px);background:#dfffd3;}
+.bald-toggle input:focus-visible+.bald-toggle-track{outline:2px solid var(--ui-primary);outline-offset:2px;}
+.settings-toggle-row{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;}
+.settings-toggle-copy{min-width:0;}
+.settings-toggle-copy strong{display:block;color:var(--ui-text);font-size:11px;}
+.settings-toggle-copy span{display:block;margin-top:4px;color:var(--ui-text-muted);font-size:10px;line-height:1.45;}
+.profile-settings-footer{height:68px;padding:12px 18px;border-top:1px solid var(--ui-border);background:var(--ui-bg-secondary);display:flex;align-items:center;justify-content:flex-end;gap:8px;}
+.profile-settings-footer .danger-btn{margin-left:0;margin-right:auto;}
+
+.export-format-modal{z-index:23000!important;}
+.export-format-shell{width:min(760px,calc(100vw - 40px));height:auto!important;max-height:min(650px,calc(100vh - 40px));overflow:hidden!important;}
+.export-format-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:4px 0 14px;}
+.export-format-card{min-height:118px;padding:14px;border:1px solid var(--ui-border);border-radius:12px;background:var(--ui-surface);color:var(--ui-text);text-align:left;cursor:pointer;transition:.14s ease;}
+.export-format-card:hover{border-color:var(--ui-primary);background:var(--ui-surface-hover);transform:translateY(-1px);}
+.export-format-card.selected{border-color:#66bd54;background:linear-gradient(135deg,rgba(120,227,90,.15),rgba(120,227,90,.03));box-shadow:0 0 0 2px rgba(120,227,90,.08);}
+.export-format-icon{width:36px;height:36px;margin-bottom:10px;border-radius:9px;background:rgba(120,227,90,.11);display:grid;place-items:center;color:var(--ui-primary);font-size:19px;}
+.export-format-name{display:block;font-size:12px;font-weight:750;}
+.export-format-sub{display:block;margin-top:5px;color:var(--ui-text-muted);font-size:9px;line-height:1.35;}
+.export-folder-modal{z-index:24000!important;}
+.export-folder-shell{width:min(760px,calc(100vw - 40px));height:min(680px,calc(100vh - 40px));padding:0!important;overflow:hidden!important;}
+.export-folder-header{padding:16px 18px;border-bottom:1px solid var(--ui-border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+.export-folder-fields{display:grid;grid-template-columns:minmax(0,1fr) 130px;gap:10px;padding:14px 18px;border-bottom:1px solid var(--ui-border);}
+.export-folder-list{flex:1;min-height:0;padding:8px 18px;overflow:auto;}
+.export-folder-row{min-height:52px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.035);display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:10px;color:var(--ui-text);}
+.export-folder-row:last-child{border-bottom:0;}
+.export-folder-check{width:18px;height:18px;accent-color:var(--ui-primary);}
+.export-folder-name{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:650;}
+.export-folder-name i{color:var(--ui-text-muted);font-size:15px;}
+.export-folder-meta{color:var(--ui-text-muted);font-size:9px;margin-top:3px;}
+.export-folder-size{color:var(--ui-text-muted);font-size:10px;white-space:nowrap;}
+.export-folder-footer{height:68px;padding:12px 18px;border-top:1px solid var(--ui-border);display:flex;align-items:center;justify-content:flex-end;gap:8px;background:var(--ui-bg-secondary);}
+
+/* Refined profile settings and export surfaces */
+.profile-settings-modal .profile-settings-shell{height:min(760px,calc(100vh - 44px));width:min(980px,calc(100vw - 48px));grid-template-columns:230px minmax(0,1fr);}
+.profile-settings-modal .profile-settings-sidebar{padding:14px 10px 18px;background:linear-gradient(180deg,#11181c,#0d1114);}
+.profile-settings-modal .profile-settings-profile{height:54px;padding:8px 8px 10px;border-bottom:1px solid var(--ui-border);margin-bottom:8px;}
+.profile-settings-modal .profile-settings-profile-icon{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#37535f,#1d2a32);border:1px solid rgba(151,207,199,.16);color:#b7ded9;}
+.profile-settings-profile-icon img{width:100%;height:100%;display:block;object-fit:cover;border-radius:inherit;}
+.profile-settings-modal .profile-settings-nav-label{margin:16px 10px 7px;}
+.profile-settings-modal .profile-settings-nav button{height:42px;border-radius:9px;}
+.profile-settings-modal .profile-settings-nav button.active{background:linear-gradient(90deg,rgba(120,227,90,.17),rgba(120,227,90,.045));box-shadow:inset 3px 0 #78e35a;}
+.profile-settings-modal .profile-settings-titlebar{height:58px;padding:0 18px;background:rgba(14,18,21,.76);}
+.profile-settings-title{display:flex;align-items:center;gap:9px;}
+.profile-settings-brand-logo{width:26px;height:26px;display:block;flex:none;object-fit:contain;}
+.profile-settings-footer{min-height:64px;padding:10px 18px;display:flex;align-items:center;justify-content:flex-end;border-top:1px solid var(--ui-border);background:linear-gradient(180deg,rgba(17,22,25,.86),#111619);}
+.profile-settings-footer[hidden]{display:none!important;}
+.profile-settings-footer .modal-btn{min-width:136px;height:38px;justify-content:center;}
+.profile-settings-modal .profile-settings-scroll{padding:18px 22px 24px;scrollbar-gutter:stable;}
+.profile-settings-modal #javaProfileSettings,.profile-settings-modal #horizonProfileSettings{width:100%;height:auto!important;max-width:none!important;overflow:visible!important;}
+.profile-settings-modal .pd-settings{width:100%;height:auto!important;max-width:none!important;padding:0!important;gap:9px!important;overflow:visible!important;}
+.profile-settings-modal .profile-settings-heading-block{margin:1px 0 13px;}
+.profile-settings-modal .profile-settings-heading{font-size:17px;line-height:1.25;margin:0 0 5px;}
+.profile-settings-modal .profile-settings-description{margin:0;color:var(--ui-text-muted);font-size:11px;}
+.profile-settings-modal .pd-settings-row{min-height:58px;margin:0;padding:13px 14px;border:1px solid var(--ui-border);border-radius:10px;background:linear-gradient(180deg,var(--ui-surface),rgba(26,31,35,.74));gap:12px!important;}
+.profile-settings-modal .pd-settings-row[hidden]{display:none!important;}
+.profile-settings-modal .pd-settings-row.column{gap:8px!important;}
+.profile-settings-modal .pd-settings-row:last-child{margin-top:4px;}
+.profile-settings-modal .setting-label{min-width:148px!important;color:var(--ui-text-secondary);font-size:11px;font-weight:700;}
+.profile-settings-modal .pd-settings-row.column .setting-label{min-width:0!important;}
+.profile-settings-modal .modal-input,.profile-settings-modal .modal-select,.profile-settings-modal .setting-select{min-height:38px;border-radius:8px;background:#151b1f;border-color:#303a42;color:var(--ui-text);}
+.profile-settings-modal .pd-settings-row .modal-input,.profile-settings-modal .pd-settings-row .modal-select{flex:1;width:auto!important;max-width:330px!important;}
+.profile-settings-modal .pd-settings-row.column>div,.profile-settings-modal .pd-settings-row.column>.setting-label~*{max-width:560px;}
+.profile-settings-modal #pdRendererOptions{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px!important;}
+.profile-settings-modal .renderer-opt{min-height:54px;background:#151b1f;border-radius:9px;}
+.profile-settings-modal .renderer-opt.sel{border-color:#66bd54;background:linear-gradient(135deg,rgba(120,227,90,.14),rgba(120,227,90,.025));box-shadow:0 0 0 2px rgba(120,227,90,.06);}
+.profile-settings-modal #pdPrewarmEnabled,.profile-settings-modal #horizonPrewarmEnabled,.profile-settings-modal input[type="checkbox"].bald-switch{appearance:none;-webkit-appearance:none;width:42px;height:24px;position:relative;border:1px solid #3b4650;border-radius:999px;background:#2a3238;cursor:pointer;margin:0 0 0 auto;transition:.16s ease;}
+.profile-settings-modal #pdPrewarmEnabled::after,.profile-settings-modal #horizonPrewarmEnabled::after,.profile-settings-modal input[type="checkbox"].bald-switch::after{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;border-radius:50%;background:#9aa4aa;box-shadow:0 2px 5px rgba(0,0,0,.25);transition:.16s ease;}
+.profile-settings-modal #pdPrewarmEnabled:checked,.profile-settings-modal #horizonPrewarmEnabled:checked,.profile-settings-modal input[type="checkbox"].bald-switch:checked{border-color:#65b64d;background:#2e6825;}
+.profile-settings-modal #pdPrewarmEnabled:checked::after,.profile-settings-modal #horizonPrewarmEnabled:checked::after,.profile-settings-modal input[type="checkbox"].bald-switch:checked::after{transform:translateX(18px);background:#e6ffd8;}
+.profile-settings-modal #pdPrewarmEnabled:focus-visible,.profile-settings-modal #horizonPrewarmEnabled:focus-visible,.profile-settings-modal input[type="checkbox"].bald-switch:focus-visible{outline:2px solid var(--ui-primary);outline-offset:2px;}
+.profile-settings-modal .danger-btn{height:38px;border-radius:8px;}
+.profile-settings-modal .profile-settings-heading-block+.pd-settings-row{margin-top:0;}
+.profile-memory-slider,.setting-slider{width:100%;height:28px;appearance:none;-webkit-appearance:none;background:transparent;cursor:pointer;}
+.profile-memory-slider::-webkit-slider-runnable-track,.setting-slider::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:linear-gradient(90deg,#82ed60 0%,#82ed60 var(--profile-memory-progress,50%),#293237 var(--profile-memory-progress,50%),#293237 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.035);}
+.profile-memory-slider::-webkit-slider-thumb,.setting-slider::-webkit-slider-thumb{appearance:none;-webkit-appearance:none;width:22px;height:22px;margin-top:-7px;border:3px solid #d4ffc4;border-radius:50%;background:#70d94f;box-shadow:0 0 0 4px rgba(120,227,90,.12),0 3px 12px rgba(0,0,0,.4);}
+.profile-memory-slider:focus-visible,.setting-slider:focus-visible{outline:2px solid rgba(120,227,90,.7);outline-offset:3px;border-radius:999px;}
+.profile-memory-slider:disabled,.setting-slider:disabled{opacity:.42;cursor:not-allowed;}
+.memory-number-field input:disabled{opacity:.5;cursor:not-allowed;}
+.ram-control{display:grid;gap:11px;width:100%;padding:13px;border:1px solid var(--ui-border);border-radius:10px;background:linear-gradient(145deg,rgba(120,227,90,.045),rgba(17,22,25,.75) 45%);}
+.memory-control-heading{display:flex;align-items:center;justify-content:space-between;gap:14px;}
+.memory-control-copy{display:grid;gap:4px;min-width:0;}
+.memory-control-copy .setting-label{min-width:0!important;color:var(--ui-text);font-size:12px;font-weight:750;}
+.memory-control-copy>span{color:var(--ui-text-muted);font-size:10px;line-height:1.45;}
+.memory-control-value{display:flex;align-items:center;gap:9px;flex-shrink:0;}
+.memory-control-value output{color:#bcf5a6;font-size:12px;font-weight:800;white-space:nowrap;}
+.memory-number-field{height:36px;display:flex;align-items:center;gap:7px;padding:0 9px;border:1px solid #3b484f;border-radius:8px;background:#101619;transition:border-color .15s,box-shadow .15s;}
+.memory-number-field:focus-within{border-color:#78e35a;box-shadow:0 0 0 3px rgba(120,227,90,.11);}
+.memory-number-field input{width:76px;padding:0;border:0;outline:0;background:transparent;color:var(--ui-text);font:700 12px var(--font-sans);text-align:right;font-variant-numeric:tabular-nums;}
+.memory-number-field span{color:var(--ui-text-muted);font-size:9px;font-weight:800;letter-spacing:.08em;}
+.memory-slider-area{display:grid;gap:3px;}
+.memory-slider-scale{display:flex;justify-content:space-between;color:var(--ui-text-muted);font-size:9px;font-variant-numeric:tabular-nums;}
+.memory-presets{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.memory-presets-label{margin-right:2px;color:var(--ui-text-muted);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;}
+.memory-preset-button{min-height:27px;padding:4px 9px;border:1px solid #354047;border-radius:7px;background:#171e22;color:#aeb8bd;font:700 10px var(--font-sans);cursor:pointer;transition:background .12s,border-color .12s,color .12s,transform .12s;}
+.memory-preset-button:hover:not(:disabled){transform:translateY(-1px);border-color:rgba(120,227,90,.55);background:rgba(120,227,90,.11);color:#d8ffd0;}
+.memory-preset-button:disabled{opacity:.42;cursor:not-allowed;}
+.server-memory-control{display:grid;grid-template-columns:minmax(120px,1fr) 110px;align-items:center;gap:8px 12px;width:min(420px,100%);}
+.server-memory-control .setting-slider{width:100%;max-width:none;flex:none;grid-column:1/-1;}
+.server-memory-control .memory-number-field{grid-column:2;justify-self:end;width:110px;}
+.server-memory-control .memory-number-field input{width:56px;}
+.server-memory-presets{grid-column:1/-1;}
+.ram-control .setting-slider{max-width:none;flex:none;}
+
+.profile-action-menu{width:238px!important;padding:8px!important;border-radius:12px!important;z-index:30000!important;}
+.profile-action-menu .profile-menu-group-label{padding:7px 9px 4px;color:var(--ui-text-muted);font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.12em;}
+.profile-action-menu .profile-menu-divider{height:1px;margin:5px 8px;background:var(--ui-border);}
+.profile-action-menu button{min-height:40px!important;padding:9px!important;border-radius:8px!important;font-size:12px!important;}
+.profile-action-menu button i{width:20px!important;height:20px;display:grid;place-items:center;border-radius:6px;background:rgba(151,207,199,.07);font-size:14px!important;}
+
+.export-format-modal .export-format-shell{width:min(820px,calc(100vw - 40px))!important;max-height:calc(100vh - 40px)!important;padding:18px!important;}
+.export-format-modal .export-format-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:2px 0 12px;}
+.export-format-modal .export-format-card{min-height:108px;display:grid;grid-template-columns:42px minmax(0,1fr);grid-template-rows:auto auto;column-gap:10px;text-align:left;padding:15px;}
+.export-format-modal .export-format-icon{grid-row:1/3;margin:0;align-self:start;}
+.export-format-modal .export-format-icon img{width:42px;height:42px;display:block;border-radius:10px;object-fit:contain;background:rgba(255,255,255,.025);}
+.export-format-modal .export-format-name{align-self:end;}
+.export-format-modal .export-format-sub{align-self:start;}
+.export-folder-modal .export-folder-shell{width:min(820px,calc(100vw - 40px))!important;height:min(700px,calc(100vh - 40px))!important;}
+.export-folder-modal .export-folder-row{min-height:58px;background:transparent;border-radius:8px;padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.035);}
+.export-folder-modal .export-folder-row:hover{background:rgba(151,207,199,.035);}
+.export-folder-modal .export-folder-name{font-size:12px;}
+.export-folder-modal .export-folder-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:8px 12px;padding-top:12px;}
+.export-folder-modal .export-folder-row{min-height:64px;margin:0;border:1px solid var(--ui-border);border-radius:10px;padding:10px 11px;background:linear-gradient(180deg,var(--ui-surface),rgba(24,29,33,.72));}
+.export-folder-modal .export-folder-row:has(.export-folder-check:checked){border-color:rgba(120,227,90,.42);background:linear-gradient(135deg,rgba(120,227,90,.11),rgba(120,227,90,.025));}
+.export-folder-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 18px;border-bottom:1px solid var(--ui-border);background:rgba(255,255,255,.012);}
+.export-folder-toolbar-actions{display:flex;gap:7px;}
+.export-folder-toolbar-actions button{min-height:30px;padding:5px 9px;font-size:10px;}
+.export-folder-selection-count{color:var(--ui-text-muted);font-size:10px;}
+.server-memory-control{display:grid;grid-template-columns:minmax(120px,1fr) 56px;align-items:center;gap:10px;width:min(360px,100%);}
+.server-memory-control .setting-slider{width:100%;}
+
+@media(max-width:760px){
+  .profile-settings-modal .profile-settings-shell{width:calc(100vw - 18px)!important;height:calc(100vh - 18px)!important;grid-template-columns:160px minmax(0,1fr);}
+  .profile-settings-modal .profile-settings-scroll{padding:14px;}
+  .profile-settings-modal .setting-label{min-width:118px!important;}
+  .profile-settings-modal #pdRendererOptions{grid-template-columns:1fr!important;}
+  .export-format-modal .export-format-grid{grid-template-columns:1fr;}
+  .export-folder-modal .export-folder-fields{grid-template-columns:1fr;}
+}
 
 .vulkan-warning{margin:10px 14px 0;background:#231d05;border:0.5px solid #5a4a10;border-radius:8px;padding:9px 12px;font-size:var(--text-sm);color:#e0c050;display:flex;align-items:center;gap:9px;line-height:1.5;flex-shrink:0;}
 
@@ -1083,7 +1270,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
   <div class="boot-splash" id="bootSplash" role="status" aria-live="polite">
     <div class="boot-splash-card">
       <div class="boot-splash-brandline">
-        <div class="boot-splash-logo"><img src="build/bald-launcher-mark.svg" alt="" draggable="false"></div>
+        <div class="boot-splash-logo"><img src="build/bald-launcher-mark.png" alt="" draggable="false"></div>
         <div class="boot-splash-brand">BALD LAUNCHER<small>JAVA EDITION · PROFILE SYSTEM</small></div>
       </div>
       <div class="boot-splash-copy">
@@ -1098,7 +1285,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
   </div>
   <div class="update-banner" id="updateBanner"><span id="updateBannerText"></span><span class="update-banner-progress" id="updateBannerProgress"></span><button id="updateButton" type="button">Check for updates</button></div>
   <div class="titlebar">
-    <img class="titlebar-logo" src="build/bald-launcher-mark.svg" alt="Bald Launcher" draggable="false">
+    <img class="titlebar-logo" src="build/bald-launcher-mark.png" onerror="this.onerror=null;this.src='build/bald-launcher-mark.svg'" alt="Bald Launcher" draggable="false">
     <span class="titlebar-name">Bald Launcher</span>
     <button class="launcher-mode-toggle" id="launcherModeToggle" type="button" onclick="toggleLauncherMode()" aria-label="Switch to Horizon mode">Horizon mode</button>
     <div class="titlebar-acc">
@@ -1304,7 +1491,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
         <div class="settings-section"><div class="ss-title">Live performance</div><pre id="performanceLiveOutput" style="white-space:pre-wrap;color:var(--text-secondary);font:12px/1.7 var(--font-mono);">Minecraft is not running.</pre><button class="modal-btn" type="button" onclick="refreshPerformanceCenter()"><i class="ti ti-refresh" aria-hidden="true"></i> Refresh metrics</button></div>
         <div class="settings-section"><div class="ss-title">Windows GPU preference</div><div style="color:var(--text-secondary);font-size:var(--text-sm);margin-bottom:8px;">Use Windows' supported per-app graphics preference for Minecraft's exact Java executable. This opens Windows Settings; Bald Launcher does not edit the registry or silently change your GPU setting. Add the Java executable shown below as a desktop app, choose High performance, then restart Minecraft. A saved preference alone does not prove it took effect: refresh while Minecraft is running to inspect process-specific 3D-engine adapter IDs.</div><div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="modal-btn" type="button" onclick="openWindowsGpuSettings()"><i class="ti ti-settings" aria-hidden="true"></i> Open Windows Graphics settings</button><button class="modal-btn" type="button" onclick="refreshGpuPreference()"><i class="ti ti-refresh" aria-hidden="true"></i> Check Java preference and active adapter</button></div><pre id="gpuPreferenceOutput" style="white-space:pre-wrap;color:var(--text-secondary);font:12px/1.7 var(--font-mono);margin-top:10px;">Check the selected profile to see its resolved Java executable and Windows preference.</pre></div>
         <div class="settings-section"><div class="ss-title">Recommendations</div><div id="performanceRecommendations" style="color:var(--text-secondary);font-size:var(--text-sm);">No recommendations collected.</div></div>
-        <div class="settings-section"><div class="ss-title">Controlled benchmark</div><div style="color:var(--text-secondary);font-size:var(--text-sm);margin-bottom:8px;">Gameplay capture: 30-second warm-up plus 60 seconds measured by PresentMon. Enter the same world/test-scene label for both runs, use identical settings and the same world snapshot, then alternate and repeat each run at least three times. Startup is a separate test: time from clicking Launch to the main menu after restarting the launcher and game, and keep those readings separate; this tool does not collect startup times. FPS is unavailable unless PresentMon is installed; 1% lows require at least 1,000 frame intervals and 0.1% lows require at least 10,000. No video settings are changed.</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;"><select class="modal-select" id="benchmarkRole" aria-label="Benchmark run type"><option value="baseline">Baseline · original profile</option><option value="optimized">Optimized · isolated Sodium profile</option></select><input class="modal-input" id="benchmarkScene" maxlength="120" placeholder="Same world + scene (e.g. test-world spawn, facing north)" aria-label="Benchmark world and scene" style="min-width:280px;flex:1;" /></div><div style="color:var(--text-tertiary);font-size:var(--text-xs);margin-bottom:10px;">Automatic optimization is limited to clean Vanilla/Fabric/Quilt profiles. Active mods and unsupported loaders are never migrated or altered. Managed profiles copy the original options.txt, resource packs, shader packs, and Iris selection into a separate folder.</div><button class="modal-btn primary" type="button" onclick="runPerformanceBenchmark()"><i class="ti ti-chart-line" aria-hidden="true"></i> Run benchmark</button><pre id="benchmarkOutput" style="white-space:pre-wrap;color:var(--text-secondary);font:12px/1.7 var(--font-mono);margin-top:10px;">No benchmark results.</pre></div>
+        <div class="settings-section"><div class="ss-title">Controlled benchmark</div><div style="color:var(--text-secondary);font-size:var(--text-sm);margin-bottom:8px;">Gameplay capture: 30-second warm-up plus 60 seconds measured by PresentMon. Enter the same world/test-scene label for both runs, use identical settings and the same world snapshot, then alternate and repeat each run at least three times. Startup is a separate test: time from clicking Launch to the main menu after restarting the launcher and game, and keep those readings separate; this tool does not collect startup times. FPS is unavailable unless PresentMon is installed; 1% lows require at least 1,000 frame intervals and 0.1% lows require at least 10,000. No video settings are changed.</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;"><select class="modal-select" id="benchmarkRole" aria-label="Benchmark run type"><option value="baseline">Baseline · original profile</option><option value="optimized">Optimized · managed profile</option></select><input class="modal-input" id="benchmarkScene" maxlength="120" placeholder="Same world + scene (e.g. test-world spawn, facing north)" aria-label="Benchmark world and scene" style="min-width:280px;flex:1;" /></div><div style="color:var(--text-tertiary);font-size:var(--text-xs);margin-bottom:10px;">OneClient uses the full compatible Fabric modpack, not a copied or split mod list. Managed profiles keep files isolated and may offer to copy a world from the source profile. FPS and startup gains must be measured; they are not guaranteed.</div><button class="modal-btn primary" type="button" onclick="runPerformanceBenchmark()"><i class="ti ti-chart-line" aria-hidden="true"></i> Run benchmark</button><pre id="benchmarkOutput" style="white-space:pre-wrap;color:var(--text-secondary);font:12px/1.7 var(--font-mono);margin-top:10px;">No benchmark results.</pre></div>
         <div class="settings-section"><div class="ss-title">Performance history</div><div id="performanceHistory" style="color:var(--text-secondary);font-size:var(--text-sm);">No benchmark history.</div></div>
       </div>
     </div>
@@ -1323,14 +1510,13 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
           </div>
           <div class="pd-actions">
             <button class="add-content-btn" type="button" onclick="openBrowseModal()"><i class="ti ti-compass" aria-hidden="true"></i> Add content</button>
-            <button class="modal-btn" type="button" data-java-only onclick="duplicateCurrentProfile()" title="Duplicate profile"><i class="ti ti-copy" aria-hidden="true"></i></button>
-            <button class="modal-btn" type="button" data-java-only onclick="exportCurrentProfile()" title="Export profile"><i class="ti ti-download" aria-hidden="true"></i></button>
+            <button class="profile-icon-button" type="button" onclick="openProfileSettingsModal()" title="Profile settings" aria-label="Profile settings"><i class="ti ti-settings" aria-hidden="true"></i></button>
+            <button class="profile-icon-button" type="button" onclick="openProfileActionMenu(event,currentProfileId)" title="More profile actions" aria-label="More profile actions"><i class="ti ti-dots" aria-hidden="true"></i></button>
             <button class="pd-play" id="pdPlayButton" type="button"><i class="ti ti-player-play" aria-hidden="true"></i> Play</button>
           </div>
         </div>
         <div class="pd-tabs">
           <div class="pd-tab active" id="pdtab-content" onclick="setPdTab('content')">Content</div>
-          <div class="pd-tab" id="pdtab-settings" onclick="setPdTab('settings')">Settings</div>
           <div class="pd-tab" id="pdtab-logs" onclick="setPdTab('logs')">Logs</div>
         </div>
         <div class="horizon-profile-status" id="horizonProfileStatus" role="status" aria-live="polite" hidden></div>
@@ -1395,7 +1581,7 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
                 <span id="pdLoaderVersionStatus" role="status" style="font-size:10px;color:var(--text-secondary);"></span>
               </div>
             </div>
-            <div class="pd-settings-row column"><label class="setting-label" for="pdPrewarmEnabled">Prewarm this profile <input id="pdPrewarmEnabled" type="checkbox" onchange="setJavaProfilePrewarm(this.checked)" /></label><span style="font-size:11px;color:var(--text-secondary);">Keep Minecraft running invisibly so Play can restore it faster. Prewarm is capped at 50% CPU and background priority until you click Play; RAM follows this profile’s allocation.</span></div>
+            <div class="pd-settings-row column"><div class="settings-toggle-row"><div class="settings-toggle-copy"><label class="setting-label" for="pdPrewarmEnabled">Prewarm this profile</label><span>Keep Minecraft running invisibly so Play can restore it faster. It uses limited resources until you launch.</span></div><input id="pdPrewarmEnabled" type="checkbox" onchange="setJavaProfilePrewarm(this.checked)" /></div></div>
             <div class="pd-settings-row column">
               <span class="setting-label">Custom Skin &amp; Cape Support</span>
               <div id="pdCustomSkinLoaderStatus" style="font-size:11px;color:#777;">Checking compatibility...</div>
@@ -1405,8 +1591,17 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
               <span class="setting-label">Renderer mode</span>
               <div id="pdRendererOptions" style="display:flex;flex-direction:column;gap:6px;"></div>
             </div>
-            <div class="pd-settings-row"><span class="setting-label">Java executable</span><input class="modal-input" id="pdJavaPath" placeholder="Automatic Java detection" style="max-width:280px;" /></div>
-            <div class="pd-settings-row"><span class="setting-label">Maximum RAM (GB)</span><input class="modal-input" id="pdMemoryMax" type="number" min="1" max="32" step="1" style="max-width:100px;" /></div>
+            <div class="pd-settings-row"><span class="setting-label">Java executable</span><select class="modal-select" id="pdJavaPath" aria-label="Java executable" style="max-width:330px;"><option value="">Automatic Java detection</option></select></div>
+            <div class="pd-settings-row column">
+              <div class="ram-control">
+                <div class="memory-control-heading">
+                  <div class="memory-control-copy"><label class="setting-label" for="pdMemoryMaxInput">Maximum RAM</label><span>Set an exact amount in MB, drag the slider, or choose a preset.</span></div>
+                  <div class="memory-control-value"><output id="pdMemoryMaxValue" for="pdMemoryMax pdMemoryMaxInput">6 GB</output><label class="memory-number-field"><input type="number" id="pdMemoryMaxInput" min="512" max="32768" step="1" value="6144" aria-label="Profile maximum RAM in megabytes" oninput="updateProfileRamInput(this.value)" onchange="updateProfileRamInput(this.value,true)" /><span>MB</span></label></div>
+                </div>
+                <div class="memory-slider-area"><input type="range" class="profile-memory-slider" id="pdMemoryMax" min="512" max="32768" step="1" value="6144" aria-label="Profile maximum RAM slider" oninput="updateProfileRamSlider(this.value)" onchange="updateProfileRamSlider(this.value,true)" /><div class="memory-slider-scale"><span>512 MB</span><span>8 GB</span><span>16 GB</span><span>32 GB</span></div></div>
+                <div class="memory-presets" aria-label="RAM presets"><span class="memory-presets-label">Quick set</span><button class="memory-preset-button" type="button" onclick="setProfileRamPreset(4096)">4 GB</button><button class="memory-preset-button" type="button" onclick="setProfileRamPreset(6144)">6 GB</button><button class="memory-preset-button" type="button" onclick="setProfileRamPreset(8192)">8 GB</button><button class="memory-preset-button" type="button" onclick="setProfileRamPreset(12288)">12 GB</button><button class="memory-preset-button" type="button" onclick="setProfileRamPreset(16384)">16 GB</button><button class="memory-preset-button" type="button" onclick="setProfileRamPreset(24576)">24 GB</button><button class="memory-preset-button" type="button" onclick="setProfileRamPreset(32768)">32 GB</button></div>
+              </div>
+            </div>
             <div class="pd-settings-row"><span class="setting-label">JVM profile</span><select class="modal-select" id="pdJvmProfile" style="max-width:180px;"><option value="default">Tuned G1GC</option><option value="zgc">Ultra low-stutter (ZGC)</option><option value="custom">Custom</option></select></div>
             <div class="pd-settings-row"><span class="setting-label">Custom JVM arguments</span><input class="modal-input" id="pdCustomJvmArgs" placeholder="Only used with Custom" style="max-width:280px;" /></div>
             <div class="pd-settings-row"><span class="setting-label">Mods / resource pack folders</span>
@@ -1419,7 +1614,6 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
               <button class="modal-btn" onclick="restoreCurrentProfile()"><i class="ti ti-database-import" aria-hidden="true"></i> Restore latest</button>
             </div>
             <div class="pd-settings-row" style="border-bottom:none;justify-content:space-between;">
-              <button class="modal-btn primary" onclick="savePdSettings()"><i class="ti ti-device-floppy" aria-hidden="true"></i> Save changes</button>
               <button class="danger-btn" onclick="deleteCurrentProfile()"><i class="ti ti-trash" aria-hidden="true"></i> Delete profile</button>
             </div>
           </div>
@@ -1535,7 +1729,14 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
       <div class="settings-panel">
         <div class="settings-section"><div class="ss-title">Memory & Java</div>
           <label class="setting-row"><span class="setting-label">Automatically recommend RAM</span><input type="checkbox" id="memoryMaxAuto" onchange="toggleAutoMemory()"/></label>
-          <div class="setting-row"><span class="setting-label">RAM maximum</span><input type="range" class="setting-slider" min="1" max="32" value="6" step="1" id="ramSlider" oninput="updateRam(this.value)"/><span class="setting-val" id="ramVal">6 GB</span></div>
+          <div class="ram-control" id="globalRamControl">
+            <div class="memory-control-heading">
+              <div class="memory-control-copy"><label class="setting-label" for="ramInput">RAM maximum</label><span>Type a precise value in MB or use the slider and quick presets.</span></div>
+              <div class="memory-control-value"><output id="ramVal" for="ramSlider ramInput">6 GB</output><label class="memory-number-field"><input type="number" id="ramInput" min="512" max="32768" step="1" value="6144" aria-label="Global maximum RAM in megabytes" oninput="updateRamInput(this.value)" onchange="updateRamInput(this.value,true)" /><span>MB</span></label></div>
+            </div>
+            <div class="memory-slider-area"><input type="range" class="setting-slider" min="512" max="32768" value="6144" step="1" id="ramSlider" aria-label="Global maximum RAM slider" oninput="updateRam(this.value)" onchange="updateRam(this.value,true)"/><div class="memory-slider-scale"><span>512 MB</span><span>8 GB</span><span>16 GB</span><span>32 GB</span></div></div>
+            <div class="memory-presets" id="globalRamPresets" aria-label="RAM presets"><span class="memory-presets-label">Quick set</span><button class="memory-preset-button" type="button" onclick="setGlobalRamPreset(2048)">2 GB</button><button class="memory-preset-button" type="button" onclick="setGlobalRamPreset(4096)">4 GB</button><button class="memory-preset-button" type="button" onclick="setGlobalRamPreset(6144)">6 GB</button><button class="memory-preset-button" type="button" onclick="setGlobalRamPreset(8192)">8 GB</button><button class="memory-preset-button" type="button" onclick="setGlobalRamPreset(12288)">12 GB</button><button class="memory-preset-button" type="button" onclick="setGlobalRamPreset(16384)">16 GB</button><button class="memory-preset-button" type="button" onclick="setGlobalRamPreset(24576)">24 GB</button><button class="memory-preset-button" type="button" onclick="setGlobalRamPreset(32768)">32 GB</button></div>
+          </div>
           <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">Automatic recommendations leave memory for Windows and other apps and account for currently available RAM. Turn this off to keep a manual value. Minecraft's Java version is selected for the chosen game version; a compatible profile Java path is kept.</div>
         </div>
         <div class="settings-section"><div class="ss-title">Launcher</div>
@@ -1545,8 +1746,9 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
         <div class="settings-section"><div class="ss-title">Minecraft performance</div>
           <label class="setting-row"><span class="setting-label">Vanilla FPS preset (no mods)</span><input type="checkbox" id="vanillaPerformancePresetEnabled" onchange="syncSettings()"/></label>
           <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">On by default: selects Fast graphics when supported, lowers render distance to 6, simulation distance to 4, entity distance, particles, clouds, biome blending, mipmaps, and ambient occlusion; disables VSync and caps at 260 FPS. Applies per profile on launch and adds no mods. Turning it off restores saved values unless you changed those settings in Minecraft.</div>
-          <label class="setting-row"><span class="setting-label">Opt in to isolated Sodium profile</span><input type="checkbox" id="optimizationModsEnabled" onchange="syncSettings()"/></label>
-          <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">Off by default. When enabled, launching may create a separate profile and install Sodium plus compatible client-side mods after exact release checks. Your existing profiles, mods, worlds, and Minecraft settings are not copied over or changed. You can keep using the original profile; FPS gains are not guaranteed.</div>
+          <div style="font-size:10px;color:var(--text-muted);margin:0 0 10px 0;">Create a separate Fabric profile with the full official OneClient Modrinth pack matching this profile’s Minecraft version. Your original profile is preserved. OneClient’s in-game configuration is used as-is; actual FPS gains depend on your system and are not guaranteed.</div>
+          <button class="modal-btn primary" id="oneClientPerformanceInstallButton" type="button" onclick="installOneClientPerformanceProfile()"><i class="ti ti-bolt" aria-hidden="true"></i> Create OneClient profile</button>
+          <div id="oneClientProfileStatus" role="status" aria-live="polite" style="font-size:10px;color:var(--text-muted);margin:8px 0 10px 0;">Uses the selected profile’s Minecraft version and leaves its files and settings untouched.</div>
           <div class="setting-row"><span class="setting-label">JVM profile</span><select class="setting-select" id="jvmProfile" onchange="toggleJvmArgs();syncSettings()"><option value="default">Java defaults (recommended)</option><option value="zgc">ZGC (Java 21+)</option><option value="custom">Custom</option></select></div>
           <div class="setting-row"><span class="setting-label">Custom JVM arguments</span><input class="setting-input" id="customJvmArgs" value="" placeholder="Only when Custom is selected" style="width:260px;" onchange="syncSettings()"/></div>
           <div style="font-size:10px;color:var(--text-muted);margin:-8px 0 10px 0;">The launcher does not edit Minecraft video settings or promise a specific FPS gain. Background prewarm uses lower process priority and a 50% CPU cap; both limits are lifted when you click Play.</div>
@@ -1986,6 +2188,78 @@ button:disabled,input:disabled,select:disabled,textarea:disabled{opacity:.5;curs
       <div><label class="modal-label">Version</label><input class="modal-input" id="exportModpackVersion" value="1.0.0" maxlength="24" /></div>
       <div><label class="modal-label">Description</label><input class="modal-input" id="exportModpackDescription" maxlength="2000" /></div>
       <div class="modal-actions"><button class="modal-btn" onclick="closeExportModpackModal()"><i class="ti ti-x" aria-hidden="true"></i> Cancel</button><button class="modal-btn primary" onclick="submitExportModpack()"><i class="ti ti-file-archive" aria-hidden="true"></i> Export Modpack</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay profile-settings-modal" id="profileSettingsModal" style="display:none;" onclick="if(event.target===this)closeProfileSettingsModal()">
+    <div class="profile-settings-shell modal-box" role="dialog" aria-label="Profile settings">
+      <aside class="profile-settings-sidebar">
+        <div class="profile-settings-profile">
+          <div class="profile-settings-profile-icon" id="profileSettingsIcon">B</div>
+          <div style="min-width:0;">
+            <div class="profile-settings-profile-name" id="profileSettingsName">Profile</div>
+            <div class="profile-settings-profile-sub" id="profileSettingsSub">Settings</div>
+          </div>
+        </div>
+        <div id="javaProfileSettingsNav">
+          <div class="profile-settings-nav-label">Profile</div>
+          <nav class="profile-settings-nav" aria-label="Profile settings">
+            <button type="button" class="active" data-profile-settings-category="general" onclick="setProfileSettingsCategory('general')"><i class="ti ti-adjustments"></i> General</button>
+            <button type="button" data-profile-settings-category="installation" onclick="setProfileSettingsCategory('installation')"><i class="ti ti-download"></i> Installation</button>
+            <button type="button" data-profile-settings-category="java" onclick="setProfileSettingsCategory('java')"><i class="ti ti-coffee"></i> Java &amp; memory</button>
+            <button type="button" data-profile-settings-category="files" onclick="setProfileSettingsCategory('files')"><i class="ti ti-folders"></i> Files &amp; backups</button>
+          </nav>
+        </div>
+        <div id="horizonProfileSettingsNav" hidden>
+          <div class="profile-settings-nav-label">Horizon</div>
+          <nav class="profile-settings-nav">
+            <button type="button" class="active" onclick="setProfileSettingsCategory('horizon')"><i class="ti ti-adjustments"></i> Profile</button>
+          </nav>
+        </div>
+      </aside>
+      <main class="profile-settings-main">
+        <header class="profile-settings-titlebar">
+          <div class="profile-settings-title"><img class="profile-settings-brand-logo" src="build/bald-launcher-mark.png" onerror="this.onerror=null;this.src='build/bald-launcher-mark.svg'" alt="" draggable="false"><strong style="color:var(--ui-text);font-size:14px;">Profile settings</strong></div>
+          <button class="profile-icon-button" type="button" onclick="closeProfileSettingsModal()" aria-label="Close profile settings"><i class="ti ti-x"></i></button>
+        </header>
+        <div class="profile-settings-scroll" id="profileSettingsContent"></div>
+        <footer class="profile-settings-footer" id="javaProfileSettingsFooter">
+          <button class="modal-btn primary" type="button" onclick="saveProfileSettings()"><i class="ti ti-device-floppy" aria-hidden="true"></i> Save changes</button>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <div class="modal-overlay export-format-modal" id="exportFormatModal" style="display:none;" onclick="if(event.target===this)closeExportFormatModal()">
+    <div class="modal-box export-format-shell" role="dialog" aria-label="Choose export format">
+      <div class="modal-title-row"><div><div class="modal-title">Export profile</div><div class="modal-help" id="exportFormatProfile" style="margin-top:4px;"></div></div><button class="profile-icon-button" type="button" onclick="closeExportFormatModal()" aria-label="Close export format"><i class="ti ti-x"></i></button></div>
+      <div class="export-format-grid" id="exportFormatGrid">
+        <button type="button" class="export-format-card selected" data-export-format="bald" onclick="selectExportFormat('bald')"><span class="export-format-icon"><img src="build/bald-launcher-mark.png" alt=""></span><span class="export-format-name">Bald Launcher</span><span class="export-format-sub">Full Bald profile with selected game folders.</span></button>
+        <button type="button" class="export-format-card" data-export-format="modrinth" onclick="selectExportFormat('modrinth')"><span class="export-format-icon"><img src="build/export-icons/modrinth.png" alt=""></span><span class="export-format-name">Modrinth</span><span class="export-format-sub">Portable .mrpack with Modrinth manifests.</span></button>
+        <button type="button" class="export-format-card" data-export-format="curseforge" onclick="selectExportFormat('curseforge')"><span class="export-format-icon"><img src="build/export-icons/curseforge.svg" alt=""></span><span class="export-format-name">CurseForge</span><span class="export-format-sub">Modpack manifest and override folders.</span></button>
+        <button type="button" class="export-format-card" data-export-format="prism" onclick="selectExportFormat('prism')"><span class="export-format-icon"><img src="build/export-icons/prism.png" alt=""></span><span class="export-format-name">Prism / MultiMC</span><span class="export-format-sub">Instance folder with mmc-pack metadata.</span></button>
+        <button type="button" class="export-format-card" data-export-format="lunar" onclick="selectExportFormat('lunar')"><span class="export-format-icon"><img src="build/export-icons/lunar.svg" alt=""></span><span class="export-format-name">Lunar</span><span class="export-format-sub">Portable folder bundle for Lunar setup.</span></button>
+        <button type="button" class="export-format-card" data-export-format="dawn" onclick="selectExportFormat('dawn')"><span class="export-format-icon"><img src="build/export-icons/dawn.svg" alt=""></span><span class="export-format-name">Dawn</span><span class="export-format-sub">Dawn-compatible profile and folder bundle.</span></button>
+        <button type="button" class="export-format-card" data-export-format="oneclient" onclick="selectExportFormat('oneclient')"><span class="export-format-icon"><img src="build/export-icons/oneclient.png" alt=""></span><span class="export-format-name">OneClient</span><span class="export-format-sub">OneClient-compatible Modrinth or folder bundle.</span></button>
+        <button type="button" class="export-format-card" data-export-format="minecraft" onclick="selectExportFormat('minecraft')"><span class="export-format-icon"><img src="build/export-icons/minecraft.svg" alt=""></span><span class="export-format-name">Minecraft folders</span><span class="export-format-sub">Plain zip of the selected game folders.</span></button>
+      </div>
+      <div class="modal-actions"><button class="modal-btn" type="button" onclick="closeExportFormatModal()">Cancel</button><button class="modal-btn primary" type="button" onclick="continueExportFormat()"><i class="ti ti-arrow-right"></i> Continue</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay export-folder-modal" id="exportFolderModal" style="display:none;" onclick="if(event.target===this)closeExportFolderModal()">
+    <div class="modal-box export-folder-shell" role="dialog" aria-label="Select export folders">
+      <div class="export-folder-header"><div><div class="modal-title" id="exportFolderTitle">Export profile</div><div class="modal-help" id="exportFolderProfile" style="margin-top:4px;"></div></div><button class="profile-icon-button" type="button" onclick="closeExportFolderModal()" aria-label="Close export folders"><i class="ti ti-x"></i></button></div>
+      <div class="export-folder-fields">
+        <div><label class="modal-label" for="exportProfileName">Name</label><input class="modal-input" id="exportProfileName" maxlength="80"></div>
+        <div><label class="modal-label" for="exportProfileVersion">Version</label><input class="modal-input" id="exportProfileVersion" value="1.0.0" maxlength="24"></div>
+      </div>
+      <div class="export-folder-toolbar">
+        <span class="export-folder-selection-count" id="exportFolderSelectionCount">0 folders selected</span>
+        <div class="export-folder-toolbar-actions"><button class="modal-btn" type="button" onclick="setExportFolderSelection(true)">Select all</button><button class="modal-btn" type="button" onclick="setExportFolderSelection(false)">Deselect all</button></div>
+      </div>
+      <div class="export-folder-list" id="exportFolderList"></div>
+      <div class="export-folder-footer"><button class="modal-btn" type="button" onclick="closeExportFolderModal()">Cancel</button><button class="modal-btn primary" type="button" onclick="submitFormatExport()"><i class="ti ti-file-export"></i> Export</button></div>
     </div>
   </div>
 
@@ -2510,6 +2784,7 @@ async function renderersFor(mcVersion, loader) {
 function badgeClass(m){ return m==='vulkan'?'badge-vulkan':m==='sodium-native-vulkan'?'badge-sodium':m==='sodium'?'badge-sodium':m==='embeddium'?'badge-sodium':'badge-vanilla'; }
 function badgeLabel(m){ return m==='vulkan'?'Vulkan':m==='sodium-native-vulkan'?'Sodium + Vulkan':m==='sodium'?'Sodium':m==='embeddium'?'Embeddium':'Vanilla'; }
 function profileModeLabel(profile){
+  if(profile?.optimizationKind==='oneclient') return 'OneClient Performance · Fabric';
   if(profile?.optimizationKind==='sodium') return 'Optimized Fabric · Sodium';
   if(profile?.optimizationKind==='vanilla-fallback') return 'True Vanilla';
   if(profile?.rendererMode==='vanilla') return profile.loader==='vanilla' ? 'True Vanilla' : `${capitalize(profile.loader)} · No renderer mod`;
@@ -2761,7 +3036,7 @@ function openProfile(profileId){
   const pdName = document.getElementById('pdName');
   const pdSub = document.getElementById('pdSub');
   const vulkanWarning = document.getElementById('vulkanWarning');
-  if (pdIcon) pdIcon.textContent = p.icon || p.name.slice(0,1).toUpperCase();
+  if (pdIcon) pdIcon.textContent = String(p.icon || String(p.name || 'P').slice(0, 1).toUpperCase());
   if (pdName) pdName.textContent = p.name;
   if (pdSub) pdSub.textContent = `${p.mcVersion} · ${capitalize(p.loader)} · ${profileModeLabel(p)}`;
   if (vulkanWarning) vulkanWarning.style.display = p.rendererMode==='vulkan' ? 'flex' : 'none';
@@ -2783,16 +3058,11 @@ function setLibrarySearch(value){ librarySearchTerm = String(value || '').trim()
 
 function setPdTab(tab){
   document.getElementById('pdtab-content').classList.toggle('active', tab==='content');
-  document.getElementById('pdtab-settings').classList.toggle('active', tab==='settings');
   document.getElementById('pdtab-logs').classList.toggle('active', tab==='logs');
   document.getElementById('pd-content-view').style.display = tab==='content' ? 'flex' : 'none';
-  document.getElementById('pd-settings-view').style.display = tab==='settings' ? 'flex' : 'none';
   document.getElementById('pd-logs-view').style.display = tab==='logs' ? 'flex' : 'none';
-  document.getElementById('pd-settings-view').style.flex = tab==='settings' ? '1' : '';
   document.getElementById('javaProfileContent').hidden = horizonModeActive || tab !== 'content';
   document.getElementById('horizonProfileContent').hidden = !horizonModeActive || tab !== 'content';
-  document.getElementById('javaProfileSettings').hidden = horizonModeActive || tab !== 'settings';
-  document.getElementById('horizonProfileSettings').hidden = !horizonModeActive || tab !== 'settings';
   const showJavaLogs = !horizonModeActive && tab === 'logs';
   const showHorizonLogs = horizonModeActive && tab === 'logs';
   const javaProfileLogs = document.getElementById('javaProfileLogs');
@@ -2811,7 +3081,6 @@ function setPdTab(tab){
   horizonStatus.hidden = true;
   horizonStatus.textContent = '';
   if (tab==='logs') renderProfileLogs(true);
-  if (tab==='content' && currentProfileId) refreshProfileContent(currentProfileId, true);
 }
 
 const PROFILE_SYNC_CATEGORIES = [
@@ -3276,14 +3545,6 @@ async function refreshProfileContent(profileId = currentProfileId, quiet = false
     profileContentSyncRequests.delete(profileId);
   }
 }
-
-setInterval(() => {
-  const profilePanel = document.getElementById('panel-profile');
-  const contentView = document.getElementById('pd-content-view');
-  if (currentProfileId && profilePanel?.style.display !== 'none' && contentView?.style.display !== 'none') {
-    refreshProfileContent(currentProfileId, true);
-  }
-}, 10000);
 
 async function toggleLibraryItem(id){
   const p = getProfile(currentProfileId);
@@ -4179,6 +4440,15 @@ let pdLoaderVersionsPromise = Promise.resolve();
 let pdLoaderVersionLocked = false;
 let pdLoaderSelectionLoader = '';
 
+function syncPdLoaderVersionVisibility() {
+  const row = document.getElementById('pdLoaderVersionRow');
+  const settings = document.getElementById('javaProfileSettings');
+  const supported = row.dataset.loaderSupported === 'true';
+  const category = settings?.dataset.profileSettingsCategory || 'general';
+  row.hidden = !supported || category !== 'installation';
+  row.style.display = supported ? '' : 'none';
+}
+
 function refreshPdLoaderVersions(mcVersion, loader, preferredVersion) {
   const row = document.getElementById('pdLoaderVersionRow');
   const select = document.getElementById('pdLoaderVersion');
@@ -4187,8 +4457,8 @@ function refreshPdLoaderVersions(mcVersion, loader, preferredVersion) {
   const requestId = ++pdLoaderVersionRequestId;
   const supportsVersions = loader !== 'vanilla';
   const loaderName = { fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge', neoforge: 'NeoForge' }[loader] || 'Loader';
-  row.hidden = !supportsVersions;
-  row.style.display = supportsVersions ? '' : 'none';
+  row.dataset.loaderSupported = String(supportsVersions);
+  syncPdLoaderVersionVisibility();
   label.textContent = `${loaderName} version`;
   select.setAttribute('aria-label', `${loaderName} version`);
   if (!supportsVersions) {
@@ -4251,11 +4521,82 @@ function refreshPdLoaderVersions(mcVersion, loader, preferredVersion) {
   return request;
 }
 
+function normalizeMemoryMb(value, snapToGigabyte = false){
+  const parsed = Number(value);
+  let mb = Math.max(512, Math.min(32768, Math.round(Number.isFinite(parsed) ? parsed : 6144)));
+  const nearestGigabyte = Math.round(mb / 1024) * 1024;
+  if (snapToGigabyte && Math.abs(mb - nearestGigabyte) <= 64) mb = nearestGigabyte;
+  return Math.max(512, Math.min(32768, mb));
+}
+
+function updateMemoryMbControl(sliderId, inputId, outputId, value, snapToGigabyte = false, syncInput = true){
+  const slider = document.getElementById(sliderId);
+  const mb = normalizeMemoryMb(value, snapToGigabyte);
+  slider.value = mb;
+  if (syncInput) document.getElementById(inputId).value = mb;
+  document.getElementById(outputId).textContent = formatMemoryValue(mb);
+  slider.style.setProperty('--profile-memory-progress', `${((mb - 512) / (32768 - 512)) * 100}%`);
+  slider.setAttribute('aria-valuetext', `${mb} MB (${formatMemoryValue(mb)})`);
+  return mb;
+}
+
+function updateProfileRamSlider(value, snapToGigabyte = false){
+  updateMemoryMbControl('pdMemoryMax', 'pdMemoryMaxInput', 'pdMemoryMaxValue', value, snapToGigabyte);
+}
+
+function updateProfileRamInput(value, commit = false){
+  if (String(value).trim() === '') return;
+  const mb = updateMemoryMbControl('pdMemoryMax', 'pdMemoryMaxInput', 'pdMemoryMaxValue', value, false, false);
+  if (commit) document.getElementById('pdMemoryMaxInput').value = mb;
+}
+
+function setProfileRamPreset(mb){
+  updateProfileRamSlider(mb);
+}
+
+function formatMemoryValue(mb){
+  const amount = Number(mb) || 512;
+  if (amount < 1024) return `${amount} MB`;
+  if (amount % 1024 === 0) return `${amount / 1024} GB`;
+  return `${(amount / 1024).toFixed(1)} GB`;
+}
+
+async function loadProfileJavaInstallations(preferredPath = ''){
+  const select = document.getElementById('pdJavaPath');
+  if (!select) return;
+  try {
+    const result = await launcherBridge?.getJavaInstallations?.();
+    if (!result?.ok) throw new Error(result?.error || 'Java installations could not be detected.');
+    for (const installation of result.installations || []) {
+      const option = document.createElement('option');
+      option.value = installation.path;
+      option.textContent = `${installation.label || `Java ${installation.version}`} · ${installation.path}`;
+      option.dataset.source = installation.source || 'System';
+      select.appendChild(option);
+    }
+    if (preferredPath) select.value = preferredPath;
+  } catch (error) {
+    const option = document.createElement('option');
+    option.value = preferredPath || '';
+    option.textContent = preferredPath ? `${preferredPath} (saved)` : (error?.message || 'Automatic Java detection');
+    if (preferredPath) select.appendChild(option);
+  }
+}
+
 function populatePdSettingsForm(p){
   document.getElementById('pdRename').value = p.name;
-  document.getElementById('pdPrewarmEnabled').checked = p.prewarmEnabled !== false;
+  document.getElementById('pdPrewarmEnabled').checked = p.prewarmEnabled === true;
+  document.getElementById('pdJavaPath').replaceChildren();
+  const automaticJavaOption = document.createElement('option');
+  automaticJavaOption.value = '';
+  automaticJavaOption.textContent = 'Automatic Java detection';
+  document.getElementById('pdJavaPath').appendChild(automaticJavaOption);
   document.getElementById('pdJavaPath').value = p.javaPath || '';
-  document.getElementById('pdMemoryMax').value = p.memoryMax || 6;
+  void loadProfileJavaInstallations(p.javaPath || '');
+  const profileMemoryMb = Math.round((Number(p.memoryMax) || 6) * 1024);
+  document.getElementById('pdMemoryMax').value = profileMemoryMb;
+  document.getElementById('pdMemoryMaxValue').textContent = formatMemoryValue(profileMemoryMb);
+  updateProfileRamSlider(profileMemoryMb);
   document.getElementById('pdJvmProfile').value = p.jvmProfile || 'default';
   document.getElementById('pdCustomJvmArgs').value = p.customJvmArgs || '';
   pdLoaderVersionLocked = p.optimizationManaged === true;
@@ -4353,6 +4694,19 @@ async function onPdConfigChange(forceRenderer, preferredLoaderVersion){
   renderRendererOptions('pdRendererOptions', opts, pdSelectedRenderer, id => { pdSelectedRenderer = id; onPdConfigChange(id); });
   await loaderVersionsRequest;
 }
+async function saveProfileSettings(){
+  const p = getProfile(currentProfileId);
+  if (!p) return;
+  const mcVersion = document.getElementById('pdVersionSel').value;
+  const loader = document.getElementById('pdLoaderSel').value;
+  const loaderVersion = document.getElementById('pdLoaderVersion').value;
+  const installationChanged = mcVersion !== p.mcVersion
+    || loader !== p.loader
+    || loaderVersion !== (p.loaderVersion || '');
+  if (installationChanged && !confirm(`Apply Minecraft installation changes?\n\nMinecraft ${mcVersion}\nLoader ${loader}${loaderVersion ? ` · ${loaderVersion}` : ''}\n\nThis can rewrite or replace Minecraft version and loader files for this profile.`)) return;
+  await savePdSettings();
+}
+
 async function savePdSettings(){
   const p = getProfile(currentProfileId);
   await pdLoaderVersionsPromise;
@@ -4365,7 +4719,7 @@ async function savePdSettings(){
     rendererMode: pdSelectedRenderer,
     prewarmEnabled: document.getElementById('pdPrewarmEnabled').checked,
     javaPath: document.getElementById('pdJavaPath').value.trim(),
-    memoryMax: Number(document.getElementById('pdMemoryMax').value) || 6,
+    memoryMax: Math.round((Number(document.getElementById('pdMemoryMax').value) || 6144) / 1024 * 1000) / 1000,
     jvmProfile: document.getElementById('pdJvmProfile').value,
     customJvmArgs: document.getElementById('pdCustomJvmArgs').value.trim(),
   };
@@ -4396,7 +4750,7 @@ async function setJavaProfilePrewarm(enabled){
   try {
     const result = await launcherBridge.updateProfile({ id: profile.id, prewarmEnabled: enabled === true });
     if (result?.ok === false) {
-      document.getElementById('pdPrewarmEnabled').checked = profile.prewarmEnabled !== false;
+      document.getElementById('pdPrewarmEnabled').checked = profile.prewarmEnabled === true;
       alert(result.error || 'Could not update this profile’s prewarm setting.');
       return;
     }
@@ -4420,7 +4774,7 @@ async function setJavaProfilePrewarm(enabled){
       }
     }
   } catch (error) {
-    document.getElementById('pdPrewarmEnabled').checked = profile.prewarmEnabled !== false;
+    document.getElementById('pdPrewarmEnabled').checked = profile.prewarmEnabled === true;
     document.getElementById('sbStatus').textContent = `Prewarm setting failed · ${error?.message || String(error)}`;
   }
 }
@@ -4432,15 +4786,30 @@ function openProfileActionMenu(event, profileId){
   const profile = getProfile(profileId);
   const menu = document.getElementById('profileActionMenu');
   if (!profile || !menu) return;
-  const launchVanillaText = profile.loader==='vanilla'&&profile.rendererMode==='vanilla'
-    ? 'Play true Vanilla'
-    : 'Create / launch true Vanilla profile';
-  const launchVanillaLabel = `<button onclick="runProfileAction('play-vanilla')"><i class="ti ti-player-play"></i> ${launchVanillaText}</button>`;
-  const importWorldAction = profile.optimizationManaged ? `<button onclick="runProfileAction('import-world')"><i class="ti ti-world-upload"></i> Import another world...</button>` : '';
-  menu.innerHTML = `<button onclick="runProfileAction('play')"><i class="ti ti-player-play"></i> Play</button>${launchVanillaLabel}${importWorldAction}<button onclick="runProfileAction('open')"><i class="ti ti-folder"></i> Open Profile</button><button onclick="runProfileAction('edit')"><i class="ti ti-settings"></i> Edit Profile</button><button onclick="runProfileAction('duplicate')"><i class="ti ti-copy"></i> Duplicate Profile</button><button onclick="runProfileAction('export')"><i class="ti ti-download"></i> Export Profile</button><button onclick="runProfileAction('modpack')"><i class="ti ti-file-archive"></i> Export Modpack</button><button onclick="runProfileAction('backup')"><i class="ti ti-database-export"></i> Create Backup</button><button onclick="runProfileAction('reveal')"><i class="ti ti-folder-open"></i> Reveal in File Explorer</button><button class="danger" onclick="runProfileAction('delete')"><i class="ti ti-trash"></i> Delete Profile</button>`;
-  const x = Math.min((event?.clientX || 0), window.innerWidth - 230);
-  const y = Math.min((event?.clientY || 0), window.innerHeight - 360);
-  menu.style.left = `${Math.max(8, x)}px`; menu.style.top = `${Math.max(8, y)}px`; menu.style.display='block';
+  menu.innerHTML = `
+    <div class="profile-menu-group-label">Profile</div>
+    <button onclick="runProfileAction('duplicate')"><i class="ti ti-copy"></i> Duplicate profile</button>
+    <div class="profile-menu-divider"></div>
+    <div class="profile-menu-group-label">Transfer</div>
+    <button onclick="runProfileAction('export')"><i class="ti ti-download"></i> Export profile</button>
+    <button onclick="runProfileAction('open-mods')"><i class="ti ti-folder-open"></i> Open mods folder</button>`;
+  menu.style.display = 'block';
+  const anchor = event?.currentTarget
+    || event?.target?.closest?.('.profile-icon-button,.profile-card-menu-btn')
+    || null;
+  const rect = anchor?.getBoundingClientRect?.();
+  const menuRect = menu.getBoundingClientRect();
+  const menuWidth = menuRect.width || 238;
+  const menuHeight = menuRect.height || 260;
+  let x = rect
+    ? rect.right - menuWidth
+    : Math.min((event?.clientX || 0), window.innerWidth - menuWidth - 8);
+  let y = rect
+    ? rect.bottom + 6
+    : Math.min((event?.clientY || 0), window.innerHeight - menuHeight - 8);
+  if (y + menuHeight > window.innerHeight - 8 && rect) y = rect.top - menuHeight - 6;
+  menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - menuWidth - 8))}px`;
+  menu.style.top = `${Math.max(8, y)}px`;
 }
 function openHorizonProfileActionMenu(event, instanceId){
   event?.stopPropagation?.();
@@ -4465,7 +4834,7 @@ async function runHorizonProfileAction(action){
   }
   if (action === 'rename') {
     await openHorizonProfile(instanceId);
-    setPdTab('settings');
+    openProfileSettingsModal();
     return;
   }
   if (action === 'delete') await deleteHorizonProfile(instanceId);
@@ -4511,13 +4880,9 @@ async function runProfileAction(action){
     }
     return;
   }
-  if (action === 'open' || action === 'edit'){ openProfile(profileId); setPdTab('settings'); return; }
   if (action === 'duplicate'){ openDuplicateProfileModal(profileId); return; }
-  if (action === 'export'){ if (launcherBridge?.exportProfile) { const result = await launcherBridge.exportProfile(profileId); if (result?.ok === false && !result.canceled) alert(result.error || 'Could not export profile.'); } return; }
-  if (action === 'modpack'){ openExportModpackModal(profileId); return; }
-  if (action === 'backup'){ if (launcherBridge?.backupProfile) { const result = await launcherBridge.backupProfile(profileId); if (result?.ok === false) alert(result.error || 'Could not back up profile.'); else alert('Profile backup created.'); } return; }
-  if (action === 'reveal'){ if (launcherBridge?.revealProfile) await launcherBridge.revealProfile(profileId); return; }
-  if (action === 'delete'){ openDeleteProfileModal(profileId); }
+  if (action === 'export'){ openExportFormatModal(profileId); return; }
+  if (action === 'open-mods'){ if (launcherBridge?.openProfileModsFolder) await launcherBridge.openProfileModsFolder(profileId); return; }
 }
 function openDuplicateProfileModal(profileId){ const profile=getProfile(profileId); if(!profile)return; profileActionTargetId=profileId; document.getElementById('duplicateProfileSource').textContent=`Create a copy of "${profile.name}"`; document.getElementById('duplicateProfileName').value=`${profile.name} Copy`; document.getElementById('duplicateProfileModal').style.display='flex'; document.getElementById('duplicateProfileName').focus(); }
 function closeDuplicateProfileModal(){ document.getElementById('duplicateProfileModal').style.display='none'; }
@@ -4525,6 +4890,180 @@ async function submitDuplicateProfile(){ const name=document.getElementById('dup
 function openExportModpackModal(profileId){ const profile=getProfile(profileId); if(!profile)return; profileActionTargetId=profileId; document.getElementById('exportModpackProfile').textContent=`${profile.name} · ${profile.mcVersion} · ${capitalize(profile.loader)}`; document.getElementById('exportModpackName').value=profile.name; document.getElementById('exportModpackDescription').value=''; document.getElementById('exportModpackModal').style.display='flex'; }
 function closeExportModpackModal(){ document.getElementById('exportModpackModal').style.display='none'; }
 async function submitExportModpack(){ const result=await launcherBridge.exportModpack({profileId:profileActionTargetId,name:document.getElementById('exportModpackName').value.trim(),version:document.getElementById('exportModpackVersion').value.trim(),description:document.getElementById('exportModpackDescription').value.trim(),options:{mods:document.getElementById('exportMods').checked,configs:document.getElementById('exportConfigs').checked,resourcepacks:document.getElementById('exportResourcepacks').checked,shaders:document.getElementById('exportShaders').checked,worlds:document.getElementById('exportWorlds').checked,screenshots:document.getElementById('exportScreenshots').checked}}); if(result?.ok===false){if(!result.canceled)alert(result.error||'Could not export modpack.');return;} closeExportModpackModal(); if(result.warnings?.length)alert(`Modpack exported with warnings:\n\n${result.warnings.join('\n')}`); else alert('Modpack exported successfully.'); }
+let selectedExportFormat = 'bald';
+function openProfileSettingsModal(){
+  const profile = getProfile(currentProfileId); if (!profile) return;
+  const modal = document.getElementById('profileSettingsModal');
+  const content = document.getElementById('profileSettingsContent');
+  const javaView = document.getElementById('javaProfileSettings');
+  const horizonView = document.getElementById('horizonProfileSettings');
+  const javaNav = document.getElementById('javaProfileSettingsNav');
+  const horizonNav = document.getElementById('horizonProfileSettingsNav');
+  const javaFooter = document.getElementById('javaProfileSettingsFooter');
+  if (!modal || !content) return;
+  document.getElementById('profileSettingsIcon').textContent = String(profile.icon || String(profile.name || 'P').slice(0, 1).toUpperCase());
+  document.getElementById('profileSettingsName').textContent = profile.name || 'Profile';
+  document.getElementById('profileSettingsSub').textContent = `${profile.mcVersion || ''} · ${capitalize(profile.loader || 'profile')}`;
+  content.replaceChildren();
+  if (horizonModeActive && horizonView) {
+    content.appendChild(horizonView); horizonView.hidden=false;
+    if (javaView) javaView.hidden=true;
+    javaNav.hidden=true; horizonNav.hidden=false;
+    if (javaFooter) javaFooter.hidden=true;
+  } else if (javaView) {
+    content.appendChild(javaView); javaView.hidden=false;
+    if (horizonView) horizonView.hidden=true;
+    javaNav.hidden=false; horizonNav.hidden=true;
+    if (javaFooter) javaFooter.hidden=false;
+    setProfileSettingsCategory('general');
+  }
+  modal.style.display='flex';
+}
+function closeProfileSettingsModal(){ document.getElementById('profileSettingsModal').style.display='none'; }
+function setProfileSettingsCategory(category){
+  const nav=document.getElementById('javaProfileSettingsNav');
+  if(nav) nav.querySelectorAll('[data-profile-settings-category]').forEach(button=>button.classList.toggle('active',button.dataset.profileSettingsCategory===category));
+  const javaView=document.getElementById('javaProfileSettings');
+  if(!javaView||javaView.hidden)return;
+  const rows=[...javaView.querySelectorAll('.pd-settings-row')];
+  const headings={general:['General','Name, prewarm behavior, renderer, and profile identity.'],installation:['Installation','Choose the Minecraft version and mod loader used by this profile.'],java:['Java & memory','Control memory allocation and the Java launch configuration.'],files:['Files & backups','Manage profile folders, imported jars, and backup snapshots.']};
+  javaView.dataset.profileSettingsCategory=category;
+  let heading=javaView.querySelector('.profile-settings-heading-block');
+  if(!heading){ heading=document.createElement('div');heading.className='profile-settings-heading-block';javaView.prepend(heading); }
+  heading.innerHTML=`<h2 class="profile-settings-heading">${headings[category][0]}</h2><p class="profile-settings-description">${headings[category][1]}</p>`;
+  for(const row of rows){
+    const hasId=id=>row.querySelector(`#${id}`);
+    let rowCategory='general';
+    if(hasId('pdVersionSel')||hasId('pdLoaderSel')||hasId('pdLoaderVersion')||row.textContent.includes('Minecraft version')||row.textContent.includes('Mod loader'))rowCategory='installation';
+    else if(hasId('pdJavaPath')||hasId('pdMemoryMax')||hasId('pdJvmProfile')||hasId('pdCustomJvmArgs'))rowCategory='java';
+    else if(row.textContent.includes('Mods / resource pack folders')||row.textContent.includes('Profile files'))rowCategory='files';
+    else if(hasId('pdRename')||hasId('pdPrewarmEnabled')||hasId('pdCustomSkinLoaderStatus')||row.textContent.includes('Renderer mode'))rowCategory='general';
+    row.hidden=rowCategory!==category;
+  }
+  syncPdLoaderVersionVisibility();
+}
+function openExportFormatModal(profileId=currentProfileId){
+  const profile=getProfile(profileId); if(!profile)return;
+  profileActionTargetId=profileId; selectedExportFormat='bald';
+  document.querySelectorAll('[data-export-format]').forEach(card=>card.classList.toggle('selected',card.dataset.exportFormat===selectedExportFormat));
+  document.getElementById('exportFormatProfile').textContent=`${profile.name} · ${profile.mcVersion} · ${capitalize(profile.loader)}`;
+  document.getElementById('exportFormatModal').style.display='flex';
+}
+function closeExportFormatModal(){ document.getElementById('exportFormatModal').style.display='none'; }
+function selectExportFormat(format){ selectedExportFormat=format;document.querySelectorAll('[data-export-format]').forEach(card=>card.classList.toggle('selected',card.dataset.exportFormat===format)); }
+async function continueExportFormat(){
+  const profile=getProfile(profileActionTargetId); if(!profile)return;
+  closeExportFormatModal();
+  document.getElementById('exportProfileName').value=profile.name;
+  document.getElementById('exportProfileVersion').value='1.0.0';
+  const names={bald:'Bald Launcher profile',modrinth:'Modrinth modpack',curseforge:'CurseForge modpack',prism:'Prism / MultiMC instance',lunar:'Lunar folder bundle',dawn:'Dawn folder bundle',oneclient:'OneClient folder bundle',minecraft:'Minecraft folder archive'};
+  document.getElementById('exportFolderTitle').textContent=`Export ${names[selectedExportFormat]}`;
+  document.getElementById('exportFolderProfile').textContent=`${profile.name} · ${profile.mcVersion} · ${capitalize(profile.loader)}`;
+  const fallbackFolders=[
+    ['mods','Mods','Installed content and local jars','folder'],
+    ['config','Config','Configuration files','folder'],
+    ['datapacks','Data packs','World data packs','folder'],
+    ['resourcepacks','Resource packs','Resource and texture packs','folder'],
+    ['saves','Worlds','Saved worlds','folder'],
+    ['screenshots','Screenshots','Captured screenshots','folder'],
+    ['shaderpacks','Shader packs','Shader configurations','folder'],
+  ];
+  let folders=fallbackFolders;
+  if (launcherBridge?.getProfileExportInventory) {
+    try {
+      const inventory=await launcherBridge.getProfileExportInventory(profileActionTargetId);
+      if (inventory?.ok && Array.isArray(inventory.entries) && inventory.entries.length) {
+        folders=inventory.entries.map(entry=>[entry.relativePath||entry.id,entry.label||entry.relativePath,entry.description||'',entry.kind||'folder',entry.sizeBytes||0]);
+      }
+    } catch (_error) {}
+  }
+  document.getElementById('exportFolderList').innerHTML=folders.map(([relativePath,label,meta,kind,sizeBytes])=>{
+    const id=relativePath.replace(/[^a-zA-Z0-9_-]/g,'_');
+    const size=kind==='folder'?'Folder':formatExportSize(sizeBytes);
+    const defaultSelected=['mods','config','datapacks','resourcepacks','shaderpacks'].includes(relativePath);
+    return `<label class="export-folder-row" for="exportFolder_${id}"><input class="export-folder-check" id="exportFolder_${id}" data-relative-path="${escapeHtml(relativePath)}" type="checkbox" ${defaultSelected?'checked':''} onchange="updateExportFolderSelectionCount()"/><span><span class="export-folder-name"><i class="ti ${kind==='folder'?'ti-folder':'ti-file'}"></i>${escapeHtml(label)}</span><span class="export-folder-meta">${escapeHtml(meta)}</span></span><span class="export-folder-size">${escapeHtml(size)}</span></label>`;
+  }).join('');
+  updateExportFolderSelectionCount();
+  document.getElementById('exportFolderModal').style.display='flex';
+}
+function closeExportFolderModal(){ document.getElementById('exportFolderModal').style.display='none'; }
+function setExportFolderSelection(selected){
+  document.querySelectorAll('#exportFolderList input.export-folder-check').forEach(input=>{ input.checked=selected===true; });
+  updateExportFolderSelectionCount();
+}
+function updateExportFolderSelectionCount(){
+  const checked=document.querySelectorAll('#exportFolderList input.export-folder-check:checked').length;
+  const total=document.querySelectorAll('#exportFolderList input.export-folder-check').length;
+  const label=document.getElementById('exportFolderSelectionCount');
+  if(label) label.textContent=`${checked} of ${total} items selected`;
+}
+function formatExportSize(bytes){
+  const amount=Number(bytes)||0;
+  if(amount<=0)return 'File';
+  if(amount<1024*1024)return `${Math.max(1,Math.round(amount/1024))} KB`;
+  if(amount<1024*1024*1024)return `${(amount/1024/1024).toFixed(1)} MB`;
+  return `${(amount/1024/1024/1024).toFixed(2)} GB`;
+}
+const exportProgressNotificationIds = new Map();
+let exportProgressListenerInstalled = false;
+async function submitFormatExport(){
+  const profile=getProfile(profileActionTargetId);
+  if(!profile)return;
+  const name=document.getElementById('exportProfileName').value.trim()||profile.name;
+  const version=document.getElementById('exportProfileVersion').value.trim()||'1.0.0';
+  const paths=[...document.querySelectorAll('#exportFolderList input.export-folder-check:checked')].map(input=>input.dataset.relativePath).filter(Boolean);
+  const options={paths,mods:false,configs:false,datapacks:false,resourcepacks:false,worlds:false,screenshots:false,shaders:false};
+  const exportId=`export-${Date.now()}-${Math.random()}`;
+  const formatName=selectedExportFormat==='modrinth'?'Modrinth':selectedExportFormat==='curseforge'?'CurseForge':selectedExportFormat==='prism'?'Prism / MultiMC':selectedExportFormat==='lunar'?'Lunar':selectedExportFormat==='dawn'?'Dawn':selectedExportFormat==='oneclient'?'OneClient':selectedExportFormat==='minecraft'?'Minecraft folders':'Bald Launcher';
+  const progressNotification=addNotification(`Exporting ${formatName}`,`Preparing ${paths.length} selected item${paths.length===1?'':'s'}...`,'info',{progress:2,progressLabel:'Starting export'});
+  exportProgressNotificationIds.set(exportId,progressNotification.id);
+  if(!exportProgressListenerInstalled && launcherBridge?.onExportProgress){
+    exportProgressListenerInstalled=true;
+    launcherBridge.onExportProgress(progress=>{
+      const notificationId=exportProgressNotificationIds.get(String(progress?.exportId||''));
+      if(!notificationId)return;
+      updateNotificationProgress(notificationId,progress.percent,progress.message);
+    });
+  }
+  closeExportFolderModal();
+  let result;
+  try{
+    if(selectedExportFormat==='modrinth'){
+      if(!launcherBridge?.exportModpack)throw new Error('Modrinth export is unavailable.');
+      result=await launcherBridge.exportModpack({exportId,profileId:profile.id,name,version,description:'',options});
+    }else{
+      if(!launcherBridge?.exportProfile)throw new Error('Profile export is unavailable.');
+      result=await launcherBridge.exportProfile({exportId,profileId:profile.id,format:selectedExportFormat,name,version,options});
+    }
+    if(!result||typeof result.ok!=='boolean')throw new Error('The export did not return a completion result.');
+  }catch(error){
+    result={ok:false,error:error instanceof Error?error.message:'Could not export profile.'};
+  }
+  const notificationId=exportProgressNotificationIds.get(exportId);
+  try{
+    if(result.ok===false){
+      const failureLabel=result.canceled?'Export canceled':'Export failed';
+      if(notificationId){
+        const notification=notificationHistory.find(item=>item.id===notificationId);
+        if(notification){notification.kind=result.canceled?'info':'error';notification.progress=100;notification.progressLabel=failureLabel;}
+        persistNotifications();renderNotifications();
+        updateNotificationProgress(notificationId,100,failureLabel);
+      }
+      if(!result.canceled)alert(result.error||'Could not export profile.');
+    }else{
+      if(notificationId){
+        updateNotificationProgress(notificationId,100,result.warnings?.length?'Export complete with warnings':'Export complete');
+        const notification=notificationHistory.find(item=>item.id===notificationId);
+        if(notification){notification.title=`${formatName} export complete`;notification.kind='success';notification.progressLabel='Export complete';}
+        persistNotifications();renderNotifications();
+      }
+      if(result.warnings?.length)addNotification('Profile exported with warnings',`${name}: ${result.warnings.join(', ')}`,'warning');
+    }
+  }finally{
+    exportProgressNotificationIds.delete(exportId);
+  }
+  return result;
+}
 function openDeleteProfileModal(profileId){ const profile=getProfile(profileId); if(!profile)return; profileActionTargetId=profileId; document.getElementById('deleteProfileMessage').textContent=`"${profile.name}" will be removed from Bald Launcher.`; document.getElementById('deleteProfileFiles').checked=true; document.getElementById('deleteProfileModal').style.display='flex'; }
 function closeDeleteProfileModal(){ document.getElementById('deleteProfileModal').style.display='none'; }
 async function confirmDeleteProfile(){ const result=await launcherBridge.deleteProfile(profileActionTargetId,document.getElementById('deleteProfileFiles').checked); if(result?.ok===false){alert(result.error||'Could not delete profile.');return;} state=result.state||state; closeDeleteProfileModal(); renderProfileGrid(); showPanel('home'); }
@@ -4533,9 +5072,7 @@ async function duplicateCurrentProfile(){
   openDuplicateProfileModal(currentProfileId);
 }
 async function exportCurrentProfile(){
-  if (!currentProfileId || !launcherBridge?.exportProfile) return;
-  const result = await launcherBridge.exportProfile(currentProfileId);
-  if (result?.ok === false && !result.canceled) alert(result.error || 'Could not export profile.');
+  openExportFormatModal(currentProfileId);
 }
 async function importProfileExport(){
   if (!launcherBridge?.importProfile) return;
@@ -5108,21 +5645,34 @@ async function deleteAccount(id){
 }
 
 // ---------------- Settings ----------------
-function updateRam(v){ document.getElementById('ramVal').textContent=v+' GB'; syncSettings(); }
+function updateRam(value, commit = false, snapToGigabyte = commit, syncInput = true){
+ const mb = updateMemoryMbControl('ramSlider', 'ramInput', 'ramVal', value, snapToGigabyte, syncInput);
+ if (commit) syncSettings();
+ return mb;
+}
+function updateRamInput(value, commit = false){
+ if (String(value).trim() === '') return;
+ updateRam(value, commit, false, commit);
+}
+function setGlobalRamPreset(mb){
+ updateRam(mb, true, false);
+}
 function toggleAutoMemory(){
-  document.getElementById('ramSlider').disabled = document.getElementById('memoryMaxAuto').checked;
+ const disabled = document.getElementById('memoryMaxAuto').checked;
+ document.getElementById('ramSlider').disabled = disabled;
+ document.getElementById('ramInput').disabled = disabled;
+ document.querySelectorAll('#globalRamPresets .memory-preset-button').forEach(button => { button.disabled = disabled; });
   syncSettings();
 }
 function toggleJvmArgs(){ document.getElementById('customJvmArgs').disabled = document.getElementById('jvmProfile').value !== 'custom'; }
 function syncSettings(){
   const valueOf = (id, fallback) => document.getElementById(id)?.value ?? fallback;
   const settings = {
-    memoryMax: Number(valueOf('ramSlider', 6)),
+    memoryMax: Math.round((Number(valueOf('ramSlider', 6144)) / 1024) * 1000) / 1000,
     memoryMaxAuto: document.getElementById('memoryMaxAuto')?.checked === true,
     jvmProfile: valueOf('jvmProfile', 'default'),
     customJvmArgs: valueOf('customJvmArgs', ''),
     vanillaPerformancePresetEnabled: document.getElementById('vanillaPerformancePresetEnabled')?.checked === true,
-    optimizationModsEnabled: document.getElementById('optimizationModsEnabled')?.checked === true,
     minecraftClientModEnabled: document.getElementById('minecraftClientModEnabled')?.checked !== false,
     minecraftMenuEnabled: document.getElementById('minecraftMenuEnabled')?.checked !== false,
     minecraftPerformanceButtonEnabled: document.getElementById('minecraftPerformanceButtonEnabled')?.checked !== false,
@@ -5354,7 +5904,7 @@ async function openHorizonProfile(instanceId){
   document.getElementById('pdSub').textContent = `Horizon · ${instance.minecraftVersion || HORIZON_MINECRAFT_VERSION}`;
   document.getElementById('horizonProfileName').value = name;
   document.getElementById('horizonProfileVersion').value = String(instance.minecraftVersion || HORIZON_MINECRAFT_VERSION);
-  document.getElementById('horizonPrewarmEnabled').checked = state.settings?.horizonPrewarmByInstance?.[instance.id] !== false;
+  document.getElementById('horizonPrewarmEnabled').checked = state.settings?.horizonPrewarmByInstance?.[instance.id] === true;
   document.getElementById('horizonProfileStatus').hidden = true;
   populateHorizonJavaProfiles();
   populateHorizonBaldAccounts();
@@ -5372,7 +5922,7 @@ async function setHorizonProfilePrewarm(enabled){
   if (!instanceId || !launcherBridge?.setHorizonPrewarm) return;
   const result = await launcherBridge.setHorizonPrewarm(instanceId, enabled === true);
   if (!result?.ok) {
-    document.getElementById('horizonPrewarmEnabled').checked = state.settings?.horizonPrewarmByInstance?.[instanceId] !== false;
+    document.getElementById('horizonPrewarmEnabled').checked = state.settings?.horizonPrewarmByInstance?.[instanceId] === true;
     document.getElementById('horizonProfileStatus').textContent = result?.error || 'Could not update this profile’s prewarm setting.';
     document.getElementById('horizonProfileStatus').hidden = false;
     return;
@@ -5962,17 +6512,35 @@ const notificationHistory = (() => {
 })();
 const baldToastByNotificationId = new Map();
 function persistNotifications(){ try { localStorage.setItem('bald:notifications', JSON.stringify(notificationHistory.slice(-100))); } catch (_error) {} }
-function addNotification(title, message, kind = 'info'){
-  const notification = { id: `notification-${Date.now()}-${Math.random()}`, title, message, kind, createdAt: new Date().toISOString() };
+function updateNotificationProgress(notificationId, percent, message, title){
+  const notification = notificationHistory.find(item => item.id === String(notificationId || ''));
+  if (!notification) return;
+  notification.progress = Math.max(0, Math.min(100, Number(percent) || 0));
+  notification.progressLabel = String(message || `${Math.round(notification.progress)}%`);
+  if (title) notification.title = title;
+  persistNotifications();
+  renderNotifications();
+  const toast = baldToastByNotificationId.get(notification.id);
+  if (toast) {
+    const copy = toast.querySelector('.bald-toast-copy span');
+    if (copy) copy.textContent = String(message || `${Math.round(notification.progress)}%`);
+  }
+}
+function addNotification(title, message, kind = 'info', options = null){
+  const notification = { id: `notification-${Date.now()}-${Math.random()}`, title, message, kind, createdAt: new Date().toISOString(), progress: options?.progress, progressLabel: options?.progressLabel };
   notificationHistory.push(notification);
   while (notificationHistory.length > 100) notificationHistory.shift();
   persistNotifications(); renderNotifications();
   showBaldToast(title, message, kind, notification.id);
+  return notification;
 }
 function renderNotifications(){
   const list = document.getElementById('notificationList');
   if (!list) return;
-  list.innerHTML = notificationHistory.slice().reverse().map(item => `<div class="notification-item"><div class="notification-item-header"><strong>${escapeHtml(item.title)}</strong><button class="notification-dismiss" type="button" data-dismiss-notification="${escapeHtml(item.id)}" aria-label="Remove notification">&times;</button></div>${escapeHtml(item.message)}<div style="margin-top:4px;font-size:10px;color:var(--ui-text-secondary);">${new Date(item.createdAt).toLocaleString()}</div></div>`).join('') || '<div class="notification-item">No notifications yet.</div>';
+  list.innerHTML = notificationHistory.slice().reverse().map(item => {
+    const progress = Number.isFinite(item.progress) ? `<div class="notification-progress"><div class="notification-progress-track"><span style="width:${Math.max(0,Math.min(100,item.progress))}%"></span></div><div class="notification-progress-meta">${escapeHtml(item.progressLabel || `${Math.round(item.progress)}%`)}</div></div>` : '';
+    return `<div class="notification-item" data-notification-id="${escapeHtml(item.id)}"><div class="notification-item-header"><strong>${escapeHtml(item.title)}</strong><button class="notification-dismiss" type="button" data-dismiss-notification="${escapeHtml(item.id)}" aria-label="Remove notification">&times;</button></div>${escapeHtml(item.message)}${progress}<div style="margin-top:4px;font-size:10px;color:var(--ui-text-secondary);">${new Date(item.createdAt).toLocaleString()}</div></div>`;
+  }).join('') || '<div class="notification-item">No notifications yet.</div>';
   list.onclick = event => {
     const button = event.target.closest?.('[data-dismiss-notification]');
     if (button) removeNotification(button.dataset.dismissNotification);
@@ -6292,6 +6860,62 @@ async function refreshPerformanceCenter(){
   if (!recommendations.length) recommendations.push('No immediate rule-based recommendation|The launcher has no measured issue to act on.|No settings were changed.');
   if (recommendationBox) recommendationBox.innerHTML = recommendations.map(item => { const [title, why, effect] = item.split('|'); const apply = title === 'Increase RAM allocation' ? `<button class="modal-btn" style="margin-top:7px;" onclick="applyPerformanceRecommendation('ram')"><i class="ti ti-check" aria-hidden="true"></i> Apply</button>` : ''; return `<div style="padding:8px 0;border-bottom:1px solid var(--ui-border);"><strong>${escapeHtml(title)}</strong><br>Why: ${escapeHtml(why)}<br>Expected effect: ${escapeHtml(effect)}${apply}</div>`; }).join('');
   renderPerformanceHistory(result.history || []);
+}
+let oneClientProfileInstallBusy = false;
+async function installOneClientPerformanceProfile(){
+  const button = document.getElementById('oneClientPerformanceInstallButton');
+  const status = document.getElementById('oneClientProfileStatus');
+  if (oneClientProfileInstallBusy) return;
+  const selectedProfile = getProfile(currentProfileId || state?.activeProfileId);
+  const sourceProfile = selectedProfile?.optimizationKind === 'oneclient'
+    ? getProfile(selectedProfile.optimizationSourceProfileId)
+    : selectedProfile;
+  if (!sourceProfile) {
+    if (status) status.textContent = 'Select a profile before creating a OneClient profile.';
+    return;
+  }
+  if (!launcherBridge?.installModpackToProfile) {
+    if (status) status.textContent = 'OneClient profile installation is unavailable in this launcher session.';
+    return;
+  }
+  const mcVersion = String(sourceProfile.mcVersion || '').trim();
+  if (!mcVersion) {
+    if (status) status.textContent = 'The selected profile does not have a Minecraft version.';
+    return;
+  }
+
+  oneClientProfileInstallBusy = true;
+  if (button) button.disabled = true;
+  if (status) status.textContent = `Finding the latest compatible OneClient Fabric release for Minecraft ${mcVersion}…`;
+  showProfileImportProgress({ message: `Finding OneClient for Minecraft ${mcVersion}…`, percent: 1 });
+  try {
+    const result = await launcherBridge.installModpackToProfile({
+      source: 'modrinth',
+      projectId: 'QhX1nx34',
+      mcVersion,
+      loader: 'fabric',
+      optimizationKind: 'oneclient',
+      optimizationSourceProfileId: sourceProfile.id,
+    });
+    if (!result?.ok || !result.profile) throw new Error(result?.error || 'OneClient profile installation failed.');
+    state = result.state || await launcherBridge.getState();
+    renderProfileGrid();
+    openProfile(result.profile.id);
+    const versionLabel = result.profile.oneClientPackVersionNumber || 'compatible release';
+    const message = result.reused
+      ? `Using existing OneClient ${versionLabel} for Minecraft ${mcVersion}.`
+      : `Installed OneClient ${versionLabel} for Minecraft ${mcVersion}. Your original profile is unchanged.`;
+    if (status) status.textContent = message;
+    addNotification(result.reused ? 'OneClient profile selected' : 'OneClient profile ready', message, 'success');
+  } catch (error) {
+    const message = error?.message || String(error);
+    if (status) status.textContent = `OneClient profile was not installed: ${message}`;
+    addNotification('OneClient installation failed', message, 'error');
+  } finally {
+    hideProfileImportProgress();
+    oneClientProfileInstallBusy = false;
+    if (button) button.disabled = false;
+  }
 }
 function gpuPreferenceLabel(state){
   return ({
@@ -7994,6 +8618,21 @@ function deleteSchedule(serverId, scheduleId) {
   renderServerSchedules();
 }
 
+function updateServerRamPreview(source){
+  if (String(source.value).trim() === '') return;
+  const parsed = Number(source.value);
+  if (!Number.isFinite(parsed)) return;
+  const control = source.closest('.server-memory-control');
+  if (!control) return;
+  const gb = Math.max(2, Math.min(32, Math.round(parsed)));
+  const slider = control.querySelector('input[type="range"]');
+  const input = control.querySelector('input[type="number"]');
+  slider.value = gb;
+  input.value = gb;
+  slider.setAttribute('aria-valuetext', `${gb} GB`);
+  slider.style.setProperty('--profile-memory-progress', `${((gb - 2) / 30) * 100}%`);
+}
+
 function renderServerSettings(){
   const grid = document.getElementById('serverSettingsGrid');
   if (!grid) return;
@@ -8009,13 +8648,38 @@ function renderServerSettings(){
   grid.innerHTML = [
     section('General', field('MOTD', `<input type="text" value="${escapeHtml(server.motd || '')}" onchange="saveServerSetting('motd', this.value)" />`) + field('Max players', `<input type="number" min="1" value="${server.maxPlayers || 20}" onchange="saveServerSetting('maxPlayers', this.value)" />`) + field('Server icon', `<button class="server-mini-btn" type="button" onclick="uploadServerIcon('${escapeInlineHandlerArg(server.id)}')">Upload server-icon.png</button>`)),
     section('World & Gameplay', field(`World name ${restartNote}`, `<input type="text" value="${escapeHtml(server.worldName || 'world')}" ${running ? 'disabled' : ''} onchange="saveServerSetting('worldName', this.value)" />`) + field('Difficulty', `<select onchange="saveServerSetting('difficulty', this.value)">${['peaceful','easy','normal','hard'].map(v => `<option value="${v}" ${server.difficulty === v ? 'selected' : ''}>${capitalize(v)}</option>`).join('')}</select>`) + field('Gamemode', `<select onchange="saveServerSetting('gamemode', this.value)">${['survival','creative','adventure','spectator'].map(v => `<option value="${v}" ${server.gamemode === v ? 'selected' : ''}>${capitalize(v)}</option>`).join('')}</select>`) + field('Force gamemode', `<input type="checkbox" ${server.forceGamemode ? 'checked' : ''} onchange="saveServerSetting('forceGamemode', this.checked)" />`, "Overrides a player's own gamemode choice with the Gamemode setting above every time they join.") + field('PvP', `<input type="checkbox" ${server.pvp !== false ? 'checked' : ''} onchange="saveServerSetting('pvp', this.checked)" />`) + field('Whitelist', `<input type="checkbox" ${server.whitelist ? 'checked' : ''} onchange="saveServerSetting('whitelist', this.checked)" />`, 'When on, only players explicitly added to the whitelist can join.')),
-    section('Performance', field(`RAM ${restartNote}`, `<input type="number" min="2" max="32" value="${server.memoryMax || 4}" ${running ? 'disabled' : ''} onchange="saveServerSetting('memoryMax', this.value)" />`) + field('View distance', `<input type="number" min="2" max="32" value="${server.viewDistance || 10}" onchange="saveServerSetting('viewDistance', this.value)" />`, 'How many chunks around each player are sent to their client. Higher lets players see farther but uses more bandwidth and RAM.') + field('Simulation distance', `<input type="number" min="2" max="32" value="${server.simulationDistance || 10}" onchange="saveServerSetting('simulationDistance', this.value)" />`, 'How many chunks around each player are actively simulated (mobs, redstone, etc). Lowering this is one of the biggest performance wins on a small server.')),
+    section('Performance', field(`RAM ${restartNote}`, `<div class="server-memory-control"><input type="range" class="setting-slider" min="2" max="32" step="1" value="${server.memoryMax || 4}" aria-label="Server maximum RAM slider in gigabytes" ${running ? 'disabled' : ''} oninput="updateServerRamPreview(this)" onchange="saveServerSetting('memoryMax', this.value)" /><label class="memory-number-field"><input type="number" min="2" max="32" step="1" value="${server.memoryMax || 4}" aria-label="Server maximum RAM in gigabytes" ${running ? 'disabled' : ''} oninput="updateServerRamPreview(this)" onchange="updateServerRamPreview(this);saveServerSetting('memoryMax', this.value)" /><span>GB</span></label><div class="memory-presets server-memory-presets"><span class="memory-presets-label">Quick set</span>${[4,8,12,16,24,32].map(gb => `<button class="memory-preset-button" type="button" ${running ? 'disabled' : ''} onclick="saveServerSetting('memoryMax', ${gb})">${gb} GB</button>`).join('')}</div></div>`) + field('View distance', `<input type="number" min="2" max="32" value="${server.viewDistance || 10}" onchange="saveServerSetting('viewDistance', this.value)" />`, 'How many chunks around each player are sent to their client. Higher lets players see farther but uses more bandwidth and RAM.') + field('Simulation distance', `<input type="number" min="2" max="32" value="${server.simulationDistance || 10}" onchange="saveServerSetting('simulationDistance', this.value)" />`, 'How many chunks around each player are actively simulated (mobs, redstone, etc). Lowering this is one of the biggest performance wins on a small server.')),
     section('Networking', field(`Server port ${restartNote}`, `<input type="number" min="1" max="65535" value="${server.serverPort || 25565}" ${running ? 'disabled' : ''} onchange="saveServerSetting('serverPort', this.value)" />`, 'The Minecraft port used by this server. Bald Launcher will not silently change it.') + field('Networking mode', `<select onchange="saveServerSetting('networkingMode', this.value)"><option value="playit" ${server.networkingMode === 'playit' ? 'selected' : ''}>Playit tunnel</option><option value="port-forward" ${server.networkingMode === 'port-forward' ? 'selected' : ''}>Port forwarding</option></select>`) + field('Address', `<input type="text" value="${address}" readonly />`)),
     section('Server type', field(`Server type ${restartNote}`, `<select ${running ? 'disabled' : ''} onchange="saveServerSetting('serverType', this.value)">${['paper','purpur','folia','forge','neoforge','spigot','bukkit','velocity','waterfall','bungeecord','vanilla','fabric','quilt'].map(type => `<option value="${type}" ${server.serverType === type ? 'selected' : ''}>${capitalize(type)}</option>`).join('')}</select>`) + field(`Version ${restartNote}`, `<select ${running ? 'disabled' : ''} onchange="saveServerSetting('mcVersion', this.value)">${VERSIONS.map(v => `<option value="${v}" ${server.mcVersion === v ? 'selected' : ''}>${v}</option>`).join('')}</select>`)),
-    section('Advanced', field('Server folder', `<input type="text" value="${escapeHtml(server.rootPath || 'Launcher-managed folder')}" readonly /><button class="server-mini-btn" type="button" ${running ? 'disabled' : ''} onclick="chooseServerFolder('${escapeInlineHandlerArg(server.id)}')">Use existing folder</button>`, 'The server runs in this folder and keeps its existing JAR, plugins, mods, worlds, configs, and logs.') + field('Java arguments', `<input type="text" value="${escapeHtml(server.javaArgs || '')}" placeholder="-XX:+UseG1GC" onchange="saveServerSetting('javaArgs', this.value)" />`, 'Extra JVM startup flags for advanced tuning. Leave as-is unless you know what you\'re changing.') + field('Java executable', `<input type="text" value="${escapeHtml(server.javaPath || '')}" placeholder="Auto-detect" onchange="saveServerSetting('javaPath', this.value)" />`) + field('Auto-restart on crash', `<input type="checkbox" ${server.autoRestart ? 'checked' : ''} onchange="saveServerSetting('autoRestart', this.checked)" />`, "Automatically restarts the server process if it exits unexpectedly. Doesn't apply to a manual Stop.") + field('Auto-start with launcher', `<input type="checkbox" ${server.autoStart ? 'checked' : ''} onchange="saveServerSetting('autoStart', this.checked)" />`)),
+    section('Advanced', field('Server folder', `<input type="text" value="${escapeHtml(server.rootPath || 'Launcher-managed folder')}" readonly /><button class="server-mini-btn" type="button" ${running ? 'disabled' : ''} onclick="chooseServerFolder('${escapeInlineHandlerArg(server.id)}')">Use existing folder</button>`, 'The server runs in this folder and keeps its existing JAR, plugins, mods, worlds, configs, and logs.') + field('Java arguments', `<input type="text" value="${escapeHtml(server.javaArgs || '')}" placeholder="-XX:+UseG1GC" onchange="saveServerSetting('javaArgs', this.value)" />`, 'Extra JVM startup flags for advanced tuning. Leave as-is unless you know what you\'re changing.') + field('Java executable', `<select id="serverJavaPathSelect" onchange="saveServerSetting('javaPath', this.value)"><option value="">Automatic Java detection</option></select>`) + field('Auto-restart on crash', `<input type="checkbox" ${server.autoRestart ? 'checked' : ''} onchange="saveServerSetting('autoRestart', this.checked)" />`, "Automatically restarts the server process if it exits unexpectedly. Doesn't apply to a manual Stop.") + field('Auto-start with launcher', `<input type="checkbox" ${server.autoStart ? 'checked' : ''} onchange="saveServerSetting('autoStart', this.checked)" />`)),
     section('Legal', field(`EULA accepted <a href="https://aka.ms/MinecraftEULA" target="_blank" rel="noreferrer">View EULA</a>`, `<input type="checkbox" ${server.eulaAccepted ? 'checked' : ''} onchange="saveServerSetting('eulaAccepted', this.checked)" />`, "Required before the server can start. This accepts Mojang's End User License Agreement on your behalf.")),
     `<div class="server-settings-section" style="border:1px solid #8b2b2b;background:rgba(130,20,20,.12);"><div class="server-settings-section-title" style="color:#ff6b6b;">Danger Zone</div><div style="padding:12px;"><strong style="color:#ff6b6b;">Delete Server</strong><p style="margin:8px 0 12px;color:#d5b5b5;">Permanently deletes this server and all of its files, including worlds, configs, logs, mods, plugins, backups, and the server JAR.</p><button type="button" style="background:#b42318;color:#fff;border:0;border-radius:6px;padding:9px 14px;font-weight:700;cursor:pointer;" onclick="openDeleteServerConfirmation('${escapeInlineHandlerArg(server.id)}')">Delete Server</button></div></div>`,
   ].join('');
+  void loadServerJavaInstallations(server);
+}
+
+async function loadServerJavaInstallations(server){
+  const select = document.getElementById('serverJavaPathSelect');
+  if (!select) return;
+  try {
+    const result = await launcherBridge?.getJavaInstallations?.();
+    if (!result?.ok) throw new Error(result?.error || 'Java installations could not be detected.');
+    for (const installation of result.installations || []) {
+      const option = document.createElement('option');
+      option.value = installation.path;
+      option.textContent = `${installation.label || `Java ${installation.version}`} · ${installation.path}`;
+      select.appendChild(option);
+    }
+    if (server.javaPath) select.value = server.javaPath;
+  } catch (error) {
+    if (server.javaPath) {
+      const option = document.createElement('option');
+      option.value = server.javaPath;
+      option.textContent = `${server.javaPath} (saved)`;
+      select.appendChild(option);
+      select.value = server.javaPath;
+    }
+  }
 }
 
 function openDeleteServerConfirmation(serverId) {
@@ -8513,7 +9177,6 @@ async function boot(){
   bindProfileLaunchButton();
   const settings = state.settings || {};
   document.getElementById('vanillaPerformancePresetEnabled').checked = settings.vanillaPerformancePresetEnabled === true;
-  document.getElementById('optimizationModsEnabled').checked = settings.optimizationModsEnabled === true;
   document.getElementById('minecraftClientModEnabled').checked = settings.minecraftClientModEnabled !== false;
   document.getElementById('minecraftMenuEnabled').checked = settings.minecraftMenuEnabled !== false;
   document.getElementById('minecraftPerformanceButtonEnabled').checked = settings.minecraftPerformanceButtonEnabled !== false;
@@ -8521,8 +9184,8 @@ async function boot(){
   document.getElementById('minecraftPerformanceHudEnabled').checked = settings.minecraftPerformanceHudEnabled === true;
   document.getElementById('memoryMaxAuto').checked = settings.memoryMaxAuto === true;
   if (settings.memoryMax) {
-    document.getElementById('ramSlider').value = settings.memoryMax;
-    document.getElementById('ramVal').textContent = `${settings.memoryMax} GB`;
+    const memoryMb = Math.round(Number(settings.memoryMax) * 1024);
+    updateRam(memoryMb);
   }
   toggleAutoMemory();
   document.getElementById('jvmProfile').value = settings.jvmProfile || 'default';
@@ -8647,7 +9310,7 @@ async function boot(){
   if (launcherBridge?.onPrewarmProfile) {
     launcherBridge.onPrewarmProfile(payload => {
       const profile = getProfile(payload?.profileId);
-      if (!profile || profile.prewarmEnabled === false || runningProfileIds.has(profile.id)) return;
+      if (!profile || profile.prewarmEnabled !== true || runningProfileIds.has(profile.id)) return;
       void launcherBridge.launch({
         profileId: profile.id,
         accountId: state.activeAccountId,
@@ -8683,7 +9346,7 @@ async function boot(){
       ...profiles.filter(profile => profile.id !== preferredProfileId),
     ];
     for (const profile of orderedProfiles) {
-      if (profile.prewarmEnabled === false || runningProfileIds.has(profile.id)) continue;
+      if (profile.prewarmEnabled !== true || runningProfileIds.has(profile.id)) continue;
       try {
         const result = await launcherBridge?.launch?.({
           profileId: profile.id,

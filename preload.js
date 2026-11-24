@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   getRendererOptions: (mcVersion, loader) => ipcRenderer.invoke('launcher:get-renderer-options', { mcVersion, loader }),
   getLoaderVersions: (mcVersion, loader) => ipcRenderer.invoke('launcher:get-loader-versions', { mcVersion, loader }),
   getVersions: () => ipcRenderer.invoke('launcher:get-versions'),
+  getJavaInstallations: () => ipcRenderer.invoke('launcher:get-java-installations'),
   resolveCustomSkinLoader: profileId => ipcRenderer.invoke('launcher:custom-skin-loader:resolve', { profileId }),
   diagnoseCustomSkinLoader: profileId => ipcRenderer.invoke('launcher:custom-skin-loader:diagnose', { profileId }),
   installCustomSkinLoader: profileId => ipcRenderer.invoke('launcher:custom-skin-loader:install', { profileId }),
@@ -36,8 +37,9 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   createProfile: profile => ipcRenderer.invoke('launcher:create-profile', profile),
   updateProfile: profile => ipcRenderer.invoke('launcher:update-profile', profile),
   duplicateProfile: (profileId, name) => ipcRenderer.invoke('launcher:duplicate-profile', { profileId, name }),
-  exportProfile: profileId => ipcRenderer.invoke('launcher:export-profile', profileId),
+  exportProfile: payload => ipcRenderer.invoke('launcher:export-profile', typeof payload === 'string' ? { profileId: payload, format: 'bald' } : payload),
   exportModpack: payload => ipcRenderer.invoke('launcher:export-modpack', payload),
+  getProfileExportInventory: profileId => ipcRenderer.invoke('launcher:get-profile-export-inventory', { profileId }),
   importProfile: () => ipcRenderer.invoke('launcher:import-profile'),
   dropProfileFiles: payload => ipcRenderer.invoke('launcher:drop-profile-files', payload),
   getDroppedFilePaths: files => Array.from(files || []).map(file => webUtils.getPathForFile(file)),
@@ -76,6 +78,7 @@ contextBridge.exposeInMainWorld('launcherAPI', {
   removeContent: payload => ipcRenderer.invoke('launcher:remove-content', payload),
   toggleContent: payload => ipcRenderer.invoke('launcher:toggle-content', payload),
   openFolder: folderType => ipcRenderer.invoke('launcher:open-folder', folderType),
+  openProfileModsFolder: profileId => ipcRenderer.invoke('launcher:open-profile-mods-folder', { profileId }),
 
   // launch
   launch: payload => ipcRenderer.invoke('launcher:launch', payload),
@@ -210,6 +213,11 @@ contextBridge.exposeInMainWorld('launcherAPI', {
     const handler = (_event, message) => callback(message);
     ipcRenderer.on('launcher:status', handler);
     return () => ipcRenderer.removeListener('launcher:status', handler);
+  },
+  onExportProgress: callback => {
+    const handler = (_event, progress) => callback(progress);
+    ipcRenderer.on('launcher:export-progress', handler);
+    return () => ipcRenderer.removeListener('launcher:export-progress', handler);
   },
   onProfileImportProgress: callback => {
     const handler = (_event, progress) => callback(progress);
